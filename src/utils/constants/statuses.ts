@@ -1,0 +1,38 @@
+export enum APPLICATION_STATUS {
+  NEW = 'new',
+  PENDING = 'pending',
+  IN_REVIEW = 'in_review',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+  POR_DISPERSAR = 'por_dispersar',
+  COMPLETED = 'completed',
+  CANCELLED = 'cancelled',
+  EXPIRED = 'expired',
+  SOLICITUD = 'solicitud'
+}
+
+export const STATUS_LABELS = {
+  [APPLICATION_STATUS.NEW]: 'Nuevo',
+  [APPLICATION_STATUS.PENDING]: 'Pendiente',
+  [APPLICATION_STATUS.IN_REVIEW]: 'En Revisión',
+  [APPLICATION_STATUS.APPROVED]: 'Aprobado',
+  [APPLICATION_STATUS.REJECTED]: 'Rechazado',
+  [APPLICATION_STATUS.POR_DISPERSAR]: 'Por Dispersar',
+  [APPLICATION_STATUS.COMPLETED]: 'Completado',
+  [APPLICATION_STATUS.CANCELLED]: 'Cancelado',
+  [APPLICATION_STATUS.EXPIRED]: 'Expirado',
+  [APPLICATION_STATUS.SOLICITUD]: 'Pendiente'
+};
+
+export const STATUS_COLORS = {
+  [APPLICATION_STATUS.NEW]: 'info',
+  [APPLICATION_STATUS.PENDING]: 'warning',
+  [APPLICATION_STATUS.IN_REVIEW]: 'secondary',
+  [APPLICATION_STATUS.APPROVED]: 'success',
+  [APPLICATION_STATUS.REJECTED]: 'error',
+  [APPLICATION_STATUS.POR_DISPERSAR]: 'accent',
+  [APPLICATION_STATUS.COMPLETED]: 'primary',
+  [APPLICATION_STATUS.CANCELLED]: 'neutral',
+  [APPLICATION_STATUS.EXPIRED]: 'error',
+  [APPLICATION_STATUS.SOLICITUD]: 'warning'
+}; 

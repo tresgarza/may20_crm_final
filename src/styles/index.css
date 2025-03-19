@@ -1,0 +1,37 @@
+/* Agregar las animaciones para las notificaciones emergentes */
+@keyframes popup-entry {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes popup-exit {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+
+.animate-popup {
+  animation-duration: 0.3s;
+  animation-timing-function: ease-out;
+}
+
+.animate-popup-entry {
+  animation-name: popup-entry;
+  animation-fill-mode: forwards;
+}
+
+.animate-popup-exit {
+  animation-name: popup-exit;
+  animation-fill-mode: forwards;
+} 
