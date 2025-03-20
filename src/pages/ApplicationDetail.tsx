@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import { 
   getApplicationById, 
@@ -17,6 +17,7 @@ import Alert from '../components/ui/Alert';
 import { STATUS_LABELS } from '../utils/constants/statuses';
 import { APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
 import { APPLICATION_STATUS } from '../utils/constants/statuses';
+import { useNotifications, NotificationType } from '../contexts/NotificationContext';
 
 // Interfaces para estados de aprobación
 interface ApprovalStatus {
@@ -28,6 +29,9 @@ interface ApprovalStatus {
 
 const ApplicationDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { addNotification, showPopup } = useNotifications();
   const [application, setApplication] = useState<Application | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,35 +39,49 @@ const ApplicationDetail: React.FC = () => {
   const [approving, setApproving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const { shouldFilterByEntity, getEntityFilter, userCan, isAdvisor, isCompanyAdmin } = usePermissions();
-  const { user } = useAuth();
   
   useEffect(() => {
-    const fetchApplication = async () => {
-      if (!id) return;
-      
+    const loadApplication = async () => {
       try {
         setLoading(true);
         setError(null);
         
-        // Aplicar filtros según el rol del usuario
-        const entityFilter = shouldFilterByEntity() ? getEntityFilter() : null;
+        // Validar que el ID tenga un formato válido de UUID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!id || !uuidRegex.test(id)) {
+          throw new Error('ID de solicitud inválido');
+        }
         
-        const applicationData = await getApplicationById(id, entityFilter);
-        setApplication(applicationData);
+        const data = await getApplicationById(id);
+        setApplication(data);
         
         // Obtener estado de aprobación
-        const approvalData = await getApprovalStatus(id, entityFilter);
+        const approvalData = await getApprovalStatus(id);
         setApprovalStatus(approvalData);
-      } catch (error: any) {
-        console.error('Error fetching application:', error);
-        setError(`Error al cargar la solicitud: ${error.message || 'Error desconocido'}`);
+      } catch (err) {
+        console.error('Error al cargar la solicitud:', err);
+        setError(err instanceof Error ? err.message : 'Error al cargar los datos de la solicitud');
+        
+        // Mostrar notificación de error
+        showPopup({
+          title: 'Solicitud no encontrada',
+          message: 'No se pudo encontrar la solicitud especificada. Es posible que haya sido eliminada o que no tengas permisos para verla.',
+          type: NotificationType.ERROR,
+          playSound: true,
+          soundType: 'alert'
+        });
+        
+        // Redirigir al listado de aplicaciones después de 3 segundos
+        setTimeout(() => {
+          navigate('/applications');
+        }, 3000);
       } finally {
         setLoading(false);
       }
     };
-    
-    fetchApplication();
-  }, [id, shouldFilterByEntity, getEntityFilter]);
+
+    loadApplication();
+  }, [id, showPopup, navigate]);
   
   // Función para aprobar como asesor
   const handleAdvisorApproval = async () => {
@@ -184,9 +202,11 @@ const ApplicationDetail: React.FC = () => {
   };
   
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CL', {
+    return new Intl.NumberFormat('es-MX', {
       style: 'currency',
-      currency: 'CLP',
+      currency: 'MXN',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(amount);
   };
 
@@ -211,6 +231,41 @@ const ApplicationDetail: React.FC = () => {
       default:
         return 'badge-ghost';
     }
+  };
+  
+  // Obtener la etiqueta legible para el tipo de aplicación
+  const getProductTypeLabel = (type: string | null | undefined): string => {
+    if (!type) return 'N/A';
+    
+    // Normalizar el tipo a minúsculas para comparación
+    const normalizedType = type.toLowerCase();
+    
+    // Verificar si es alguno de los tipos definidos en APPLICATION_TYPE_LABELS
+    for (const [key, value] of Object.entries(APPLICATION_TYPE_LABELS)) {
+      if (key.toLowerCase() === normalizedType || key.toLowerCase().includes(normalizedType) || normalizedType.includes(key.toLowerCase())) {
+        return value;
+      }
+    }
+    
+    // Mapeo adicional para otros valores comunes
+    const typeMappings: Record<string, string> = {
+      'selected_plans': 'Crédito a Plazos',
+      'product_simulations': 'Simulación',
+      'auto_loan': 'Crédito Auto',
+      'car_backed_loan': 'Crédito con Garantía',
+      'personal_loan': 'Préstamo Personal',
+      'cash_advance': 'Adelanto de Efectivo'
+    };
+    
+    // Buscar una coincidencia parcial
+    for (const [key, value] of Object.entries(typeMappings)) {
+      if (normalizedType.includes(key) || key.includes(normalizedType)) {
+        return value;
+      }
+    }
+    
+    // Si no hay coincidencia, retornar el valor original
+    return type;
   };
   
   if (!userCan(PERMISSIONS.VIEW_APPLICATIONS)) {
@@ -283,10 +338,30 @@ const ApplicationDetail: React.FC = () => {
                     <p className="font-medium">{formatDate(application.created_at)}</p>
                   </div>
                   
-                  <div>
-                    <p className="text-sm text-gray-500">Tipo de Producto</p>
-                    <p className="font-medium">
-                      {application.product_type}
+                  <div className="mb-4">
+                    <h3 className="text-sm font-medium text-gray-500">Tipo de Producto</h3>
+                    <p className="text-sm text-gray-900">
+                      {(() => {
+                        const appType = application.application_type;
+                        if (!appType) return 'No especificado';
+                        
+                        // Check for common types
+                        if (appType === 'selected_plans') return 'Planes Seleccionados';
+                        if (appType === 'product_simulations') return 'Simulación de Producto';
+                        if (appType === 'cash_requests') return 'Solicitud de Efectivo';
+                        
+                        // Try to find in APPLICATION_TYPE_LABELS if imported
+                        const { APPLICATION_TYPE_LABELS } = require('../utils/constants/applications');
+                        if (APPLICATION_TYPE_LABELS && APPLICATION_TYPE_LABELS[appType]) {
+                          return APPLICATION_TYPE_LABELS[appType];
+                        }
+                        
+                        // Format nicely as fallback
+                        return appType
+                          .split('_')
+                          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                          .join(' ');
+                      })()}
                     </p>
                   </div>
                   
@@ -301,7 +376,7 @@ const ApplicationDetail: React.FC = () => {
                   
                   <div>
                     <p className="text-sm text-gray-500">Monto Solicitado</p>
-                    <p className="font-medium">{formatCurrency(application.requested_amount)}</p>
+                    <p className="font-medium">{formatCurrency(application.requested_amount || application.amount || 0)}</p>
                   </div>
                 </div>
                 
@@ -449,7 +524,7 @@ const ApplicationDetail: React.FC = () => {
         
         {/* Agregar botón para mover a estado "Por Dispersar" después de aprobación */}
         {application && application.status === APPLICATION_STATUS.APPROVED && 
-          (isAdvisor() || isCompanyAdmin()) && (
+          isAdvisor() && (
           <div className="mt-4 p-4 bg-base-200 rounded-lg">
             <h3 className="font-medium mb-2">Acciones disponibles</h3>
             <div className="flex flex-col space-y-2">
@@ -467,7 +542,7 @@ const ApplicationDetail: React.FC = () => {
         )}
         
         {application && application.status === APPLICATION_STATUS.POR_DISPERSAR && 
-          (isAdvisor() || isCompanyAdmin()) && (
+          isAdvisor() && (
           <div className="mt-4 p-4 bg-base-200 rounded-lg">
             <h3 className="font-medium mb-2">Acciones disponibles</h3>
             <div className="flex flex-col space-y-2">

@@ -24,6 +24,22 @@
       work correctly both with client-side routing and a non-root public URL.
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
+    <!-- Preload notification sounds with high fetchpriority -->
+    <link rel="preload" href="%PUBLIC_URL%/sounds/clean-notification.mp3" as="audio" type="audio/mp3" fetchpriority="high">
+    <link rel="preload" href="%PUBLIC_URL%/sounds/notification-simple.mp3" as="audio" type="audio/mp3" fetchpriority="high">
+    <link rel="preload" href="%PUBLIC_URL%/sounds/triple-tone.mp3" as="audio" type="audio/mp3" fetchpriority="high">
+    <link rel="preload" href="%PUBLIC_URL%/sounds/beep.mp3" as="audio" type="audio/mp3">
+    <link rel="preload" href="%PUBLIC_URL%/sounds/alert.mp3" as="audio" type="audio/mp3">
+    <link rel="preload" href="%PUBLIC_URL%/sounds/approval.mp3" as="audio" type="audio/mp3">
+    
+    <!-- Audio elements to prefetch sounds -->
+    <audio id="preload-clean-notification" preload="auto" src="%PUBLIC_URL%/sounds/clean-notification.mp3" style="display:none"></audio>
+    <audio id="preload-notification-simple" preload="auto" src="%PUBLIC_URL%/sounds/notification-simple.mp3" style="display:none"></audio>
+    <audio id="preload-triple-tone" preload="auto" src="%PUBLIC_URL%/sounds/triple-tone.mp3" style="display:none"></audio>
+    
+    <!-- Additional fallback sounds that might be needed -->
+    <link rel="preload" href="%PUBLIC_URL%/sounds/notification.mp3" as="audio" type="audio/mp3">
+    <link rel="preload" href="%PUBLIC_URL%/sounds/notification.wav" as="audio" type="audio/wav">
     <title>CRM Fincentiva</title>
   </head>
   <body>
@@ -39,5 +55,21 @@
       To begin the development, run `npm start` or `yarn start`.
       To create a production bundle, use `npm run build` or `yarn build`.
     -->
+    
+    <!-- Script to initialize audio elements -->
+    <script>
+      // Initialize audio for better mobile compatibility
+      window.addEventListener('DOMContentLoaded', function() {
+        const audioElements = document.querySelectorAll('audio[preload="auto"]');
+        audioElements.forEach(function(audio) {
+          // Set low volume
+          audio.volume = 0.2;
+          // Load the audio file
+          audio.load();
+        });
+        
+        console.log('Preloaded audio elements: ' + audioElements.length);
+      });
+    </script>
   </body>
 </html> 

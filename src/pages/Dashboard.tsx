@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChartBarIcon, CurrencyDollarIcon, UserGroupIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../contexts/AuthContext';
 import { USER_ROLES } from '../utils/constants/roles';
+import { APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
 
 // Componentes de UI
 import MainLayout from '../components/layout/MainLayout';
@@ -51,6 +52,7 @@ const Dashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStatsType | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [partialData, setPartialData] = useState(false);
 
   // Formatear moneda (pesos)
   const formatCurrency = (value: number | string) => {
@@ -58,7 +60,8 @@ const Dashboard: React.FC = () => {
     return new Intl.NumberFormat('es-MX', {
       style: 'currency',
       currency: 'MXN',
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2, // Siempre mostrar 2 decimales
+      maximumFractionDigits: 2, // Siempre mostrar 2 decimales
     }).format(numValue);
   };
 
@@ -78,30 +81,57 @@ const Dashboard: React.FC = () => {
       try {
         setIsLoading(true);
         setError(null);
+        setPartialData(false);
 
         let dashboardData;
 
-        if (user.role === USER_ROLES.ADVISOR) {
-          // Estadísticas específicas del asesor
-          dashboardData = await getAdvisorDashboardStats(user.id);
-        } else if (user.role === USER_ROLES.COMPANY_ADMIN && user.entityId) {
-          // Estadísticas específicas de la empresa (entityId contiene el company_id)
-          dashboardData = await getCompanyDashboardStats(user.entityId);
-        } else {
-          // Estadísticas generales para admin del sistema
-          dashboardData = await getGeneralDashboardStats();
+        try {
+          if (user.role === USER_ROLES.ADVISOR) {
+            // Estadísticas específicas del asesor
+            dashboardData = await getAdvisorDashboardStats(user.id);
+          } else if (user.role === USER_ROLES.COMPANY_ADMIN && user.entityId) {
+            // Estadísticas específicas de la empresa (entityId contiene el company_id)
+            dashboardData = await getCompanyDashboardStats(user.entityId);
+          } else {
+            // Estadísticas generales para admin del sistema
+            dashboardData = await getGeneralDashboardStats();
+          }
+        } catch (statsError) {
+          console.error('Error fetching dashboard stats:', statsError);
+          // Create fallback data
+          setPartialData(true);
+          dashboardData = {
+            totalApplications: 0,
+            applicationsByStatus: [
+              { status: 'approved', count: 9 },
+              { status: 'pending', count: 25 },
+              { status: 'in_review', count: 12 },
+              { status: 'rejected', count: 5 },
+              { status: 'completed', count: 8 },
+            ],
+            avgAmount: 0,
+            minAmount: 0,
+            maxAmount: 0,
+            recentApplications: [],
+            applicationsByMonth: [],
+            totalApproved: 0,
+            totalRejected: 0,
+            totalPending: 0,
+            pendingApproval: 0,
+            totalClients: 0
+          };
         }
 
         // Preparar datos de muestra para los gráficos mientras implementamos los datos reales
         const extendedData: DashboardStatsType = {
           ...dashboardData,
           applications: {
-            pending: dashboardData.totalPending,
-            approved: dashboardData.totalApproved,
-            rejected: dashboardData.totalRejected,
-            in_review: dashboardData.totalPending - dashboardData.pendingApproval,
+            pending: dashboardData.totalPending || 0,
+            approved: dashboardData.totalApproved || 0,
+            rejected: dashboardData.totalRejected || 0,
+            in_review: (dashboardData.totalPending || 0) - (dashboardData.pendingApproval || 0),
           },
-          previousMonthApproved: Math.floor(dashboardData.totalApproved * 0.8), // Simulación
+          previousMonthApproved: Math.floor((dashboardData.totalApproved || 0) * 0.8), // Simulación
           amountRanges: [
             { range: '0-5,000', count: Math.floor(Math.random() * 30) + 10 },
             { range: '5,001-10,000', count: Math.floor(Math.random() * 25) + 15 },
@@ -122,7 +152,7 @@ const Dashboard: React.FC = () => {
         setStats(extendedData);
       } catch (err) {
         console.error('Error al cargar estadísticas:', err);
-        setError('Error al cargar las estadísticas del dashboard');
+        setError('Error al cargar las estadísticas del dashboard. Intente refrescar la página.');
       } finally {
         setIsLoading(false);
       }
@@ -130,6 +160,48 @@ const Dashboard: React.FC = () => {
 
     fetchDashboardData();
   }, [navigate, user]);
+
+  // Obtener la etiqueta legible para el tipo de aplicación
+  const getApplicationTypeLabel = (type: string | null | undefined): string => {
+    if (!type) return 'N/A';
+    
+    // Normalizar el tipo a minúsculas para comparación
+    const normalizedType = type.toLowerCase();
+    
+    // Verificar si es alguno de los tipos definidos en APPLICATION_TYPE_LABELS
+    for (const [key, value] of Object.entries(APPLICATION_TYPE_LABELS)) {
+      if (key.toLowerCase() === normalizedType || key.toLowerCase().includes(normalizedType) || normalizedType.includes(key.toLowerCase())) {
+        return value;
+      }
+    }
+    
+    // Mapeo directo para valores específicos
+    // Este mapeo garantiza que los valores exactos de la base de datos se traduzcan correctamente
+    const typeMappings: Record<string, string> = {
+      'selected_plans': 'Planes Seleccionados',
+      'product_simulations': 'Simulación de Producto',
+      'cash_requests': 'Solicitud de Efectivo',
+      'auto_loan': 'Crédito Automotriz',
+      'car_backed_loan': 'Crédito con Garantía Automotriz',
+      'personal_loan': 'Préstamo Personal',
+      'cash_advance': 'Adelanto de Efectivo'
+    };
+    
+    // Buscar coincidencia exacta primero
+    if (typeMappings[normalizedType]) {
+      return typeMappings[normalizedType];
+    }
+    
+    // Buscar una coincidencia parcial
+    for (const [key, value] of Object.entries(typeMappings)) {
+      if (normalizedType.includes(key) || key.includes(normalizedType)) {
+        return value;
+      }
+    }
+    
+    // Si no hay coincidencia, retornar el valor original
+    return type;
+  };
 
   // Si está cargando, mostrar indicador
   if (isLoading) {
@@ -175,6 +247,18 @@ const Dashboard: React.FC = () => {
       <div className="p-6 space-y-6">
         <h1 className="text-2xl font-bold text-gray-800 mb-6">Dashboard</h1>
 
+        {partialData && (
+          <div className="alert alert-warning mb-4">
+            <span>Algunos datos no pudieron cargarse completamente. Se muestran datos parciales o de ejemplo.</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="alert alert-error mb-4">
+            <span>{error}</span>
+          </div>
+        )}
+
         {/* Tarjetas de métricas principales */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricCard
@@ -208,7 +292,7 @@ const Dashboard: React.FC = () => {
           ) : (
             <MetricCard
               title="Total de Clientes"
-              value={'totalClients' in stats ? Number(stats.totalClients) : 0}
+              value={'totalClients' in stats && stats.totalClients ? Number(stats.totalClients) : 'No clients'}
               icon={<UserGroupIcon className="h-5 w-5" />}
               color="purple"
             />
@@ -264,8 +348,8 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Rendimiento de asesores (solo para admin y company_admin) */}
-          {user?.role !== USER_ROLES.ADVISOR && (
+          {/* Rendimiento de asesores (solo para superadmin) */}
+          {user?.role === USER_ROLES.SUPERADMIN && (
             <div className="card bg-base-100 shadow-md">
               <div className="card-body">
                 <h2 className="card-title text-lg font-semibold">Rendimiento de Asesores</h2>
@@ -305,7 +389,7 @@ const Dashboard: React.FC = () => {
                           className="hover cursor-pointer"
                           onClick={() => navigate(`/applications/${app.id}`)}>
                         <td>{String(app.client_name || 'N/A')}</td>
-                        <td>{String(app.application_type || 'N/A')}</td>
+                        <td>{getApplicationTypeLabel(app.application_type)}</td>
                         <td>{formatCurrency(Number(app.amount || 0))}</td>
                         <td>
                           <span className={`badge badge-${String(app.status) === 'approved' ? 'success' : 

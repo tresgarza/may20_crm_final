@@ -17,7 +17,7 @@ export interface Application {
   client_id: string;
   company_id: string;
   assigned_to: string;
-  product_type: string;
+  application_type: string;
   requested_amount: number;
   status: ApplicationStatus;
   status_previous?: string;
@@ -25,6 +25,8 @@ export interface Application {
   updated_at: string;
   client_name?: string;
   client_email?: string;
+  client_phone?: string;
+  client_address?: string;
   company_name?: string;
   advisor_name?: string;
   approved_by_advisor: boolean;
@@ -32,16 +34,13 @@ export interface Application {
   approval_date_advisor?: string;
   approval_date_company?: string;
   dispersal_date?: string;
+  dni?: string;
   
   // Campos adicionales que necesitan los formularios
-  client_phone?: string;
-  client_address?: string;
-  dni?: string;
   amount?: number;
   term?: number;
   interest_rate?: number;
   monthly_payment?: number;
-  application_type?: string;
 }
 
 export interface ApplicationFilter {
@@ -156,7 +155,7 @@ export const getApplications = async (filters?: ApplicationFilter, entityFilter?
       client_id: app.source_id || "",
       company_id: app.company_id || "",
       assigned_to: app.assigned_to || "",
-      product_type: app.application_type || "",
+      application_type: app.application_type || "",
       requested_amount: parseFloat(app.amount) || 0,
       status: mapStatusFromDB(app.status),
       created_at: app.created_at,
@@ -178,7 +177,6 @@ export const getApplications = async (filters?: ApplicationFilter, entityFilter?
       term: app.term ? parseInt(app.term) : undefined,
       interest_rate: app.interest_rate ? parseFloat(app.interest_rate) : undefined,
       monthly_payment: app.monthly_payment ? parseFloat(app.monthly_payment) : undefined,
-      application_type: app.application_type
     })) as Application[];
   } catch (error) {
     console.error('Error fetching applications:', error);

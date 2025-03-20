@@ -332,7 +332,7 @@ const Applications: React.FC = () => {
                         <div>{app.client_email}</div>
                         <div className="text-sm opacity-70">{app.client_phone || 'Sin teléfono'}</div>
                       </td>
-                      <td>{getTypeText(app.product_type)}</td>
+                      <td>{getTypeText(app.application_type)}</td>
                       <td>
                         <span className={`badge ${getStatusClass(app.status)}`}>
                           {getStatusText(app.status)}

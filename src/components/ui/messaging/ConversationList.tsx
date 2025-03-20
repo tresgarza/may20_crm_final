@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { getUserConversations } from '../../../services/messageService';
-import { Box, List, ListItem, Text, Flex, Badge, Avatar, Divider } from '@chakra-ui/react';
 
 interface UserConversation {
   userId: string;
@@ -22,7 +21,6 @@ const ConversationList: React.FC<ConversationListProps> = ({
 }) => {
   const [conversations, setConversations] = useState<UserConversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [userNames, setUserNames] = useState<Record<string, string>>({});
   
   // Cargar conversaciones del usuario
   useEffect(() => {
@@ -39,16 +37,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
     try {
       setIsLoading(true);
       const fetchedConversations = await getUserConversations(currentUserId);
-      
-      // Formatear las conversaciones
-      const formattedConversations = fetchedConversations.map(conv => ({
-        userId: conv.userId,
-        userName: userNames[conv.userId] || `Usuario ${conv.userId.slice(0, 6)}`,
-        lastMessage: conv.lastMessage,
-        unreadCount: conv.unreadCount
-      }));
-      
-      setConversations(formattedConversations);
+      setConversations(fetchedConversations);
     } catch (error) {
       console.error('Error al cargar conversaciones:', error);
     } finally {
@@ -75,69 +64,77 @@ const ConversationList: React.FC<ConversationListProps> = ({
   // Formatear el texto para ser mostrado como vista previa del mensaje
   const formatMessagePreview = (content: string) => {
     const maxLength = 30;
+    if (!content) return '';
     if (content.length <= maxLength) return content;
     return content.substring(0, maxLength) + '...';
   };
   
+  if (isLoading && conversations.length === 0) {
+    return (
+      <div className="p-4 text-center">
+        <div className="loading loading-spinner loading-md mx-auto"></div>
+        <p className="mt-2">Cargando conversaciones...</p>
+      </div>
+    );
+  }
+  
+  if (conversations.length === 0) {
+    return (
+      <div className="p-4 text-center text-gray-500">
+        No hay conversaciones disponibles
+      </div>
+    );
+  }
+  
   return (
-    <Box>
-      <Text fontWeight="bold" p={3} borderBottomWidth="1px">
-        Conversaciones
-      </Text>
+    <div className="border rounded-lg overflow-hidden">
+      <h3 className="font-bold p-3 border-b bg-base-200">Conversaciones</h3>
       
-      {isLoading && conversations.length === 0 ? (
-        <Box p={4} textAlign="center">
-          <Text>Cargando...</Text>
-        </Box>
-      ) : conversations.length === 0 ? (
-        <Box p={4} textAlign="center">
-          <Text color="gray.500">No hay conversaciones</Text>
-        </Box>
-      ) : (
-        <List spacing={0}>
-          {conversations.map((conversation) => (
-            <React.Fragment key={conversation.userId}>
-              <ListItem 
-                px={3} 
-                py={2}
-                bg={selectedUserId === conversation.userId ? 'blue.50' : undefined}
-                _hover={{ bg: 'gray.50' }}
-                cursor="pointer"
-                onClick={() => onSelectConversation(conversation.userId, conversation.userName)}
-              >
-                <Flex alignItems="center">
-                  <Avatar size="sm" name={conversation.userName} mr={3} />
+      <div className="divide-y">
+        {conversations.map((conversation) => (
+          <div 
+            key={conversation.userId}
+            className={`p-3 cursor-pointer hover:bg-base-200 ${
+              selectedUserId === conversation.userId ? 'bg-base-200' : ''
+            }`}
+            onClick={() => onSelectConversation(conversation.userId, conversation.userName)}
+          >
+            <div className="flex items-center space-x-3">
+              <div className="avatar placeholder">
+                <div className="bg-neutral-focus text-neutral-content rounded-full w-10">
+                  <span>{(conversation.userName || 'U')[0].toUpperCase()}</span>
+                </div>
+              </div>
+              
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-center">
+                  <p className="font-medium text-sm truncate">
+                    {conversation.userName || `Usuario ${conversation.userId.slice(0, 6)}`}
+                  </p>
+                  {conversation.lastMessage?.created_at && (
+                    <span className="text-xs text-gray-500">
+                      {formatRelativeTime(conversation.lastMessage.created_at)}
+                    </span>
+                  )}
+                </div>
+                
+                <div className="flex justify-between items-center mt-1">
+                  <p className="text-xs text-gray-600 truncate">
+                    {formatMessagePreview(conversation.lastMessage?.message_content)}
+                  </p>
                   
-                  <Box flex="1">
-                    <Flex alignItems="center" justifyContent="space-between">
-                      <Text fontWeight="bold" fontSize="sm">
-                        {conversation.userName}
-                      </Text>
-                      <Text fontSize="xs" color="gray.500">
-                        {formatRelativeTime(conversation.lastMessage.created_at)}
-                      </Text>
-                    </Flex>
-                    
-                    <Flex alignItems="center" justifyContent="space-between" mt={1}>
-                      <Text fontSize="xs" color="gray.600" noOfLines={1}>
-                        {formatMessagePreview(conversation.lastMessage.message_content)}
-                      </Text>
-                      
-                      {conversation.unreadCount > 0 && (
-                        <Badge colorScheme="red" borderRadius="full" ml={2}>
-                          {conversation.unreadCount}
-                        </Badge>
-                      )}
-                    </Flex>
-                  </Box>
-                </Flex>
-              </ListItem>
-              <Divider />
-            </React.Fragment>
-          ))}
-        </List>
-      )}
-    </Box>
+                  {conversation.unreadCount > 0 && (
+                    <span className="badge badge-sm badge-error ml-2">
+                      {conversation.unreadCount}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 };
 

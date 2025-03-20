@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Flex, Heading, Text, useColorMode, Spinner } from '@chakra-ui/react';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import { Message, MessageType, getConversation, sendMessage, markConversationAsRead } from '../../../services/messageService';
@@ -22,10 +21,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const { colorMode } = useColorMode();
-  const bgColor = colorMode === 'light' ? 'white' : 'gray.800';
-  const headerBgColor = colorMode === 'light' ? 'gray.100' : 'gray.700';
-  const borderColor = colorMode === 'light' ? 'gray.200' : 'gray.600';
 
   // Cargar mensajes al iniciar
   useEffect(() => {
@@ -33,21 +28,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     // Intervalo para actualizar los mensajes cada 10 segundos
     const interval = setInterval(fetchMessages, 10000);
     return () => clearInterval(interval);
-  }, [currentUserId, otherUserId, applicationId]);
+  }, [currentUserId, otherUserId]);
 
-  // Marcar mensajes como leídos al visualizarlos
-  useEffect(() => {
-    if (messages.length > 0) {
-      markMessagesAsRead();
-    }
-  }, [messages]);
-
-  // Obtener mensajes de la conversación
+  // Función para cargar mensajes
   const fetchMessages = async () => {
     try {
       setIsLoading(true);
-      const fetchedMessages = await getConversation(currentUserId, otherUserId, applicationId);
+      const fetchedMessages = await getConversation(currentUserId, otherUserId);
       setMessages(fetchedMessages);
+      
+      // Marcar mensajes como leídos
+      await markConversationAsRead(currentUserId, otherUserId);
     } catch (error) {
       console.error('Error al cargar mensajes:', error);
     } finally {
@@ -55,93 +46,77 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
-  // Marcar mensajes como leídos
-  const markMessagesAsRead = async () => {
-    try {
-      await markConversationAsRead(currentUserId, otherUserId);
-    } catch (error) {
-      console.error('Error al marcar mensajes como leídos:', error);
-    }
-  };
-
   // Enviar un nuevo mensaje
-  const handleSendMessage = async (content: string, type: MessageType) => {
+  const handleSendMessage = async (content: string, type: MessageType = MessageType.GENERAL) => {
+    if (!content.trim()) return;
+    
     try {
       setIsSending(true);
       
-      const messageData = {
+      // Crear un mensaje optimista para UI instantánea
+      const optimisticMessage: Message = {
+        id: `temp-${Date.now()}`,
+        sender_id: currentUserId,
+        receiver_id: otherUserId,
+        message_content: content,
+        message_type: type,
+        created_at: new Date().toISOString(),
+        read_status: false,
+        related_application_id: applicationId
+      };
+      
+      // Añadir a la lista de mensajes inmediatamente
+      setMessages(prev => [...prev, optimisticMessage]);
+      
+      // Enviar el mensaje real
+      await sendMessage({
         sender_id: currentUserId,
         receiver_id: otherUserId,
         message_content: content,
         message_type: type,
         related_application_id: applicationId
-      };
+      });
       
-      const newMessage = await sendMessage(messageData);
-      
-      // Actualizar el estado local para mostrar el mensaje inmediatamente
-      setMessages(prevMessages => [...prevMessages, newMessage]);
+      // Recargar mensajes para obtener el ID real
+      fetchMessages();
     } catch (error) {
       console.error('Error al enviar mensaje:', error);
+      // Eliminar el mensaje optimista en caso de error
+      setMessages(prev => prev.filter(msg => msg.id !== `temp-${Date.now()}`));
     } finally {
       setIsSending(false);
     }
   };
 
   return (
-    <Flex 
-      direction="column" 
-      h="100%" 
-      maxH="100%" 
-      bg={bgColor} 
-      borderRadius="md" 
-      borderWidth="1px"
-      borderColor={borderColor}
-      boxShadow="md"
-      overflow="hidden"
-    >
-      {/* Cabecera del chat */}
-      <Box 
-        p={3} 
-        bg={headerBgColor} 
-        borderBottomWidth="1px" 
-        borderColor={borderColor}
-      >
-        <Heading size="sm">
-          {applicationId 
-            ? `Conversación sobre aplicación ${applicationId.slice(0, 8)}...` 
-            : `Conversación con ${otherUserName}`
-          }
-        </Heading>
-        {applicationId && (
-          <Text fontSize="xs" color="gray.500">
-            Entre {userName} y {otherUserName}
-          </Text>
-        )}
-      </Box>
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="bg-base-200 p-4 border-b border-base-300">
+        <h2 className="text-lg font-bold">{otherUserName}</h2>
+      </div>
       
-      {/* Área de mensajes */}
-      <Box flex="1" overflowY="hidden" position="relative">
+      {/* Message list */}
+      <div className="flex-grow overflow-y-auto p-4">
         {isLoading && messages.length === 0 ? (
-          <Flex justify="center" align="center" h="100%">
-            <Spinner size="xl" />
-          </Flex>
+          <div className="flex justify-center items-center h-full">
+            <div className="loading loading-spinner loading-lg"></div>
+          </div>
         ) : (
-          <MessageList
-            messages={messages}
-            currentUserId={currentUserId}
-            isLoading={isLoading && messages.length > 0}
+          <MessageList 
+            messages={messages} 
+            currentUserId={currentUserId} 
           />
         )}
-      </Box>
+      </div>
       
-      {/* Campo para escribir mensajes */}
-      <MessageInput
-        onSendMessage={handleSendMessage}
-        isLoading={isSending}
-        applicationRelated={!!applicationId}
-      />
-    </Flex>
+      {/* Message input */}
+      <div className="border-t border-base-300 p-4">
+        <MessageInput 
+          onSendMessage={handleSendMessage} 
+          isSending={isSending} 
+        />
+      </div>
+    </div>
   );
 };
 

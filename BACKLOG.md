@@ -36,6 +36,7 @@
 - ✅ Sistema de filtrado avanzado para aplicaciones
 - ✅ Vista Kanban para gestión visual de estados de aplicaciones
 - ✅ Páginas stub para las demás secciones (Clientes, Reportes, etc.)
+- ✅ Sistema de mensajería interna entre usuarios
 
 ### Conexión a Datos Reales
 - ✅ Servicios para CRUD de aplicaciones
@@ -44,6 +45,7 @@
 - ✅ Servicios para CRUD de asesores
 - ✅ Servicios para gestión de documentos
 - ✅ Servicios de estadísticas para el dashboard
+- ✅ Servicios para el sistema de mensajería
 
 ## Orden Cronológico del Desarrollo (🔢)
 
@@ -65,9 +67,9 @@
 11. ✅ Implementar estado "Por Dispersar" entre "Aprobado" y "Completado"
 12. ✅ Optimizar la experiencia de arrastre y fluidez en Kanban
 13. ✅ Implementar notificaciones para aprobadores cuando una solicitud está lista
-14. 🔄 Desarrollar sistema de mensajería interna entre asesores y admins
+14. ✅ Desarrollar sistema de mensajería interna entre asesores y admins
 
-### Fase 4: Dashboard y Reportes (Actual)
+### Fase 4: Dashboard y Reportes (✅)
 15. ✅ Implementar dashboard interactivo con datos reales para cada tipo de usuario
 16. ✅ Desarrollar gráficos de estadísticas personalizados según rol
 17. ✅ Implementar filtros de fechas para estadísticas
@@ -75,10 +77,10 @@
 19. ✅ Implementar notificaciones emergentes (pop-up) en tiempo real
 20. 🔄 Desarrollar sistema de reportes exportables
 
-### Fase 5: Gestión de Clientes
-21. 📝 Implementar vista de listado de clientes conectada a API
-22. 📝 Desarrollar formulario de creación/edición de clientes
-23. 📝 Implementar vista detallada de clientes con sus aplicaciones
+### Fase 5: Gestión de Clientes (Actual)
+21. ✅ Implementar vista de listado de clientes conectada a API
+22. ✅ Implementar vista detallada de clientes con sus aplicaciones
+23. 🔄 Desarrollar formulario de creación/edición de clientes
 
 ### Fase 6: Gestión de Empresas y Asesores
 24. 📝 Implementar vista de listado de empresas
@@ -98,32 +100,27 @@
 
 ## Pendiente Detallado
 
-### Dashboard y Reportes (Actual)
-- ✅ Implementar dashboard interactivo con KPIs específicos por rol
-- ✅ Desarrollar gráficos de distribución de estados de solicitudes
-- ✅ Implementar gráfico de tendencia temporal de solicitudes
-- ✅ Añadir gráfico de distribución por monto
-- ✅ Implementar filtros de rango de fechas para estadísticas
-- ✅ Añadir estadísticas de conversión por asesor/empresa
-- ✅ Mostrar métricas de tiempo promedio de aprobación
-- ✅ Mejorar el sistema de notificaciones con alertas sonoras y visuales
-- ✅ Implementar notificaciones emergentes (pop-up) en tiempo real
-- 🔄 Desarrollar sistema de exportación de reportes a PDF/Excel
+### Reportes Exportables (Prioridad 1)
+- 🔄 Implementar exportación de listado de aplicaciones a Excel
+- 🔄 Añadir reportes resumidos por estado, empresa y asesor
+- 🔄 Permitir exportación de reportes personalizados según filtros
 
-### Sistema de Mensajería
-- 🔄 Implementar sistema de mensajería interna entre usuarios para colaboración en solicitudes
-- 🔄 Componente de chat para mensajería interna
+### Gestión de Clientes (Prioridad 2)
+- ✅ Vista de listado de clientes con filtros
+- ✅ Vista detallada de clientes con historial de solicitudes
+- 🔄 Formulario de creación/edición de clientes con validaciones avanzadas
+- 🔄 Implementar verificación de duplicados al crear clientes
+- 🔄 Añadir sugerencias de autocompletado en campos como Ciudad y Estado
+
+### Sistema de Mensajería (Prioridad 3)
+- ✅ Componente de chat para mensajería interna
+- 🔄 Mejorar la interfaz de usuario del sistema de mensajería
+- 🔄 Añadir soporte para envío de archivos adjuntos en mensajes
 - 📝 Integración con API de WhatsApp para mensajes predefinidos
 
-### Gestión de Clientes
-- 📝 Vista de listado de clientes con filtros
-- 📝 Formulario de creación/edición de clientes
-- 📝 Vista detallada de clientes con historial de solicitudes
-
-### Reportes y Analíticas
-- 📝 Generación de reportes personalizados
-- 📝 Exportación de datos a Excel/PDF
-- 📝 Analíticas avanzadas por asesor/empresa
+### Gestión de Empresas y Asesores (Prioridad 4)
+- 📝 Completar formularios de empresas
+- 📝 Mejorar asignación de asesores a empresas
 
 ## Estructura de Tablas en Supabase
 
@@ -136,15 +133,22 @@
 - `documents`: Documentos asociados a solicitudes
 - `comments`: Comentarios en solicitudes
 - `messages`: Sistema de mensajería interna
+- `clients`: Clientes (personas que solicitan préstamos)
 
-## Fase 4: Dashboard y Reportes (Mejoras Recientes)
+## Próximos pasos inmediatos
 
-- ✅ Implementación de dashboard interactivo con KPIs personalizados por rol de usuario
-- ✅ Desarrollo de gráficos estadísticos en tiempo real con datos de Supabase
-- ✅ Visualización de métricas clave como total de solicitudes, aprobadas, montos promedio
-- ✅ Gráficos de distribución por estado, tendencia mensual, y distribución por montos
-- ✅ Rendimiento comparativo de asesores (para administradores y empresa)
-- ✅ Notificaciones emergentes (pop-up) con alertas visuales y sonoras
-- ✅ Sistema de notificaciones con sonidos personalizados según tipo de alerta
-- ✅ Preferencias de usuario para activar/desactivar sonidos en notificaciones
-- 🔄 Implementación de reportes exportables a diferentes formatos 
+1. **Completar sistema de reportes exportables**:
+   - Implementar botón de exportación a Excel en la página de Aplicaciones
+   - Crear interfaz de selección de filtros para reportes personalizados
+   - Desarrollar generador de PDF para detalles de aplicaciones individuales
+
+2. **Finalizar formulario de clientes**:
+   - Añadir validaciones avanzadas para RFC, CURP y otros campos específicos
+   - Implementar auto-formateo para campos como teléfono y fechas
+   - Añadir selector de advisor/empresa según el rol del usuario
+   - Implementar verificación de duplicados
+
+3. **Mejorar la experiencia de usuario**:
+   - Corregir advertencias de linter para mejorar el rendimiento y calidad del código
+   - Optimizar componentes para reducir la cantidad de re-renderizados
+   - Mejorar el manejo de errores y feedback visual al usuario 

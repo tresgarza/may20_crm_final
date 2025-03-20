@@ -62,7 +62,7 @@ const ApplicationsKanban: React.FC = () => {
     );
   };
   
-  const handleStatusChange = async (application: ApplicationType, newStatus: string) => {
+  const handleStatusChange = async (application: ApplicationType, newStatus: string): Promise<void> => {
     if (!user) {
       setError('No has iniciado sesión. Por favor, inicia sesión para realizar esta acción.');
       return;
@@ -98,8 +98,6 @@ const ApplicationsKanban: React.FC = () => {
       setTimeout(() => {
         setSuccess(null);
       }, 3000);
-      
-      return updatedApplication;
     } catch (error: any) {
       console.error('Error updating application status:', error);
       setError(`Error al actualizar el estado: ${error.message || 'Error desconocido'}`);

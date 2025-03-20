@@ -1,5 +1,3 @@
-import { supabase } from '../lib/supabaseClient';
-
 /**
  * Ejecuta una consulta SQL directa
  * @param query Consulta SQL a ejecutar
@@ -17,12 +15,28 @@ export const executeQuery = async (query: string): Promise<any[]> => {
     });
 
     if (!response.ok) {
-      throw new Error(`Error al ejecutar la consulta: ${response.statusText}`);
+      const errorText = await response.text();
+      // Try to parse error as JSON if possible
+      let errorDetail;
+      try {
+        errorDetail = JSON.parse(errorText);
+      } catch {
+        errorDetail = errorText;
+      }
+      
+      throw new Error(`Error al ejecutar la consulta: ${response.statusText}. Detalles: ${JSON.stringify(errorDetail)}`);
     }
 
     const result = await response.json();
     return result.data || [];
   } catch (error) {
+    // Check if error is about missing relation/table
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('relation') && errorMessage.includes('does not exist')) {
+      console.error('Error ejecutando consulta - tabla no existe:', errorMessage);
+      throw new Error(`Tabla no encontrada: ${errorMessage}`);
+    }
+    
     console.error('Error ejecutando consulta:', error);
     throw error;
   }

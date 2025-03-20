@@ -407,6 +407,43 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
     return labels[type] || type;
   };
   
+  // Función para obtener el color apropiado para la tarjeta según estado y aprobaciones
+  const getCardColor = (app: ApplicationWithApproval) => {
+    const status = app.status || '';
+    
+    // Colores específicos según el estado
+    switch (status.toLowerCase()) {
+      case 'rejected':
+        return 'border-error bg-red-50';
+      case 'approved':
+        // Si está aprobado, verificar el estado de las aprobaciones
+        if (app.approvalStatus) {
+          const { approvedByAdvisor, approvedByCompany } = app.approvalStatus;
+          if (approvedByAdvisor && approvedByCompany) {
+            return 'border-success bg-green-50'; // Aprobado por ambos
+          } else if (approvedByAdvisor) {
+            return 'border-success bg-green-100'; // Aprobado solo por asesor
+          } else if (approvedByCompany) {
+            return 'border-success bg-green-100'; // Aprobado solo por empresa
+          }
+        }
+        return 'border-success bg-green-50';
+      case 'in_review':
+        return 'border-info bg-blue-50';
+      case 'pending':
+        return 'border-warning bg-amber-50';
+      case 'por_dispersar':
+        return 'border-accent bg-cyan-50';
+      case 'completed':
+        return 'border-primary bg-indigo-50';
+      case 'cancelled':
+        return 'border-neutral bg-gray-100';
+      default:
+        // Si el estado no coincide con ninguno de los anteriores, usar el color de la columna
+        return `border-${app.status || 'neutral'}`;
+    }
+  };
+  
   if (applications.length === 0) {
     return (
       <div className="bg-base-200 p-6 rounded-lg">
@@ -591,7 +628,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
                 column.applications.map((app, index) => (
                   <div
                     key={app.id}
-                    className={`card bg-base-100 shadow hover:shadow-lg transition-all border-l-4 border-${column.color} border-t border-r border-b hover:border-primary kanban-card relative ${app.id === processingAppId ? 'processing' : ''} ${app.isMoving ? 'opacity-90' : ''}`}
+                    className={`card shadow hover:shadow-lg transition-all ${getCardColor(app)} border-l-4 border-t border-r border-b hover:border-primary kanban-card relative ${app.id === processingAppId ? 'processing' : ''} ${app.isMoving ? 'opacity-90' : ''}`}
                     draggable={!!onStatusChange && !isLoading && app.id !== processingAppId}
                     onDragStart={(e) => handleDragStart(e, app, index)}
                     onDragEnd={handleDragEnd}
@@ -601,8 +638,10 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
                   >
                     <div className="card-body p-4">
                       <div className="flex justify-between items-center">
-                        <h3 className="text-base font-semibold truncate max-w-[160px]">{app.client_name || "Cliente sin nombre"}</h3>
-                        <span className={`badge badge-${column.color} badge-md`}>{getProductLabel(app.product_type)}</span>
+                        <div className="flex items-center space-x-2">
+                          <div className="flex-1 font-semibold">{app.client_name}</div>
+                          <span className={`badge badge-${column.color} badge-md`}>{getProductLabel(app.application_type)}</span>
+                        </div>
                       </div>
                       
                       <div className="mt-2">

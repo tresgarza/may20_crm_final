@@ -14,6 +14,7 @@ import {
 } from '../services/applicationService';
 import { APPLICATION_TYPE, APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
 import { APPLICATION_STATUS, STATUS_LABELS } from '../utils/constants/statuses';
+import { useNotifications, NotificationType } from '../contexts/NotificationContext';
 
 interface FormData {
   client_name: string;
@@ -55,6 +56,7 @@ const ApplicationForm: React.FC = () => {
   const { userCan } = usePermissions();
   const { user } = useAuth();
   const { shouldFilterByEntity, getEntityFilter } = usePermissions();
+  const { addNotification, showPopup } = useNotifications();
   
   const isEditMode = !!id;
   
@@ -197,7 +199,6 @@ const ApplicationForm: React.FC = () => {
           company_name: formData.company_name,
           assigned_to: formData.assigned_to,
           client_id: '', // Generado por el servidor
-          product_type: formData.application_type,
           requested_amount: formData.amount,
           approved_by_advisor: false,
           approved_by_company: false
@@ -206,6 +207,28 @@ const ApplicationForm: React.FC = () => {
         // Crear nueva aplicación
         const newApplication = await createApplication(newApplicationData);
         setSuccessMessage('Solicitud creada con éxito');
+        
+        // Create a notification and show popup - make sure we have a valid UUID
+        if (newApplication && newApplication.id) {
+          const notificationData = {
+            title: 'Nueva solicitud creada',
+            message: `Se ha creado una nueva solicitud para ${formData.client_name}`,
+            type: NotificationType.NEW_APPLICATION,
+            relatedItemType: 'application',
+            relatedItemId: newApplication.id // This will be a valid UUID from the database
+          };
+          
+          // Add to notifications list
+          addNotification(notificationData);
+          
+          // Show immediate popup with sound
+          showPopup({
+            ...notificationData,
+            playSound: true,
+            soundType: 'notification',
+            duration: 5000
+          });
+        }
         
         // Redirigir a la página de detalle después de un breve retraso
         setTimeout(() => {

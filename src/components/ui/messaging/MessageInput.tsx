@@ -1,149 +1,52 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Box, 
-  Flex, 
-  IconButton, 
-  Textarea,
-  Button,
-  TooltipProps,
-  Text,
-  useColorMode
-} from '@chakra-ui/react';
-import { FiSend } from 'react-icons/fi';
+import React, { useState } from 'react';
 import { MessageType } from '../../../services/messageService';
 
 interface MessageInputProps {
   onSendMessage: (content: string, type: MessageType) => void;
-  isLoading?: boolean;
-  placeholder?: string;
-  applicationRelated?: boolean;
+  isSending: boolean;
 }
 
-const MessageInput: React.FC<MessageInputProps> = ({
-  onSendMessage,
-  isLoading = false,
-  placeholder = 'Escribe tu mensaje aquí...',
-  applicationRelated = false
+const MessageInput: React.FC<MessageInputProps> = ({ 
+  onSendMessage, 
+  isSending
 }) => {
-  const [message, setMessage] = useState('');
-  const [messageType, setMessageType] = useState<MessageType>(
-    applicationRelated ? MessageType.APPLICATION : MessageType.GENERAL
-  );
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const { colorMode } = useColorMode();
-  const inputBg = colorMode === 'light' ? 'white' : 'gray.700';
-  const borderColor = colorMode === 'light' ? 'gray.200' : 'gray.600';
+  const [message, setMessage] = useState<string>('');
 
-  // Focus en el input al cargar el componente
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (message.trim() && !isSending) {
+      onSendMessage(message, MessageType.GENERAL);
+      setMessage('');
     }
-  }, []);
-
-  // Manejar el envío del mensaje
-  const handleSendMessage = () => {
-    if (message.trim() === '' || isLoading) return;
-    
-    onSendMessage(message.trim(), messageType);
-    setMessage('');
-    
-    // Devolver el focus al input después de enviar
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
-  };
-
-  // Manejar tecla Enter para enviar (con Shift+Enter para nueva línea)
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
-  // Cambiar el tipo de mensaje
-  const handleTypeChange = (type: MessageType) => {
-    setMessageType(type);
   };
 
   return (
-    <Box borderTopWidth="1px" borderColor={borderColor} p={3}>
-      {applicationRelated && (
-        <Flex mb={2} wrap="wrap" gap={1}>
-          <Button 
-            size="xs" 
-            colorScheme={messageType === MessageType.APPLICATION ? 'teal' : 'gray'} 
-            onClick={() => handleTypeChange(MessageType.APPLICATION)}
-            title="Mensaje general"
-          >
-            Aplicación
-          </Button>
-          <Button 
-            size="xs" 
-            colorScheme={messageType === MessageType.APPROVAL_REQUEST ? 'orange' : 'gray'} 
-            onClick={() => handleTypeChange(MessageType.APPROVAL_REQUEST)}
-            title="Solicitud de aprobación"
-          >
-            Solicitar aprobación
-          </Button>
-          <Button 
-            size="xs" 
-            colorScheme={messageType === MessageType.APPROVAL_RESPONSE ? 'green' : 'gray'} 
-            onClick={() => handleTypeChange(MessageType.APPROVAL_RESPONSE)}
-            title="Respuesta a una solicitud"
-          >
-            Responder solicitud
-          </Button>
-          <Button 
-            size="xs" 
-            colorScheme={messageType === MessageType.DOCUMENT_REQUEST ? 'purple' : 'gray'} 
-            onClick={() => handleTypeChange(MessageType.DOCUMENT_REQUEST)}
-            title="Solicitud de documentos"
-          >
-            Solicitar documentos
-          </Button>
-        </Flex>
-      )}
-      
-      <Flex>
-        <Textarea
-          ref={inputRef}
+    <form onSubmit={handleSubmit} className="flex items-center gap-2">
+      <div className="flex-1">
+        <input
+          type="text"
+          placeholder="Escribe un mensaje..."
+          className="input input-bordered w-full"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          bg={inputBg}
-          borderRadius="md"
-          resize="none"
-          rows={2}
-          disabled={isLoading}
-          mr={2}
-          borderColor={borderColor}
-          _focus={{
-            borderColor: 'blue.400',
-            boxShadow: '0 0 0 1px var(--chakra-colors-blue-400)'
-          }}
+          disabled={isSending}
         />
-        
-        <Flex direction="column" justifyContent="flex-end">
-          <IconButton
-            aria-label="Enviar mensaje"
-            colorScheme="blue"
-            onClick={handleSendMessage}
-            isLoading={isLoading}
-            isDisabled={message.trim() === ''}
-            size="md"
-          >
-            <FiSend />
-          </IconButton>
-        </Flex>
-      </Flex>
+      </div>
       
-      <Text fontSize="xs" color="gray.500" mt={1}>
-        Presiona Enter para enviar. Shift+Enter para nueva línea.
-      </Text>
-    </Box>
+      <button
+        type="submit"
+        className="btn btn-primary"
+        disabled={!message.trim() || isSending}
+      >
+        {isSending ? (
+          <span className="loading loading-spinner loading-xs"></span>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+          </svg>
+        )}
+      </button>
+    </form>
   );
 };
 

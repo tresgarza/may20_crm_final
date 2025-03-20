@@ -1,7 +1,9 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { usePermissions } from '../../contexts/PermissionsContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { PERMISSIONS } from '../../utils/constants/permissions';
+import { USER_ROLES } from '../../utils/constants/roles';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -12,11 +14,13 @@ interface NavItem {
   path: string;
   icon: React.ReactNode;
   permission?: PERMISSIONS;
+  visibleFor?: string[]; // Add roles that can see this item
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
   const location = useLocation();
   const { userCan } = usePermissions();
+  const { user } = useAuth();
 
   const navItems: NavItem[] = [
     {
@@ -81,6 +85,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
         </svg>
       ),
       permission: PERMISSIONS.VIEW_COMPANIES,
+      visibleFor: [USER_ROLES.SUPERADMIN, USER_ROLES.ADVISOR],
     },
     {
       label: 'Asesores',
@@ -103,10 +108,55 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
       ),
       permission: PERMISSIONS.VIEW_ADVISORS,
     },
+    {
+      label: 'Clientes',
+      path: '/clients',
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+          />
+        </svg>
+      ),
+      permission: PERMISSIONS.VIEW_CLIENTS,
+    },
+    {
+      label: 'Mensajes',
+      path: '/messages',
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+          />
+        </svg>
+      ),
+    },
   ];
 
   const filteredNavItems = navItems.filter(
-    (item) => !item.permission || userCan(item.permission)
+    (item) => 
+      // Check permission
+      (!item.permission || userCan(item.permission)) && 
+      // Check role-specific visibility
+      (!item.visibleFor || !user?.role || item.visibleFor.includes(user.role))
   );
 
   return (

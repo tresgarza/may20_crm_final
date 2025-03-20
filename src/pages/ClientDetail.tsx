@@ -44,13 +44,13 @@ const ClientDetail: React.FC = () => {
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-4">
             <button 
-              onClick={() => navigate(-1)} 
-              className="btn btn-ghost btn-sm"
+              onClick={() => navigate('/clients')} 
+              className="btn btn-sm btn-outline"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
               </svg>
-              Volver
+              Volver a Clientes
             </button>
             <h1 className="text-2xl font-bold">Detalle de Cliente</h1>
           </div>
@@ -162,13 +162,29 @@ const ClientDetail: React.FC = () => {
                   <h2 className="card-title text-xl">Solicitudes</h2>
                   {userCan(PERMISSIONS.CREATE_APPLICATION) && (
                     <Link to={`/applications/new?client=${id}`} className="btn btn-sm btn-primary">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                      </svg>
                       Nueva Solicitud
                     </Link>
                   )}
                 </div>
                 
-                {applications.length === 0 ? (
-                  <p className="text-gray-500 text-center py-6">Este cliente no tiene solicitudes.</p>
+                {!applications || applications.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p className="text-gray-500 mb-4">Este cliente no tiene solicitudes registradas.</p>
+                    {userCan(PERMISSIONS.CREATE_APPLICATION) && (
+                      <Link to={`/applications/new?client=${id}`} className="btn btn-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                        </svg>
+                        Crear Solicitud
+                      </Link>
+                    )}
+                  </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="table w-full">
