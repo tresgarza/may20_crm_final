@@ -1,9 +1,55 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Application } from '../types';
-import { formatCurrency, formatDate } from '../utils/formatters';
-import ApplicationStatusBadge from '../components/ui/ApplicationStatusBadge';
+import { Application } from '../utils/types';
+// import { formatCurrency, formatDate } from '../utils/formatters';
+// import ApplicationStatusBadge from '../components/ui/ApplicationStatusBadge';
 import { APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
+
+// Simple formatters to avoid import issues
+const formatCurrency = (amount: number | undefined): string => {
+  if (amount === undefined || amount === null) return "$0.00";
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount);
+};
+
+const formatDate = (dateString: string | undefined): string => {
+  if (!dateString) return 'N/A';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('es-MX');
+  } catch (error) {
+    return dateString;
+  }
+};
+
+// Simple status badge component to avoid import issues
+const SimpleApplicationStatusBadge = ({ status }: { status: string }) => {
+  // Map status to appropriate color
+  const getStatusClass = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'pending': return 'badge-warning';
+      case 'review': return 'badge-info';
+      case 'approved': return 'badge-success';
+      case 'rejected': return 'badge-error';
+      case 'completed': return 'badge-primary';
+      case 'cancelled': return 'badge-ghost';
+      default: return 'badge-neutral';
+    }
+  };
+
+  return (
+    <span className={`badge ${getStatusClass(status)}`}>
+      {status}
+    </span>
+  );
+};
+
+// Use this instead of the imported ApplicationStatusBadge
+const ApplicationStatusBadge = SimpleApplicationStatusBadge;
 
 interface RecentApplicationsProps {
   applications: Application[];

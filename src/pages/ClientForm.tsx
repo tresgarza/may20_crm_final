@@ -52,6 +52,12 @@ const ClientForm: React.FC = () => {
       setFetchingData(true);
       const clientData = await getClientById(clientId);
       
+      // Check if clientData exists before using it
+      if (!clientData) {
+        setError('No se encontraron los datos del cliente o la tabla de clientes no existe.');
+        return;
+      }
+      
       // Convertir las fechas a formato YYYY-MM-DD para el input date
       setFormData({
         name: clientData.name,

@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS clients (id UUID PRIMARY KEY DEFAULT uuid_generate_v4(), created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), name TEXT NOT NULL, email TEXT, phone TEXT, address TEXT, city TEXT, state TEXT, postal_code TEXT, birth_date DATE, rfc TEXT, curp TEXT, company_id UUID REFERENCES companies(id), advisor_id UUID REFERENCES advisors(id));

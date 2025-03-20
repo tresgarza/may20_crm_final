@@ -69,6 +69,9 @@ export interface Application {
   company_id?: string;
   company_name?: string;
   assigned_to?: string;
+  approved_by_advisor?: boolean;
+  approved_by_company?: boolean;
+  isMoving?: boolean;
 }
 
 export interface StatusHistory {

@@ -28,11 +28,34 @@ export interface ClientFilter {
   pageSize?: number;
 }
 
-const CLIENTS_TABLE = TABLES.CLIENTS;
+// Nombre de la tabla definido como constante para evitar errores de escritura
+const CLIENTS_TABLE = TABLES.CLIENTS || 'clients';
+
+// Verificar si la tabla existe antes de realizar operaciones
+const tableExists = async () => {
+  try {
+    // Intentamos hacer una consulta sencilla para verificar si la tabla existe
+    const { count, error } = await supabase
+      .from(CLIENTS_TABLE)
+      .select('*', { count: 'exact', head: true });
+    
+    return !error;
+  } catch (error) {
+    console.warn('Error verificando si la tabla clients existe:', error);
+    return false;
+  }
+};
 
 // Get all clients with filters
 export const getClients = async (filters?: ClientFilter) => {
   try {
+    // Verificar si la tabla existe
+    const exists = await tableExists();
+    if (!exists) {
+      console.warn('La tabla clients no existe. Retornando lista vacía.');
+      return { clients: [], totalCount: 0 };
+    }
+
     let query = supabase.from(CLIENTS_TABLE).select('*', { count: 'exact' });
 
     // Apply filters
@@ -95,18 +118,29 @@ export const getClients = async (filters?: ClientFilter) => {
       totalCount: count || 0
     };
   } catch (error) {
-    // For any other errors, return an empty list
-    console.error('Error in getClients:', error);
-    return {
-      clients: [],
-      totalCount: 0
-    };
+    // Verificar si el error es porque la tabla no existe
+    if (error instanceof Error && (
+        error.message?.includes('does not exist') || 
+        error.message?.includes('42P01'))) {
+      console.warn('La tabla clients no existe. Retornando lista vacía.');
+      return { clients: [], totalCount: 0 };
+    }
+    
+    console.error('Error en getClients:', error);
+    throw error;
   }
 };
 
 // Get a single client by ID
 export const getClientById = async (id: string) => {
   try {
+    // Verificar si la tabla existe
+    const exists = await tableExists();
+    if (!exists) {
+      console.warn('La tabla clients no existe. Retornando cliente vacío.');
+      return null;
+    }
+
     const { data, error } = await supabase
       .from(CLIENTS_TABLE)
       .select('*')
@@ -117,7 +151,7 @@ export const getClientById = async (id: string) => {
       // Check if the error is because the table doesn't exist
       if (error.message?.includes('does not exist') || error.code === '42P01') {
         console.warn('Clients table does not exist. Returning empty client.');
-        throw new Error('Clients table does not exist');
+        return null;
       }
       
       console.error(`Error fetching client with ID ${id}:`, error);
@@ -126,8 +160,16 @@ export const getClientById = async (id: string) => {
 
     return data as Client;
   } catch (error) {
+    // Verificar si el error es porque la tabla no existe
+    if (error instanceof Error && (
+        error.message?.includes('does not exist') || 
+        error.message?.includes('42P01'))) {
+      console.warn('La tabla clients no existe. Retornando cliente vacío.');
+      return null;
+    }
+    
     console.error(`Error in getClientById:`, error);
-    throw error; // Rethrow as this is a single client request, caller should handle
+    throw error;
   }
 };
 

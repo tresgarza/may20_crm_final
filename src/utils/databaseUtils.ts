@@ -24,7 +24,14 @@ export const executeQuery = async (query: string): Promise<any[]> => {
         errorDetail = errorText;
       }
       
-      throw new Error(`Error al ejecutar la consulta: ${response.statusText}. Detalles: ${JSON.stringify(errorDetail)}`);
+      // Check for relation/table not existing in error message
+      const errorDetailStr = JSON.stringify(errorDetail);
+      if (errorDetailStr.includes('relation') && errorDetailStr.includes('does not exist')) {
+        console.warn('Tabla no encontrada en la base de datos:', errorDetailStr);
+        return []; // Retornar array vacío en lugar de lanzar error
+      }
+      
+      throw new Error(`Error al ejecutar la consulta: ${response.statusText}. Detalles: ${errorDetailStr}`);
     }
 
     const result = await response.json();
@@ -33,8 +40,8 @@ export const executeQuery = async (query: string): Promise<any[]> => {
     // Check if error is about missing relation/table
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('relation') && errorMessage.includes('does not exist')) {
-      console.error('Error ejecutando consulta - tabla no existe:', errorMessage);
-      throw new Error(`Tabla no encontrada: ${errorMessage}`);
+      console.warn('Error ejecutando consulta - tabla no existe:', errorMessage);
+      return []; // Retornar array vacío en lugar de lanzar error
     }
     
     console.error('Error ejecutando consulta:', error);

@@ -1,7 +1,8 @@
 import React from 'react';
-import { Application } from '../../types';
-import UserAvatar from './UserAvatar';
-import { formatCurrency } from '../../utils/formatters';
+import { Application } from '../../utils/types';
+// Conditionally use the UserAvatar component if it exists, or just return a simple avatar
+// import UserAvatar from './UserAvatar';
+// import { formatCurrency } from '../../utils/formatters';
 
 interface KanbanCardProps {
   app: Application;
@@ -37,6 +38,17 @@ const getCardColor = (app: Application): string => {
   return 'border-gray-300 bg-white';
 };
 
+// Simple currency formatter to avoid import issues
+const formatCurrency = (amount: number | undefined): string => {
+  if (amount === undefined || amount === null) return "$0.00";
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount);
+};
+
 const KanbanCard: React.FC<KanbanCardProps> = ({ 
   app, 
   onClick, 
@@ -44,9 +56,9 @@ const KanbanCard: React.FC<KanbanCardProps> = ({
   onDragStart,
   processingAppId
 }) => {
-  // Special approval indicators
-  const hasAdvisorApproval = app.approved_by_advisor;
-  const hasCompanyApproval = app.approved_by_company;
+  // Special approval indicators - handle potentially undefined values
+  const hasAdvisorApproval = app.approved_by_advisor || false;
+  const hasCompanyApproval = app.approved_by_company || false;
   
   return (
     <div

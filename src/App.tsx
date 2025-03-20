@@ -21,8 +21,14 @@ import NotFound from './pages/NotFound';
 import Companies from './pages/Companies';
 import Notifications from './pages/Notifications';
 import Messages from './pages/Messages';
+import { initDbStructureCheck } from './utils/dbStructureCheck';
 
 const App: React.FC = () => {
+  // Verificar estructura de BD al iniciar la aplicación
+  useEffect(() => {
+    initDbStructureCheck();
+  }, []);
+
   // Add event listener to track if user has interacted with the page
   // This helps with browser autoplay restrictions
   useEffect(() => {

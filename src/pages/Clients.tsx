@@ -50,11 +50,13 @@ const Clients: React.FC = () => {
     try {
       setLoading(true);
       const result = await getClients(filters);
-      setClients(result.clients);
-      setTotalCount(result.totalCount);
+      // Handle potential undefined values with default empty array and zero
+      setClients(result.clients || []);
+      setTotalCount(result.totalCount || 0);
       
       // If we got an empty list, check if it's because the table doesn't exist
-      if (result.clients.length === 0 && result.totalCount === 0) {
+      // Use optional chaining to avoid potential undefined errors
+      if ((result.clients?.length === 0 || !result.clients) && (result.totalCount === 0 || !result.totalCount)) {
         setError('No se pudieron cargar los clientes. La tabla de clientes no existe en la base de datos.');
       } else {
         setError(null);
