@@ -18,6 +18,7 @@ export interface Application {
   company_id: string;
   assigned_to: string;
   application_type: string;
+  product_type?: string;  // Tipo de producto (préstamo personal, auto, etc.)
   requested_amount: number;
   status: ApplicationStatus;
   status_previous?: string;
@@ -94,16 +95,23 @@ export const getApplications = async (filters?: ApplicationFilter, entityFilter?
     }
   }
 
+  // Por defecto, mostrar solo las solicitudes de tipo 'selected_plans'
+  // a menos que se especifique explícitamente en los filtros
+  if (filters?.application_type) {
+    // Si hay un filtro específico de tipo, usarlo
+    if (filters.application_type !== 'all') {
+      query += ` AND application_type = '${filters.application_type}'`;
+    }
+  } else {
+    // Si no hay filtro específico, mostrar solo selected_plans
+    query += ` AND application_type = 'selected_plans'`;
+  }
+
   // Aplicar otros filtros
   if (filters) {
     // Filter by status
     if (filters.status && filters.status !== 'all') {
       query += ` AND status = '${filters.status}'`;
-    }
-
-    // Filter by application type
-    if (filters.application_type && filters.application_type !== 'all') {
-      query += ` AND application_type = '${filters.application_type}'`;
     }
 
     // Filter by advisor
@@ -498,6 +506,52 @@ export const approveByCompany = async (
     return app;
   } catch (error) {
     console.error(`Error aprobando solicitud ${id} por empresa:`, error);
+    throw error;
+  }
+};
+
+// Cancelar aprobación de una empresa
+export const cancelCompanyApproval = async (
+  id: string,
+  comment: string,
+  company_admin_id: string,
+  company_id: string,
+  entityFilter?: Record<string, any> | null
+) => {
+  // Verificar que el usuario es realmente un administrador de la empresa correcta
+  if (!entityFilter?.company_id || entityFilter.company_id !== company_id) {
+    throw new Error('Solo los administradores de la empresa pueden realizar esta acción');
+  }
+  
+  // Actualizar la solicitud
+  let updateQuery = `
+    UPDATE ${TABLES.APPLICATIONS}
+    SET approved_by_company = false, 
+        approval_date_company = NULL,
+        status = '${APPLICATION_STATUS.IN_REVIEW}'
+    WHERE id = '${id}' AND company_id = '${company_id}'
+    RETURNING *
+  `;
+  
+  try {
+    // Ejecutar la actualización
+    const updatedApp = await executeQuery(updateQuery);
+    if (!updatedApp || updatedApp.length === 0) {
+      throw new Error('Solicitud no encontrada o no tienes permisos para cancelar la aprobación');
+    }
+    
+    // Añadir al historial
+    const historyQuery = `
+      INSERT INTO ${APPLICATION_HISTORY_TABLE} (application_id, status, comment, created_by)
+      VALUES ('${id}', '${APPLICATION_STATUS.IN_REVIEW}', '${comment}', '${company_admin_id}')
+      RETURNING *
+    `;
+    
+    await executeQuery(historyQuery);
+    
+    return updatedApp[0] as Application;
+  } catch (error) {
+    console.error(`Error cancelando aprobación de solicitud ${id} por empresa:`, error);
     throw error;
   }
 };
