@@ -6,6 +6,8 @@ import { usePermissions } from '../../contexts/PermissionsContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { TABLES } from '../../utils/constants/tables';
 import { useNotifications } from '../../contexts/NotificationContext';
+import { formatCurrency, formatDate } from '../../utils/formatters';
+import { APPLICATION_TYPE_LABELS } from '../../utils/constants/applications';
 
 // Verificar si APPLICATION_HISTORY tabla está definida
 const APPLICATION_HISTORY_TABLE = TABLES.APPLICATION_HISTORY || 'application_history';
@@ -48,6 +50,16 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
   const draggedItemNewStatusRef = useRef<string>('');
   const [autoTransitionMessage, setAutoTransitionMessage] = useState<string | null>(null);
   
+  // Añadir estados para filtros
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [dateFromFilter, setDateFromFilter] = useState<string>('');
+  const [dateToFilter, setDateToFilter] = useState<string>('');
+  const [amountMinFilter, setAmountMinFilter] = useState<string>('');
+  const [amountMaxFilter, setAmountMaxFilter] = useState<string>('');
+  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  
   // Primero, modificar useEffect para cargar aplicaciones con datos de aprobación
   useEffect(() => {
     const loadApprovalStatuses = async () => {
@@ -84,6 +96,36 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
     loadApprovalStatuses();
   }, [applications]);
   
+  // Modificar cómo se transforman las aplicaciones para ordenarlas de más viejas a más recientes
+  // en el useEffect donde se establece appsWithApproval alrededor de la línea 100-150
+  useEffect(() => {
+    const setupApplications = async () => {
+      const appsWithApprovalStatuses = await Promise.all(
+        applications.map(async (app) => {
+          // Cargar estado de aprobación si aún no está cargado
+          const approvalStatus = await getApprovalStatus(app.id);
+          
+          return {
+            ...app,
+            approvalStatus,
+            isMoving: false
+          };
+        })
+      );
+      
+      // Ordenar de más viejas a más recientes por fecha de creación
+      const sortedApps = [...appsWithApprovalStatuses].sort((a, b) => {
+        const dateA = new Date(a.created_at);
+        const dateB = new Date(b.created_at);
+        return dateA.getTime() - dateB.getTime(); // Orden ascendente (más viejas primero)
+      });
+      
+      setAppsWithApproval(sortedApps);
+    };
+    
+    setupApplications();
+  }, [applications]);
+  
   // Actualizar la lógica para nuevas aplicaciones para incluir todas las nuevas notificaciones
   useEffect(() => {
     // Verificar si hay aplicaciones que deberían estar en "nuevo" (recién creadas)
@@ -93,7 +135,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
       const createdAt = new Date(app.created_at);
       const now = new Date();
       const hoursElapsed = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
-      const isRecent = hoursElapsed < 24;
+      const isRecent = hoursElapsed < 72;
       
       return isRecent && (isNew || app.status === 'new');
     });
@@ -245,7 +287,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
     // Crear un objeto con todos los estados posibles como claves y arrays vacíos como valores
     const initialGroups = Object.values(APPLICATION_STATUS).reduce((acc, status) => {
       acc[status] = [];
-      return acc;
+      return acc as Record<string, ApplicationWithApproval[]>;
     }, {} as Record<string, ApplicationWithApproval[]>);
     
     // Para los administradores de empresa, usaremos un agrupamiento virtual basado en las aprobaciones
@@ -486,7 +528,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
   }, [appsWithApproval, isAdvisor, isCompanyAdmin]);
   
   // Función para actualizar localmente el estado de aprobación de una aplicación
-  const updateLocalApprovalStatus = (applicationId: string, updates: Partial<{ approvedByAdvisor: boolean, approvedByCompany: boolean }>) => {
+  const updateLocalApprovalStatus = (applicationId: string, updates: Partial<{ approvedByAdvisor: boolean, approvedByCompany: boolean }>, newStatus?: string) => {
     console.log(`Actualizando estado de aprobación para ${applicationId}:`, updates);
     
     // Crear una copia del estado actual
@@ -677,6 +719,9 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
         return false;
       }
       
+      // MODIFICACIÓN: Aunque el asesor haya aprobado, el admin de empresa debe poder aprobar también
+      // Aquí no se impide mover la tarjeta si solo está aprobada por el asesor
+      
       return true;
     }
     
@@ -816,7 +861,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
                 });
                 
                 // Actualizar UI explícitamente
-                updateLocalApprovalStatus(applicationId, { approvedByCompany: false });
+                updateLocalApprovalStatus(applicationId, { approvedByCompany: false }, APPLICATION_STATUS.NEW);
               } catch (error) {
                 console.error("❌ Error al quitar aprobación de empresa:", error);
                 setErrorMessage(`Error al quitar aprobación: ${(error as Error).message}`);
@@ -881,7 +926,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
                 // Actualizar UI explícitamente con ambas propiedades
                 updateLocalApprovalStatus(applicationId, { 
                   approvedByCompany: false 
-                });
+                }, APPLICATION_STATUS.IN_REVIEW);
                 
                 // Forzar actualización global de la aplicación para todos los usuarios
                 // llamando a la API de cambio de estado
@@ -1207,7 +1252,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             )}
-        </div>
+          </div>
           
           <div className="tooltip tooltip-top flex items-center ml-3" data-tip={approvedByCompany ? "Aprobado por empresa" : "Pendiente de aprobación por empresa"}>
             <span className="text-xs mr-1 whitespace-nowrap">Empresa:</span>
@@ -1217,7 +1262,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             )}
-        </div>
+          </div>
         </div>
         
         {/* Indicador de doble aprobación */}
@@ -1226,6 +1271,21 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
             <div className="badge badge-success text-xs px-2 py-1 text-white font-medium">
               Aprobado Total
             </div>
+          </div>
+        )}
+        
+        {/* Botón para deshacer aprobación (solo para empresa y si está aprobado) */}
+        {isCompanyAdmin() && approvedByCompany && app.status === APPLICATION_STATUS.APPROVED && (
+          <div className="w-full flex justify-center mt-1">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation(); // Evitar que se propague al card
+                handleDrop(e as unknown as React.DragEvent<HTMLDivElement>, APPLICATION_STATUS.IN_REVIEW);
+              }}
+              className="btn btn-xs btn-error w-full"
+            >
+              Deshacer Aprobación
+            </button>
           </div>
         )}
       </div>
@@ -1739,7 +1799,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
         // Si hubo cambios, actualizar el estado
         if (hasChanges) {
           console.log("Actualizando aplicaciones con estados de aprobación refrescados");
-          setAppsWithApproval([...updatedApps]);
+          setAppsWithApproval(updatedApps);
         }
       } catch (error) {
         console.error("Error al refrescar estados de aprobación:", error);
@@ -1811,6 +1871,78 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
     }
   }, [applications, appsWithApproval, isCompanyAdmin]);
 
+  // Añadir función para manejar la limpieza de filtros
+  const handleClearFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setTypeFilter('all');
+    setDateFromFilter('');
+    setDateToFilter('');
+    setAmountMinFilter('');
+    setAmountMaxFilter('');
+  };
+
+  // Modificar función para filtrar las aplicaciones según los criterios
+  const getFilteredApplications = (apps: ApplicationWithApproval[]): ApplicationWithApproval[] => {
+    return apps.filter(app => {
+      // Filtro por búsqueda de texto
+      if (searchQuery && !(
+        (app.client_name?.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (app.client_email?.toLowerCase().includes(searchQuery.toLowerCase()))
+      )) {
+        return false;
+      }
+      
+      // Filtro por estado
+      if (statusFilter !== 'all' && app.status !== statusFilter) {
+        return false;
+      }
+      
+      // Filtro por tipo de aplicación
+      if (typeFilter !== 'all' && app.application_type !== typeFilter) {
+        return false;
+      }
+      
+      // Filtro por fecha desde
+      if (dateFromFilter) {
+        const appDate = new Date(app.created_at);
+        const fromDate = new Date(dateFromFilter);
+        if (appDate < fromDate) {
+          return false;
+        }
+      }
+      
+      // Filtro por fecha hasta
+      if (dateToFilter) {
+        const appDate = new Date(app.created_at);
+        const toDate = new Date(dateToFilter);
+        // Ajustar para incluir todo el día
+        toDate.setHours(23, 59, 59, 999);
+        if (appDate > toDate) {
+          return false;
+        }
+      }
+      
+      // Filtro por monto mínimo
+      if (amountMinFilter && parseFloat(amountMinFilter) > 0) {
+        const amount = app.amount || app.requested_amount || 0;
+        if (amount < parseFloat(amountMinFilter)) {
+          return false;
+        }
+      }
+      
+      // Filtro por monto máximo
+      if (amountMaxFilter && parseFloat(amountMaxFilter) > 0) {
+        const amount = app.amount || app.requested_amount || 0;
+        if (amount > parseFloat(amountMaxFilter)) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+  };
+
   if (applications.length === 0) {
     return (
       <div className="bg-base-200 p-6 rounded-lg">
@@ -1854,98 +1986,301 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
         </div>
       )}
       
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-4 pb-4 kanban-container p-4" style={{ minWidth: '1000px' }}>
-        {columns.map(column => (
-          <div 
-            key={column.id}
-            className={`bg-base-100 rounded-xl shadow-md border-t-4 border-${column.color} border-l border-r border-b flex flex-col h-full kanban-column`}
-            onDragOver={(e) => {
-              handleDragOver(e, column.id);
-            }}
-            onDragLeave={(e) => {
-              e.currentTarget.classList.remove('drag-over');
-            }}
-            onDrop={(e) => {
-              handleDrop(e, column.id);
-            }}
-          >
-            {/* Cabecera de columna con indicador de color */}
-            <div className={`text-center py-3 px-4 font-bold rounded-t-lg flex items-center justify-between bg-${column.color} bg-opacity-10`}>
-              <span className={`text-${column.color} font-bold text-lg`}>{column.title}</span>
-              <span className={`badge badge-${column.color} badge-lg`}>{column.applications.length}</span>
+      {/* Panel de Filtros */}
+      <div className="mb-6">
+        <div className="bg-base-100 border border-base-300 rounded-lg shadow-sm">
+          <div className="flex justify-between items-center p-4 border-b border-base-300">
+            <div className="relative flex-grow mr-4">
+              <input
+                type="text"
+                placeholder="Buscar por nombre o email..."
+                className="input input-bordered w-full pr-10"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
             </div>
             
-            <div className="p-3 space-y-3 min-h-[500px] max-h-[calc(100vh-220px)] overflow-y-auto custom-scrollbar flex-grow">
-              {column.applications.length === 0 ? (
-                <div className="flex items-center justify-center h-full opacity-50 border-2 border-dashed border-base-300 rounded-lg p-6">
-                  <div className="text-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <p className="text-sm mt-2">No hay solicitudes</p>
-                  </div>
-                </div>
-              ) : (
-                column.applications.map((app, index) => {
-                  const isCardDraggable = canDragCard(app) && app.id !== processingAppId;
-                  return (
-                  <div
-                    key={app.id}
-                      data-tip={getDragTooltip(app)}
-                      className={`card shadow hover:shadow-lg transition-all ${getCardColor(app)} border-l-4 border-t border-r border-b hover:border-primary kanban-card relative ${app.id === processingAppId ? 'processing' : ''} ${app.isMoving ? 'opacity-90' : ''} ${getDraggableClasses(app)}`}
-                      draggable={isCardDraggable}
-                      onDragStart={isCardDraggable ? (e) => handleDragStart(e, app, index) : undefined}
-                      onDragEnd={isCardDraggable ? handleDragEnd : undefined}
-                    style={{
-                      animation: app.id === processingAppId ? 'processingPulse 1.5s infinite' : ''
-                    }}
+            <button 
+              className="btn btn-ghost btn-sm"
+              onClick={() => setIsFilterExpanded(!isFilterExpanded)}
+            >
+              {isFilterExpanded ? 'Ocultar Filtros' : 'Mostrar Filtros'}
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ml-2 transform ${isFilterExpanded ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+          
+          {isFilterExpanded && (
+            <div className="bg-base-200 p-4 rounded-lg">
+              <h3 className="text-lg font-semibold mb-4">Filtros Avanzados</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Estado</span>
+                  </label>
+                  <select
+                    className="select select-bordered w-full"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
                   >
-                    <div className="card-body p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex flex-col">
-                          <div className="font-semibold mb-1">{app.client_name}</div>
-                          {renderProductLabel(app.application_type || '', column.color)}
-                        </div>
-                      </div>
-                      
-                      <div className="mt-1">
-                        {/* Info de la empresa */}
-                        <div className="text-sm text-gray-600 mb-2 flex items-center">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 inline flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                          </svg>
-                          <span className="truncate max-w-[180px] font-medium">
-                            {app.company_name || "Sin empresa"}
-                          </span>
-                        </div>
-                        
-                        {/* Monto */}
-                        <div className="flex items-center mb-3">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <span className="text-base font-bold text-primary">
-                              {formatCurrency(app.requested_amount || 0)}
-                          </span>
-                        </div>
-                        
-                        {/* Indicadores de estado de aprobación */}
-                        {renderApprovalIndicators(app)}
-                        
-                        <div className="card-actions justify-end mt-3">
-                          <Link to={`/applications/${app.id}`} className="btn btn-sm btn-primary w-full">
-                            Ver Detalle
-                          </Link>
-                        </div>
-                      </div>
+                    <option value="all">Todos los estados</option>
+                    {Object.entries(APPLICATION_STATUS).map(([key, value]) => (
+                      <option key={key} value={value}>{STATUS_LABELS[value as keyof typeof STATUS_LABELS] || value}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Tipo de Aplicación</span>
+                  </label>
+                  <select
+                    className="select select-bordered w-full"
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                  >
+                    <option value="all">Todos los tipos</option>
+                    {Object.entries(APPLICATION_TYPE_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Fecha Desde</span>
+                  </label>
+                  <input
+                    type="date"
+                    className="input input-bordered w-full"
+                    value={dateFromFilter}
+                    onChange={(e) => setDateFromFilter(e.target.value)}
+                  />
+                </div>
+                
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Fecha Hasta</span>
+                  </label>
+                  <input
+                    type="date"
+                    className="input input-bordered w-full"
+                    value={dateToFilter}
+                    onChange={(e) => setDateToFilter(e.target.value)}
+                  />
+                </div>
+                
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Monto Mínimo</span>
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    className="input input-bordered w-full"
+                    value={amountMinFilter}
+                    onChange={(e) => setAmountMinFilter(e.target.value)}
+                  />
+                </div>
+                
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Monto Máximo</span>
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    className="input input-bordered w-full"
+                    value={amountMaxFilter}
+                    onChange={(e) => setAmountMaxFilter(e.target.value)}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex justify-end">
+                <button 
+                  className="btn btn-ghost"
+                  onClick={handleClearFilters}
+                >
+                  Limpiar Filtros
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-4 pb-4 kanban-container p-4" style={{ minWidth: '1000px' }}>
+        {/* Modificar bucle de columnas para usar aplicaciones filtradas */}
+        {columns.map(column => {
+          // Filtrar aplicaciones para esta columna
+          const filteredApps = getFilteredApplications(column.applications);
+          
+          return (
+            <div 
+              key={column.id}
+              className={`bg-base-100 rounded-xl shadow-md border-t-4 border-${column.color} border-l border-r border-b flex flex-col h-full kanban-column`}
+              onDragOver={(e) => {
+                handleDragOver(e, column.id);
+              }}
+              onDragLeave={(e) => {
+                e.currentTarget.classList.remove('drag-over');
+              }}
+              onDrop={(e) => {
+                handleDrop(e, column.id);
+              }}
+            >
+              {/* Cabecera de columna con indicador de color */}
+              <div className={`text-center py-3 px-4 font-bold rounded-t-lg flex items-center justify-between bg-${column.color} bg-opacity-10`}>
+                <span className={`text-${column.color} font-bold text-lg`}>{column.title}</span>
+                <span className={`badge badge-${column.color} badge-lg`}>{filteredApps.length}</span>
+              </div>
+              
+              <div className="p-3 space-y-3 min-h-[500px] max-h-[calc(100vh-220px)] overflow-y-auto custom-scrollbar flex-grow">
+                {filteredApps.length === 0 ? (
+                  <div className="flex items-center justify-center h-full opacity-50 border-2 border-dashed border-base-300 rounded-lg p-6">
+                    <div className="text-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <p className="text-sm mt-2">No hay solicitudes</p>
                     </div>
                   </div>
-                  );
-                })
-              )}
+                ) : (
+                  filteredApps.map((app, index) => {
+                    const isCardDraggable = canDragCard(app) && app.id !== processingAppId;
+                    return (
+                      <div
+                        key={app.id}
+                        data-tip={getDragTooltip(app)}
+                        className={`card shadow hover:shadow-lg transition-all ${getCardColor(app)} border-l-4 border-t border-r border-b hover:border-primary kanban-card relative ${app.id === processingAppId ? 'processing' : ''} ${app.isMoving ? 'opacity-90' : ''} ${getDraggableClasses(app)}`}
+                        draggable={isCardDraggable}
+                        onDragStart={isCardDraggable ? (e) => handleDragStart(e, app, index) : undefined}
+                        onDragEnd={isCardDraggable ? handleDragEnd : undefined}
+                        style={{
+                          animation: app.id === processingAppId ? 'processingPulse 1.5s infinite' : ''
+                        }}
+                      >
+                        <div className="card-body p-4">
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex flex-col">
+                              <div className="font-semibold mb-1">{app.client_name}</div>
+                              {renderProductLabel(app.application_type || '', column.color)}
+                            </div>
+                          </div>
+                          
+                          <div className="mt-1">
+                            {/* Info de la empresa */}
+                            <div className="text-sm text-gray-600 mb-2 flex items-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 inline flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                              </svg>
+                              <span className="truncate max-w-[180px] font-medium">
+                                {app.company_name || "Sin empresa"}
+                              </span>
+                            </div>
+                            
+                            {/* Fecha de creación */}
+                            <div className="text-xs text-gray-500 mb-2 flex items-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 inline flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              <span>
+                                {app.created_at ? formatDate(app.created_at, 'datetime') : 'N/A'}
+                              </span>
+                            </div>
+                            
+                            {/* Monto */}
+                            <div className="flex items-center mb-3">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className="text-base font-bold text-primary">
+                                {formatCurrency(app.requested_amount || 0)}
+                              </span>
+                            </div>
+                            
+                            {/* Indicadores de estado de aprobación */}
+                            {renderApprovalIndicators(app)}
+                            
+                            <div className="card-actions justify-end mt-3">
+                              {/* Botón para marcar como completado/dispersado (solo para asesores y tarjetas en Por Dispersar) */}
+                              {isAdvisor() && app.status === APPLICATION_STATUS.POR_DISPERSAR && (
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation(); // Evitar navegación al detalle
+                                    e.preventDefault();
+                                    if (onStatusChange) {
+                                      setProcessingAppId(app.id);
+                                      onStatusChange(app, APPLICATION_STATUS.COMPLETED)
+                                        .then(() => {
+                                          setAutoTransitionMessage(`Solicitud ${app.id} marcada como Completada correctamente`);
+                                          setTimeout(() => setAutoTransitionMessage(null), 3000);
+                                        })
+                                        .catch(error => {
+                                          setErrorMessage(`Error al marcar como completado: ${error.message}`);
+                                        })
+                                        .finally(() => {
+                                          setProcessingAppId(null);
+                                        });
+                                    }
+                                  }}
+                                  className="btn btn-sm btn-accent w-full mb-2"
+                                >
+                                  Marcar como Dispersado
+                                </button>
+                              )}
+                              {/* Botón para mover a Por Dispersar cuando hay ambas aprobaciones pero no está en ese estado */}
+                              {isAdvisor() && 
+                               app.approvalStatus?.approvedByAdvisor && 
+                               app.approvalStatus?.approvedByCompany && 
+                               app.status !== APPLICATION_STATUS.POR_DISPERSAR &&
+                               app.status !== APPLICATION_STATUS.COMPLETED && (
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    if (onStatusChange && !processingAppId) {
+                                      setProcessingAppId(app.id);
+                                      onStatusChange(app, APPLICATION_STATUS.POR_DISPERSAR)
+                                        .then(() => {
+                                          setAutoTransitionMessage(`Solicitud movida a Por Dispersar`);
+                                          setTimeout(() => setAutoTransitionMessage(null), 3000);
+                                        })
+                                        .catch(error => {
+                                          console.error("Error al mover a Por Dispersar:", error);
+                                        })
+                                        .finally(() => {
+                                          setTimeout(() => setProcessingAppId(null), 500);
+                                        });
+                                    }
+                                  }}
+                                  className="btn btn-xs btn-accent w-full mt-2 mb-2"
+                                >
+                                  Mover a Por Dispersar
+                                </button>
+                              )}
+                              <Link to={`/applications/${app.id}`} className="btn btn-sm btn-primary w-full">
+                                Ver Detalle
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
