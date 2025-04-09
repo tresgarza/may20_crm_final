@@ -49,6 +49,19 @@ const formatCurrency = (amount: number | undefined): string => {
   }).format(amount);
 };
 
+// Simple date and time formatter
+const formatDateTime = (dateString: string | undefined): string => {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleString('es-MX', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
 const KanbanCard: React.FC<KanbanCardProps> = ({ 
   app, 
   onClick, 
@@ -92,6 +105,15 @@ const KanbanCard: React.FC<KanbanCardProps> = ({
         <div className="flex flex-col">
           <h3 className="font-medium text-sm">{app.client_name || 'Sin nombre'}</h3>
           <p className="text-xs text-gray-600 truncate">{app.client_phone || 'Sin contacto'}</p>
+          
+          {/* Timestamp row */}
+          <div className="flex items-center mt-1 text-xs text-gray-500">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>{app.created_at ? formatDateTime(app.created_at) : 'Fecha desconocida'}</span>
+          </div>
+          
           <div className="flex justify-between items-center mt-2">
             <span className="badge badge-sm">{app.company_name}</span>
             <span className="text-xs font-bold">{formatCurrency(app.amount)}</span>
