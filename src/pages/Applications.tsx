@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { PERMISSIONS } from '../utils/constants/permissions';
 import { usePermissions } from '../contexts/PermissionsContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,11 +8,13 @@ import { getApplications, Application as ApplicationType, ApplicationFilter } fr
 import Alert from '../components/ui/Alert';
 import { APPLICATION_TYPE, APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
 import { APPLICATION_STATUS, STATUS_LABELS } from '../utils/constants/statuses';
+import { formatCurrency, formatDate } from '../utils/formatters';
 
 const Applications: React.FC = () => {
   const { userCan } = usePermissions();
   const { user } = useAuth();
   const { getEntityFilter, shouldFilterByEntity } = usePermissions();
+  const navigate = useNavigate();
   
   const [applications, setApplications] = useState<ApplicationType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -93,25 +95,18 @@ const Applications: React.FC = () => {
     return STATUS_LABELS[status as keyof typeof STATUS_LABELS] || status;
   };
   
-  const getTypeText = (type: string) => {
+  const getTypeText = (type: string, productType?: string) => {
+    if (productType && type === 'selected_plans') {
+      return getApplicationTypeLabel(productType);
+    }
+    
     const typeLabels: Record<string, string> = {
-      'personal_loan': 'Préstamo Personal',
-      'auto_loan': 'Crédito Auto',
-      'car_backed_loan': 'Crédito con Garantía',
-      'cash_advance': 'Adelanto de Efectivo',
-      'selected_plans': 'Crédito a Plazos',
-      'product_simulations': 'Simulación'
+      'selected_plans': 'Planes Seleccionados',
+      'product_simulations': 'Simulación',
+      'cash_requests': 'Solicitud de Efectivo'
     };
     
     return typeLabels[type] || type;
-  };
-  
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-ES', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
   };
   
   const formatCurrency = (amount: number) => {
@@ -119,6 +114,11 @@ const Applications: React.FC = () => {
       style: 'currency',
       currency: 'CLP',
     }).format(amount);
+  };
+  
+  // Función para obtener la etiqueta del tipo de aplicación
+  const getApplicationTypeLabel = (type: string): string => {
+    return APPLICATION_TYPE_LABELS[type as keyof typeof APPLICATION_TYPE_LABELS] || type;
   };
   
   if (!userCan(PERMISSIONS.VIEW_APPLICATIONS)) {
@@ -156,6 +156,40 @@ const Applications: React.FC = () => {
                 Nueva Solicitud
               </Link>
             )}
+            
+            <button 
+              className="btn btn-outline"
+              onClick={() => {
+                setIsLoading(true);
+                const entityFilter = shouldFilterByEntity() ? getEntityFilter() : null;
+                // Crear objeto de filtros para la búsqueda
+                const filters: ApplicationFilter = {
+                  status: statusFilter !== 'all' ? statusFilter : undefined,
+                  searchQuery: searchQuery || undefined,
+                  application_type: typeFilter !== 'all' ? typeFilter : undefined,
+                  dateFrom: dateFromFilter || undefined,
+                  dateTo: dateToFilter || undefined,
+                  amountMin: amountMinFilter ? parseFloat(amountMinFilter) : undefined,
+                  amountMax: amountMaxFilter ? parseFloat(amountMaxFilter) : undefined
+                };
+                getApplications(filters, entityFilter)
+                  .then(data => {
+                    setApplications(data);
+                    setIsLoading(false);
+                  })
+                  .catch(error => {
+                    console.error('Error al sincronizar aplicaciones:', error);
+                    setError('Error al sincronizar: ' + (error.message || 'Error desconocido'));
+                    setIsLoading(false);
+                  });
+              }}
+              title="Sincronizar datos"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Sincronizar
+            </button>
             
             <button 
               className="btn btn-outline" 
@@ -314,35 +348,60 @@ const Applications: React.FC = () => {
               <table className="table table-zebra w-full">
                 <thead>
                   <tr>
-                    <th>Fecha</th>
-                    <th>Solicitante</th>
-                    <th>Contacto</th>
+                    <th>Cliente</th>
+                    <th>Empresa</th>
                     <th>Tipo</th>
-                    <th>Estado</th>
                     <th>Monto</th>
+                    <th>Estado</th>
+                    <th>Fecha y Hora</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {applications.map((app) => (
-                    <tr key={app.id}>
-                      <td>{formatDate(app.created_at)}</td>
-                      <td>{app.client_name}</td>
+                  {applications.map((application) => (
+                    <tr key={application.id} className="hover cursor-pointer" onClick={() => navigate(`/applications/${application.id}`)}>
+                      <td>{application.client_name || 'N/A'}</td>
+                      <td>{application.company_name || 'N/A'}</td>
                       <td>
-                        <div>{app.client_email}</div>
-                        <div className="text-sm opacity-70">{app.client_phone || 'Sin teléfono'}</div>
+                        {application.application_type === 'selected_plans' && application.product_type
+                          ? getApplicationTypeLabel(application.product_type)
+                          : getApplicationTypeLabel(application.application_type)}
                       </td>
-                      <td>{getTypeText(app.application_type)}</td>
+                      <td>{formatCurrency(Number(application.amount || 0))}</td>
                       <td>
-                        <span className={`badge ${getStatusClass(app.status)}`}>
-                          {getStatusText(app.status)}
+                        <span
+                          className={`badge badge-${
+                            application.status === 'approved'
+                              ? 'success'
+                              : application.status === 'rejected'
+                              ? 'error'
+                              : application.status === 'pending'
+                              ? 'warning'
+                              : application.status === 'in_review'
+                              ? 'info'
+                              : 'ghost'
+                          }`}
+                        >
+                          {application.status}
                         </span>
                       </td>
-                      <td>{formatCurrency(app.requested_amount)}</td>
+                      <td>{application.created_at ? formatDate(application.created_at, 'datetime') : 'N/A'}</td>
                       <td>
-                        <Link to={`/applications/${app.id}`} className="btn btn-sm">
-                          Ver Detalle
-                        </Link>
+                        <div className="dropdown dropdown-end">
+                          <label tabIndex={0} className="btn btn-ghost btn-circle">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                            </svg>
+                          </label>
+                          <ul tabIndex={0} className="dropdown-content menu menu-compact mt-3 p-2 shadow bg-base-100 rounded-box w-52">
+                            <li>
+                              <Link to={`/applications/${application.id}`} className="justify-between">
+                                Ver Detalle
+                                <span className="text-info">⌘T</span>
+                              </Link>
+                            </li>
+                          </ul>
+                        </div>
                       </td>
                     </tr>
                   ))}

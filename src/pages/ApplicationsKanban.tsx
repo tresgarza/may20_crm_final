@@ -54,7 +54,15 @@ const ApplicationsKanban: React.FC = () => {
       // Obtener las aplicaciones
       const data = await getApplications(filters, entityFilter);
       console.log("Aplicaciones recuperadas:", data);
-      setApplications(data);
+      
+      // Ordenar las aplicaciones de más antiguas a más recientes
+      const sortedApplications = [...data].sort((a, b) => {
+        const dateA = new Date(a.created_at);
+        const dateB = new Date(b.created_at);
+        return dateA.getTime() - dateB.getTime(); // Orden ascendente (más viejas primero)
+      });
+      
+      setApplications(sortedApplications);
       // Limpiar la bandera de actualización pendiente
       pendingRefreshRef.current = false;
     } catch (error: any) {
