@@ -6,7 +6,8 @@ import {
   Application, 
   getApprovalStatus, 
   approveByAdvisor, 
-  approveByCompany, 
+  approveByCompany,
+  cancelCompanyApproval,
   updateApplicationStatus,
   ApplicationStatus 
 } from '../services/applicationService';
@@ -17,7 +18,9 @@ import Alert from '../components/ui/Alert';
 import { STATUS_LABELS } from '../utils/constants/statuses';
 import { APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
 import { APPLICATION_STATUS } from '../utils/constants/statuses';
+import { TABLES } from '../utils/constants/tables';
 import { useNotifications, NotificationType } from '../contexts/NotificationContext';
+import { formatDate } from '../utils/formatters';
 
 // Interfaces para estados de aprobación
 interface ApprovalStatus {
@@ -167,6 +170,45 @@ const ApplicationDetail: React.FC = () => {
     }
   };
   
+  // Función para deshacer la aprobación de empresa
+  const handleCancelCompanyApproval = async () => {
+    if (!id || !user || !application) return;
+    
+    try {
+      setApproving(true);
+      setError(null);
+      
+      const entityFilter = shouldFilterByEntity() ? getEntityFilter() : null;
+      
+      if (!entityFilter?.company_id) {
+        throw new Error('No tienes una empresa asociada para realizar esta acción');
+      }
+      
+      await cancelCompanyApproval(
+        id, 
+        'Aprobación cancelada por la empresa', 
+        user.id,
+        entityFilter.company_id,
+        entityFilter
+      );
+      
+      // Recargar datos
+      const updatedApp = await getApplicationById(id, entityFilter);
+      setApplication(updatedApp);
+      
+      const updatedApproval = await getApprovalStatus(id, entityFilter);
+      setApprovalStatus(updatedApproval);
+      
+      setSuccessMessage('Aprobación de empresa cancelada correctamente');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (error: any) {
+      console.error('Error canceling company approval:', error);
+      setError(`Error al cancelar aprobación: ${error.message || 'Error desconocido'}`);
+    } finally {
+      setApproving(false);
+    }
+  };
+  
   // Función para cambiar estado
   const handleStatusChange = async (newStatus: ApplicationStatus) => {
     if (!id || !user || !application) return;
@@ -178,6 +220,60 @@ const ApplicationDetail: React.FC = () => {
       const entityFilter = shouldFilterByEntity() ? getEntityFilter() : null;
       const statusText = STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS] || newStatus;
       
+      // Si un administrador de empresa está cambiando el estado a "En revisión",
+      // primero limpiamos su aprobación
+      if (isCompanyAdmin() && newStatus === APPLICATION_STATUS.IN_REVIEW && approvalStatus?.approvedByCompany) {
+        console.log("Quitando aprobación de empresa antes de cambiar el estado");
+        
+        // Ejecutar consulta SQL para quitar la aprobación
+        const query = `
+          UPDATE ${TABLES.APPLICATIONS}
+          SET approved_by_company = false, 
+              approval_date_company = NULL,
+              status = '${APPLICATION_STATUS.IN_REVIEW}'
+          WHERE id = '${id}' AND company_id = '${entityFilter?.company_id}'
+          RETURNING *
+        `;
+        
+        try {
+          // Ejecutar la consulta directamente usando executeQuery
+          const response = await fetch('http://localhost:3100/query', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ query }),
+          });
+          
+          const result = await response.json();
+          console.log("Resultado de quitar aprobación:", result);
+          
+          if (result.error) {
+            throw new Error(`Error al quitar aprobación: ${result.error}`);
+          }
+          
+          console.log("✅ Aprobación de empresa removida correctamente");
+          
+          // Recargar los datos de aprobación
+          const updatedApproval = await getApprovalStatus(id, entityFilter);
+          setApprovalStatus(updatedApproval);
+          
+          setSuccessMessage(`Aprobación de empresa removida y solicitud actualizada a "${statusText}"`);
+          
+          // Recargar datos completos de la aplicación
+          const updatedApp = await getApplicationById(id, entityFilter);
+          setApplication(updatedApp);
+          
+          setTimeout(() => setSuccessMessage(null), 3000);
+          setApproving(false);
+          return;
+        } catch (error) {
+          console.error("Error al quitar aprobación:", error);
+          // Continuamos con el flujo normal si hay un error
+        }
+      }
+      
+      // Flujo normal para otros casos
       await updateApplicationStatus(
         id,
         newStatus,
@@ -189,6 +285,10 @@ const ApplicationDetail: React.FC = () => {
       // Recargar datos
       const updatedApp = await getApplicationById(id, entityFilter);
       setApplication(updatedApp);
+      
+      // Si cambiamos estado, recargar también el estado de aprobación
+      const updatedApproval = await getApprovalStatus(id, entityFilter);
+      setApprovalStatus(updatedApproval);
       
       // Mostrar mensaje de éxito
       setSuccessMessage(`Solicitud actualizada correctamente a "${statusText}"`);
@@ -208,14 +308,6 @@ const ApplicationDetail: React.FC = () => {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(amount);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-ES', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
   };
   
   const getStatusClass = (status: string) => {
@@ -335,7 +427,7 @@ const ApplicationDetail: React.FC = () => {
                   
                   <div>
                     <p className="text-sm text-gray-500">Fecha de Creación</p>
-                    <p className="font-medium">{formatDate(application.created_at)}</p>
+                    <p className="font-medium">{formatDate(application.created_at, 'short')}</p>
                   </div>
                   
                   <div className="mb-4">
@@ -397,7 +489,7 @@ const ApplicationDetail: React.FC = () => {
                         </div>
                         {approvalStatus.approvalDateAdvisor && (
                           <p className="text-xs text-gray-500 mt-1">
-                            Fecha: {formatDate(approvalStatus.approvalDateAdvisor)}
+                            Fecha: {formatDate(approvalStatus.approvalDateAdvisor, 'short')}
                           </p>
                         )}
                         
@@ -427,7 +519,7 @@ const ApplicationDetail: React.FC = () => {
                         </div>
                         {approvalStatus.approvalDateCompany && (
                           <p className="text-xs text-gray-500 mt-1">
-                            Fecha: {formatDate(approvalStatus.approvalDateCompany)}
+                            Fecha: {formatDate(approvalStatus.approvalDateCompany, 'short')}
                           </p>
                         )}
                         
@@ -441,6 +533,19 @@ const ApplicationDetail: React.FC = () => {
                             {approving ? (
                               <span className="loading loading-spinner loading-xs"></span>
                             ) : 'Aprobar como Empresa'}
+                          </button>
+                        )}
+                        
+                        {/* Botón para deshacer aprobación como empresa */}
+                        {isCompanyAdmin() && approvalStatus.approvedByCompany && (
+                          <button 
+                            onClick={handleCancelCompanyApproval}
+                            disabled={approving}
+                            className="btn btn-sm btn-warning mt-2 w-full"
+                          >
+                            {approving ? (
+                              <span className="loading loading-spinner loading-xs"></span>
+                            ) : 'Deshacer Aprobación'}
                           </button>
                         )}
                       </div>

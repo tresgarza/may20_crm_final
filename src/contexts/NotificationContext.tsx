@@ -476,353 +476,323 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   const checkForNewNotifications = async () => {
-    // Record the check time immediately to prevent race conditions
-    lastCheckTimeRef.current = new Date();
-    
-    // Avoid multiple executions at the same time
-    if (checkingRef.current) {
-      console.log('Already checking for notifications');
-      return;
-    }
-    
-    // Make sure we don't have any lingering popups
-    clearPopups();
-    
-    // Sincronizar con localStorage antes de verificar para evitar duplicados
-    try {
-      const storedNotifications = localStorage.getItem('notified_application_ids');
-      if (storedNotifications) {
-        const parsedData = JSON.parse(storedNotifications);
-        if (typeof parsedData === 'object' && !Array.isArray(parsedData)) {
-          // Fusionar con las notificaciones actuales
-          const updatedMap = new Map(notifiedApplications);
-          let hasChanges = false;
-          
-          Object.entries(parsedData).forEach(([id, timestamp]) => {
-            if (!updatedMap.has(id)) {
-              updatedMap.set(id, timestamp as number);
-              hasChanges = true;
-            }
-          });
-          
-          if (hasChanges) {
-            console.log('Synchronized notification IDs from localStorage before checking');
-            setNotifiedApplications(updatedMap);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error synchronizing notifications from localStorage:', error);
-    }
+    // If already checking or user not logged in, don't start another check
+    if (checkingRef.current || !user) return;
     
     checkingRef.current = true;
-    console.log('Checking for new notifications...');
+    lastCheckTimeRef.current = new Date();
     
     try {
-      // Convert notified IDs Map to array for logging
-      const notifiedIdsArray = Array.from(notifiedApplications.keys());
-      console.log(`${notifiedIdsArray.length} already notified application IDs: ${notifiedIdsArray.join(', ').substring(0, 200)}${notifiedIdsArray.length > 5 ? '...' : ''}`);
-      
-      // Obtener consulta optimizada según tipo de aplicación
-      const optimizedQuery = await getOptimizedQuery();
-      console.log('Using optimized query for latest application type');
-      
-      const response = await fetch('http://localhost:3100/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ query: optimizedQuery })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Error querying recent applications');
-      }
-      
-      const data = await response.json();
-      
-      // If there are applications, filter them first and then show notification
-      if (data.data && data.data.length > 0) {
-        console.log(`Received ${data.data.length} applications from the last 30 seconds`);
+      console.log('Checking for new notifications...');
+      console.log(`${notifiedApplications.size} already notified application IDs: `, 
+        Array.from(notifiedApplications.keys()).slice(0, 3).join(', '));
         
-        // Filter out any applications that have already been notified
-        const newApps = data.data.filter((app: any) => {
-          const isAlreadyNotified = notifiedApplications.has(app.id);
-          if (isAlreadyNotified) {
-            console.log(`Skipping already notified application: ${app.id}`);
-            return false;
-          }
+      // Get the optimized query based on the most recent application type
+      let query = '';
+      try {
+        query = await getOptimizedQuery();
+        console.log('Using optimized query for latest application type');
+        
+        const response = await fetch('http://localhost:3100/query', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ query })
+        });
+        
+        // Process results only if the request was successful
+        if (response.ok) {
+          const result = await response.json();
           
-          // Convertir el timestamp de la aplicación a Date para comparar
-          const appCreatedAt = new Date(app.created_at);
-          
-          // Si la aplicación es de hace más de 60 segundos, no notificar
-          const isTooOld = (new Date().getTime() - appCreatedAt.getTime()) > 60000;
-          if (isTooOld) {
-            console.log(`Skipping too old application: ${app.id} created at ${appCreatedAt.toISOString()}`);
-            // Marcar como notificada para evitar mostrarla en futuras verificaciones
+          if (result.data && result.data.length > 0) {
+            console.log(`Received ${result.data.length} applications from the last 30 seconds`);
+            
+            // Filter out any applications that have already been notified
+            const newApps = result.data.filter((app: any) => {
+              const isAlreadyNotified = notifiedApplications.has(app.id);
+              if (isAlreadyNotified) {
+                console.log(`Skipping already notified application: ${app.id}`);
+                return false;
+              }
+              
+              // Convertir el timestamp de la aplicación a Date para comparar
+              const appCreatedAt = new Date(app.created_at);
+              
+              // Si la aplicación es de hace más de 60 segundos, no notificar
+              const isTooOld = (new Date().getTime() - appCreatedAt.getTime()) > 60000;
+              if (isTooOld) {
+                console.log(`Skipping too old application: ${app.id} created at ${appCreatedAt.toISOString()}`);
+                // Marcar como notificada para evitar mostrarla en futuras verificaciones
+                const appMetadata = {
+                  notifiedAt: new Date().toISOString(),
+                  notificationType: 'application',
+                  applicationType: app.application_type,
+                  amount: app.amount,
+                  clientName: app.client_name,
+                  companyName: app.company_name,
+                  status: app.status
+                };
+                markApplicationAsNotified(app.id, app.created_at, appMetadata);
+                return false;
+              }
+              
+              return true;
+            });
+            
+            console.log(`Found ${newApps.length} new applications after filtering`);
+            
+            if (newApps.length === 0) {
+              console.log('No truly new applications found (already notified or too old)');
+              checkingRef.current = false;
+              return;
+            }
+            
+            // Take only the first new application to show
+            const newApp = newApps[0];
+            const appId = newApp.id;
+            
+            // Verificar si ya está en proceso de notificación (para evitar doble notificación)
+            if (currentPopup && currentPopup.relatedItemId === appId) {
+              console.log(`Already showing notification for application ${appId} - skipping`);
+              checkingRef.current = false;
+              return;
+            }
+            
+            console.log(`New application detected: ${appId} (created ${new Date(newApp.created_at).toISOString()})`);
+            
+            // IMPORTANT: Mark as notified IMMEDIATELY to prevent duplicates
+            // even if processing fails later
             const appMetadata = {
               notifiedAt: new Date().toISOString(),
               notificationType: 'application',
-              applicationType: app.application_type,
-              amount: app.amount,
-              clientName: app.client_name,
-              companyName: app.company_name,
-              status: app.status
+              applicationType: newApp.application_type,
+              amount: newApp.amount,
+              clientName: newApp.client_name,
+              companyName: newApp.company_name,
+              status: newApp.status
             };
-            markApplicationAsNotified(app.id, app.created_at, appMetadata);
-            return false;
-          }
-          
-          return true;
-        });
-        
-        console.log(`Found ${newApps.length} new applications after filtering`);
-        
-        if (newApps.length === 0) {
-          console.log('No truly new applications found (already notified or too old)');
-          checkingRef.current = false;
-          return;
-        }
-        
-        // Take only the first new application to show
-        const newApp = newApps[0];
-        const appId = newApp.id;
-        
-        // Verificar si ya está en proceso de notificación (para evitar doble notificación)
-        if (currentPopup && currentPopup.relatedItemId === appId) {
-          console.log(`Already showing notification for application ${appId} - skipping`);
-          checkingRef.current = false;
-          return;
-        }
-        
-        console.log(`New application detected: ${appId} (created ${new Date(newApp.created_at).toISOString()})`);
-        
-        // IMPORTANT: Mark as notified IMMEDIATELY to prevent duplicates
-        // even if processing fails later
-        const appMetadata = {
-          notifiedAt: new Date().toISOString(),
-          notificationType: 'application',
-          applicationType: newApp.application_type,
-          amount: newApp.amount,
-          clientName: newApp.client_name,
-          companyName: newApp.company_name,
-          status: newApp.status
-        };
-        markApplicationAsNotified(appId, newApp.created_at, appMetadata);
-          
-        // Format data for notification
-        const createdAt = new Date(newApp.created_at);
-        const formattedDate = new Intl.DateTimeFormat('es-MX', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric'
-        }).format(createdAt);
-        
-        const formattedTime = new Intl.DateTimeFormat('es-MX', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true
-        }).format(createdAt);
-        
-        // Format amount with thousands separator and 2 decimals
-        const formattedAmount = new Intl.NumberFormat('es-MX', {
-          style: 'currency',
-          currency: 'MXN',
-          minimumFractionDigits: 2
-        }).format(Number(newApp.amount || 0));
-        
-        // Format interest rate with percentage
-        const formattedRate = newApp.interest_rate !== null && newApp.interest_rate !== undefined 
-          ? `${newApp.interest_rate}%` 
-          : "N/A";
-        
-        // Format monthly payment
-        const formattedMonthly = newApp.monthly_payment !== null && newApp.monthly_payment !== undefined
-          ? new Intl.NumberFormat('es-MX', {
+            markApplicationAsNotified(appId, newApp.created_at, appMetadata);
+              
+            // Format data for notification
+            const createdAt = new Date(newApp.created_at);
+            const formattedDate = new Intl.DateTimeFormat('es-MX', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric'
+            }).format(createdAt);
+            
+            const formattedTime = new Intl.DateTimeFormat('es-MX', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true
+            }).format(createdAt);
+            
+            // Format amount with thousands separator and 2 decimals
+            const formattedAmount = new Intl.NumberFormat('es-MX', {
               style: 'currency',
               currency: 'MXN',
               minimumFractionDigits: 2
-            }).format(Number(newApp.monthly_payment))
-          : "N/A";
-        
-        // Transform application type to a more readable format
-        let appType = 'No especificado';
-        if (newApp.application_type) {
-          // Remove any trailing slash if it exists
-          const cleanType = newApp.application_type.replace(/\/$/, '');
-          
-          if (cleanType === 'selected_plans') {
-            appType = 'Planes seleccionados';
-          } else if (cleanType === 'product_simulations') {
-            appType = 'Simulación de producto';
-          } else if (cleanType === 'cash_requests') {
-            appType = 'Solicitud de efectivo';
-          } else if (cleanType === 'car_backed_loan_applications') {
-            appType = 'Préstamo con garantía de auto';
-          } else if (cleanType === 'auto_loan_applications') {
-            appType = 'Préstamo para auto';
+            }).format(Number(newApp.amount || 0));
+            
+            // Format interest rate with percentage
+            const formattedRate = newApp.interest_rate !== null && newApp.interest_rate !== undefined 
+              ? `${newApp.interest_rate}%` 
+              : "N/A";
+            
+            // Format monthly payment
+            const formattedMonthly = newApp.monthly_payment !== null && newApp.monthly_payment !== undefined
+              ? new Intl.NumberFormat('es-MX', {
+                  style: 'currency',
+                  currency: 'MXN',
+                  minimumFractionDigits: 2
+                }).format(Number(newApp.monthly_payment))
+              : "N/A";
+            
+            // Transform application type to a more readable format
+            let appType = 'No especificado';
+            if (newApp.application_type) {
+              // Remove any trailing slash if it exists
+              const cleanType = newApp.application_type.replace(/\/$/, '');
+              
+              if (cleanType === 'selected_plans') {
+                appType = 'Planes seleccionados';
+              } else if (cleanType === 'product_simulations') {
+                appType = 'Simulación de producto';
+              } else if (cleanType === 'cash_requests') {
+                appType = 'Solicitud de efectivo';
+              } else if (cleanType === 'car_backed_loan_applications') {
+                appType = 'Préstamo con garantía de auto';
+              } else if (cleanType === 'auto_loan_applications') {
+                appType = 'Préstamo para auto';
+              } else {
+                appType = cleanType
+                  .split('_')
+                  .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+                  .join(' ');
+              }
+            }
+
+            // Adaptar la información según el tipo de aplicación
+            const getApplicationSpecificHtml = (appType: string, app: any) => {
+              // Base de los campos comunes para todos los tipos
+              const commonFields = `
+                <div class="font-semibold text-gray-700">Cliente:</div>
+                <div class="text-gray-900">${app.client_name || 'Sin nombre'}</div>
+                
+                <div class="font-semibold text-gray-700">Empresa:</div>
+                <div class="text-gray-900">${app.company_name || 'No especificada'}</div>
+                
+                <div class="font-semibold text-gray-700">Tipo:</div>
+                <div class="text-gray-900">${appType}</div>
+              `;
+
+              // Campos específicos según el tipo de aplicación
+              let specificFields = '';
+
+              // Planes seleccionados - enfatizar plazo, tasa, pago mensual
+              if (app.application_type === 'selected_plans') {
+                specificFields = `
+                  <div class="font-semibold text-gray-700">Monto:</div>
+                  <div class="text-gray-900">${formattedAmount}</div>
+                  
+                  <div class="font-semibold text-gray-700">Plazo:</div>
+                  <div class="text-gray-900">${app.term || 'N/A'} ${app.term === 1 ? 'mes' : 'meses'}</div>
+                  
+                  <div class="font-semibold text-gray-700">Tasa:</div>
+                  <div class="text-gray-900">${formattedRate}</div>
+                  
+                  <div class="font-semibold text-gray-700">Pago mensual:</div>
+                  <div class="text-gray-900">${formattedMonthly}</div>
+                `;
+              } 
+              // Simulación de producto - enfatizar tipo de producto y monto total
+              else if (app.application_type === 'product_simulations') {
+                specificFields = `
+                  <div class="font-semibold text-gray-700">Monto:</div>
+                  <div class="text-gray-900 font-bold">${formattedAmount}</div>
+                  
+                  <div class="font-semibold text-gray-700">Plazo:</div>
+                  <div class="text-gray-900">${app.term && app.term > 0 ? app.term + (app.term === 1 ? ' mes' : ' meses') : 'N/A'}</div>
+                  
+                  <div class="font-semibold text-gray-700">Tasa:</div>
+                  <div class="text-gray-900">${formattedRate}</div>
+                `;
+              } 
+              // Solicitudes de efectivo - enfatizar monto solicitado
+              else if (app.application_type === 'cash_requests') {
+                specificFields = `
+                  <div class="font-semibold text-gray-700">Monto solicitado:</div>
+                  <div class="text-gray-900 font-bold">${formattedAmount}</div>
+                  
+                  <div class="font-semibold text-gray-700">Plazo:</div>
+                  <div class="text-gray-900">${app.term && app.term > 0 ? app.term + (app.term === 1 ? ' mes' : ' meses') : 'N/A'}</div>
+                  
+                  <div class="font-semibold text-gray-700">Tasa:</div>
+                  <div class="text-gray-900">${formattedRate}</div>
+                `;
+              }
+              // Préstamos relacionados con autos
+              else if (app.application_type === 'car_backed_loan_applications' || app.application_type === 'auto_loan_applications') {
+                specificFields = `
+                  <div class="font-semibold text-gray-700">Monto del préstamo:</div>
+                  <div class="text-gray-900 font-bold">${formattedAmount}</div>
+                  
+                  <div class="font-semibold text-gray-700">Plazo:</div>
+                  <div class="text-gray-900">${app.term && app.term > 0 ? app.term + (app.term === 1 ? ' mes' : ' meses') : 'N/A'}</div>
+                  
+                  <div class="font-semibold text-gray-700">Tasa:</div>
+                  <div class="text-gray-900">${formattedRate}</div>
+                  
+                  <div class="font-semibold text-gray-700">Pago mensual:</div>
+                  <div class="text-gray-900">${formattedMonthly}</div>
+                `;
+              }
+              // Para cualquier otro tipo
+              else {
+                specificFields = `
+                  <div class="font-semibold text-gray-700">Monto:</div>
+                  <div class="text-gray-900">${formattedAmount}</div>
+                  
+                  <div class="font-semibold text-gray-700">Plazo:</div>
+                  <div class="text-gray-900">${app.term && app.term > 0 ? app.term + (app.term === 1 ? ' mes' : ' meses') : 'N/A'}</div>
+                  
+                  <div class="font-semibold text-gray-700">Tasa:</div>
+                  <div class="text-gray-900">${formattedRate}</div>
+                  
+                  <div class="font-semibold text-gray-700">Pago mensual:</div>
+                  <div class="text-gray-900">${formattedMonthly}</div>
+                `;
+              }
+
+              // Contacto y fecha - comunes para todos
+              const contactFields = `
+                <div class="font-semibold text-gray-700">Email:</div>
+                <div class="text-gray-900">${app.client_email || 'No especificado'}</div>
+                
+                <div class="font-semibold text-gray-700">Teléfono:</div>
+                <div class="text-gray-900">${app.client_phone || 'No especificado'}</div>
+                
+                <div class="font-semibold text-gray-700">Fecha:</div>
+                <div class="text-gray-900">${formattedDate} ${formattedTime}</div>
+              `;
+
+              return `
+                <div class="grid grid-cols-2 gap-2 text-sm mt-2">
+                  ${commonFields}
+                  ${specificFields}
+                  ${contactFields}
+                </div>
+              `;
+            };
+            
+            // Obtener el HTML específico según el tipo de aplicación
+            const detailedMessage = getApplicationSpecificHtml(appType, newApp);
+            
+            const notificationTitle = '💼 Nueva solicitud recibida';
+            
+            // Create the notification for the panel
+            const newNotification = {
+              title: notificationTitle,
+              message: `Cliente: ${newApp.client_name || 'Sin nombre'} - ${newApp.company_name || 'Empresa no especificada'}`,
+              type: NotificationType.NEW_APPLICATION,
+              relatedItemType: 'application',
+              relatedItemId: appId
+            };
+            
+            // Add the notification to the panel
+            addNotification(newNotification);
+            
+            // Show popup with complete details
+            showPopup({
+              title: notificationTitle,
+              message: detailedMessage,
+              type: NotificationType.NEW_APPLICATION,
+              playSound: soundEnabled,
+              soundType: 'notification',
+              duration: 10000, // 10 seconds
+              customSound: '/sounds/clean-notification.mp3',
+              centerScreen: true,
+              relatedItemId: appId
+            });
+            
+            // Update last notification time to avoid duplicates
+            lastNotificationTimeRef.current = new Date();
           } else {
-            appType = cleanType
-              .split('_')
-              .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-              .join(' ');
+            console.log('No new applications found in the past 30 seconds');
           }
+        } else {
+          console.warn('Failed to fetch notifications: server returned an error status');
         }
-
-        // Adaptar la información según el tipo de aplicación
-        const getApplicationSpecificHtml = (appType: string, app: any) => {
-          // Base de los campos comunes para todos los tipos
-          const commonFields = `
-            <div class="font-semibold text-gray-700">Cliente:</div>
-            <div class="text-gray-900">${app.client_name || 'Sin nombre'}</div>
-            
-            <div class="font-semibold text-gray-700">Empresa:</div>
-            <div class="text-gray-900">${app.company_name || 'No especificada'}</div>
-            
-            <div class="font-semibold text-gray-700">Tipo:</div>
-            <div class="text-gray-900">${appType}</div>
-          `;
-
-          // Campos específicos según el tipo de aplicación
-          let specificFields = '';
-
-          // Planes seleccionados - enfatizar plazo, tasa, pago mensual
-          if (app.application_type === 'selected_plans') {
-            specificFields = `
-              <div class="font-semibold text-gray-700">Monto:</div>
-              <div class="text-gray-900">${formattedAmount}</div>
-              
-              <div class="font-semibold text-gray-700">Plazo:</div>
-              <div class="text-gray-900">${app.term || 'N/A'} ${app.term === 1 ? 'mes' : 'meses'}</div>
-              
-              <div class="font-semibold text-gray-700">Tasa:</div>
-              <div class="text-gray-900">${formattedRate}</div>
-              
-              <div class="font-semibold text-gray-700">Pago mensual:</div>
-              <div class="text-gray-900">${formattedMonthly}</div>
-            `;
-          } 
-          // Simulación de producto - enfatizar tipo de producto y monto total
-          else if (app.application_type === 'product_simulations') {
-            specificFields = `
-              <div class="font-semibold text-gray-700">Monto:</div>
-              <div class="text-gray-900 font-bold">${formattedAmount}</div>
-              
-              <div class="font-semibold text-gray-700">Plazo:</div>
-              <div class="text-gray-900">${app.term && app.term > 0 ? app.term + (app.term === 1 ? ' mes' : ' meses') : 'N/A'}</div>
-              
-              <div class="font-semibold text-gray-700">Tasa:</div>
-              <div class="text-gray-900">${formattedRate}</div>
-            `;
-          } 
-          // Solicitudes de efectivo - enfatizar monto solicitado
-          else if (app.application_type === 'cash_requests') {
-            specificFields = `
-              <div class="font-semibold text-gray-700">Monto solicitado:</div>
-              <div class="text-gray-900 font-bold">${formattedAmount}</div>
-              
-              <div class="font-semibold text-gray-700">Plazo:</div>
-              <div class="text-gray-900">${app.term && app.term > 0 ? app.term + (app.term === 1 ? ' mes' : ' meses') : 'N/A'}</div>
-              
-              <div class="font-semibold text-gray-700">Tasa:</div>
-              <div class="text-gray-900">${formattedRate}</div>
-            `;
-          }
-          // Préstamos relacionados con autos
-          else if (app.application_type === 'car_backed_loan_applications' || app.application_type === 'auto_loan_applications') {
-            specificFields = `
-              <div class="font-semibold text-gray-700">Monto del préstamo:</div>
-              <div class="text-gray-900 font-bold">${formattedAmount}</div>
-              
-              <div class="font-semibold text-gray-700">Plazo:</div>
-              <div class="text-gray-900">${app.term && app.term > 0 ? app.term + (app.term === 1 ? ' mes' : ' meses') : 'N/A'}</div>
-              
-              <div class="font-semibold text-gray-700">Tasa:</div>
-              <div class="text-gray-900">${formattedRate}</div>
-              
-              <div class="font-semibold text-gray-700">Pago mensual:</div>
-              <div class="text-gray-900">${formattedMonthly}</div>
-            `;
-          }
-          // Para cualquier otro tipo
-          else {
-            specificFields = `
-              <div class="font-semibold text-gray-700">Monto:</div>
-              <div class="text-gray-900">${formattedAmount}</div>
-              
-              <div class="font-semibold text-gray-700">Plazo:</div>
-              <div class="text-gray-900">${app.term && app.term > 0 ? app.term + (app.term === 1 ? ' mes' : ' meses') : 'N/A'}</div>
-              
-              <div class="font-semibold text-gray-700">Tasa:</div>
-              <div class="text-gray-900">${formattedRate}</div>
-              
-              <div class="font-semibold text-gray-700">Pago mensual:</div>
-              <div class="text-gray-900">${formattedMonthly}</div>
-            `;
-          }
-
-          // Contacto y fecha - comunes para todos
-          const contactFields = `
-            <div class="font-semibold text-gray-700">Email:</div>
-            <div class="text-gray-900">${app.client_email || 'No especificado'}</div>
-            
-            <div class="font-semibold text-gray-700">Teléfono:</div>
-            <div class="text-gray-900">${app.client_phone || 'No especificado'}</div>
-            
-            <div class="font-semibold text-gray-700">Fecha:</div>
-            <div class="text-gray-900">${formattedDate} ${formattedTime}</div>
-          `;
-
-          return `
-            <div class="grid grid-cols-2 gap-2 text-sm mt-2">
-              ${commonFields}
-              ${specificFields}
-              ${contactFields}
-            </div>
-          `;
-        };
-        
-        // Obtener el HTML específico según el tipo de aplicación
-        const detailedMessage = getApplicationSpecificHtml(appType, newApp);
-        
-        const notificationTitle = '💼 Nueva solicitud recibida';
-        
-        // Create the notification for the panel
-        const newNotification = {
-          title: notificationTitle,
-          message: `Cliente: ${newApp.client_name || 'Sin nombre'} - ${newApp.company_name || 'Empresa no especificada'}`,
-          type: NotificationType.NEW_APPLICATION,
-          relatedItemType: 'application',
-          relatedItemId: appId
-        };
-        
-        // Add the notification to the panel
-        addNotification(newNotification);
-        
-        // Show popup with complete details
-        showPopup({
-          title: notificationTitle,
-          message: detailedMessage,
-          type: NotificationType.NEW_APPLICATION,
-          playSound: soundEnabled,
-          soundType: 'notification',
-          duration: 10000, // 10 seconds
-          customSound: '/sounds/clean-notification.mp3',
-          centerScreen: true,
-          relatedItemId: appId
-        });
-        
-        // Update last notification time to avoid duplicates
-        lastNotificationTimeRef.current = new Date();
-      } else {
-        console.log('No new applications found in the last 30 seconds');
+      } catch (fetchError) {
+        // Gracefully handle connection errors
+        console.warn('Connection to database failed, skipping notification check');
+        // Don't rethrow the error - just log it and continue
       }
-
     } catch (error) {
       console.error('Error checking for new notifications:', error);
     } finally {
-      // Always mark as not running regardless of the result
+      // Always release the checking lock, even if there was an error
       checkingRef.current = false;
     }
   };

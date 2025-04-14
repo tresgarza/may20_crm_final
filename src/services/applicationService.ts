@@ -1,5 +1,6 @@
 import { TABLES } from '../utils/constants/tables';
 import { APPLICATION_STATUS } from '../utils/constants/statuses';
+import { supabase } from '../lib/supabaseClient';
 
 // Verify if APPLICATION_HISTORY table is defined in TABLES
 let APPLICATION_HISTORY_TABLE = TABLES.APPLICATION_HISTORY;
@@ -732,4 +733,35 @@ export const getComments = async (applicationId: string, entityFilter?: Record<s
     console.error(`Error fetching comments for application ${applicationId}:`, error);
     throw error;
   }
+};
+
+export interface ApplicationWithClient {
+  // ... existing code ...
+}
+
+/**
+ * Calcula el pago mensual de un préstamo basado en el monto, tasa de interés y plazo
+ * @param loanAmount - Monto del préstamo 
+ * @param interestRate - Tasa de interés anual (en decimales, ej: 0.12 para 12%)
+ * @param termMonths - Plazo en meses
+ * @returns Pago mensual calculado
+ */
+export const calculateMonthlyPayment = (loanAmount: number, interestRate: number, termMonths: number): number => {
+  // Convertir tasa de interés anual a mensual
+  const monthlyInterestRate = interestRate / 12;
+  
+  // Si la tasa es 0, simplemente dividir el monto entre los meses
+  if (interestRate === 0) {
+    return loanAmount / termMonths;
+  }
+  
+  // Fórmula para calcular pago mensual: P = L[r(1+r)^n]/[(1+r)^n-1]
+  // Donde: P = pago mensual, L = monto del préstamo, r = tasa mensual, n = número de pagos
+  const numerator = monthlyInterestRate * Math.pow(1 + monthlyInterestRate, termMonths);
+  const denominator = Math.pow(1 + monthlyInterestRate, termMonths) - 1;
+  
+  const monthlyPayment = loanAmount * (numerator / denominator);
+  
+  // Redondear a 2 decimales y devolver
+  return Math.round(monthlyPayment * 100) / 100;
 }; 

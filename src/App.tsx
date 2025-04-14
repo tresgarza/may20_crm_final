@@ -12,7 +12,8 @@ import ApplicationDetail from './pages/ApplicationDetail';
 import ApplicationForm from './pages/ApplicationForm';
 import Clients from './pages/Clients';
 import ClientDetail from './pages/ClientDetail';
-import ClientForm from './pages/ClientForm';
+import NewClient from './pages/NewClient';
+import EditClient from './pages/EditClient';
 import Reports from './pages/Reports';
 import Users from './pages/Users';
 import UserForm from './pages/UserForm';
@@ -129,7 +130,7 @@ const App: React.FC = () => {
                 path="/clients/new"
                 element={
                   <ProtectedRoute>
-                    <ClientForm />
+                    <NewClient />
                   </ProtectedRoute>
                 }
               />
@@ -147,7 +148,7 @@ const App: React.FC = () => {
                 path="/clients/:id/edit"
                 element={
                   <ProtectedRoute>
-                    <ClientForm />
+                    <EditClient />
                   </ProtectedRoute>
                 }
               />

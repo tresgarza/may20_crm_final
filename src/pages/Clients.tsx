@@ -223,7 +223,14 @@ const Clients: React.FC = () => {
                     <tbody>
                       {clients.map(client => (
                         <tr key={client.id} className="hover">
-                          <td>{client.name}</td>
+                          <td>
+                            {/* Construct full name from name components */}
+                            {client.name || 
+                              [client.first_name, client.paternal_surname, client.maternal_surname]
+                                .filter(Boolean)
+                                .join(' ')
+                            }
+                          </td>
                           <td>{client.email}</td>
                           <td>{client.phone}</td>
                           <td>{client.rfc || '-'}</td>

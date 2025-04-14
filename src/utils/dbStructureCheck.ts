@@ -14,7 +14,7 @@ interface TableStatus {
 export const checkTableExists = async (tableName: string): Promise<boolean> => {
   try {
     // Intenta hacer una consulta mínima a la tabla
-    const { count, error } = await supabase
+    const { error } = await supabase
       .from(tableName)
       .select('*', { count: 'exact', head: true })
       .limit(1);

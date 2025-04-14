@@ -4,7 +4,7 @@ export type AlertType = 'error' | 'success' | 'info' | 'warning';
 
 interface AlertProps {
   type: AlertType;
-  message: string | Error;
+  message: React.ReactNode;
   onClose?: () => void;
   autoClose?: boolean;
   autoCloseTime?: number;
@@ -20,14 +20,6 @@ const Alert: React.FC<AlertProps> = ({
   className = '',
 }) => {
   const [isVisible, setIsVisible] = useState(true);
-
-  // Format message if it's an Error object
-  const formattedMessage = React.useMemo(() => {
-    if (message instanceof Error) {
-      return message.message || 'Ha ocurrido un error desconocido';
-    }
-    return message;
-  }, [message]);
 
   useEffect(() => {
     if (autoClose && isVisible) {
@@ -93,6 +85,10 @@ const Alert: React.FC<AlertProps> = ({
         return null;
     }
   };
+
+  // Ensure message is rendered as a string
+  const formattedMessage = message instanceof Error ? message.message : 
+                          (typeof message === 'object' ? JSON.stringify(message) : String(message));
 
   return (
     <div className={`alert ${getAlertClass()} ${className}`}>
