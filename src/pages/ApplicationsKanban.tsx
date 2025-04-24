@@ -188,7 +188,7 @@ const ApplicationsKanban: React.FC = () => {
       console.error('No se encontró la aplicación');
       return;
     }
-
+    
     const currentStatus = getStatusField() === 'advisor_status' ? application.advisor_status :
                          getStatusField() === 'company_status' ? application.company_status :
                          getStatusField() === 'global_status' ? application.global_status :
@@ -215,10 +215,10 @@ const ApplicationsKanban: React.FC = () => {
         `;
         
         await supabase.rpc('execute_sql', { query_text: updateQuery });
-        
+      
         // Actualizar el estado local
         updateLocalApplication(application, getStatusField(), APPLICATION_STATUS.REJECTED);
-
+      
         // Mostrar notificación
         toast.success(`La solicitud ha sido rechazada correctamente.`);
         
