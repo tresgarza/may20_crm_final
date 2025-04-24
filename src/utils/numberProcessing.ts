@@ -36,3 +36,4 @@ export const processNumericFields = (data: Record<string, any>, fields: string[]
   
   return updatedData;
 }; 
+ 

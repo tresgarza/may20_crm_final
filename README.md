@@ -412,3 +412,95 @@ El sistema utiliza una arquitectura modular basada en componentes React con las 
   - Manual de usuario
   - Guía de desarrollo
   - Guía de API
+
+## Configuración
+
+### Requisitos
+
+- Node.js v16+
+- npm o yarn
+- Cuenta de Supabase
+
+### Instalación
+
+1. Clonar el repositorio
+2. Instalar dependencias
+   ```
+   npm install
+   ```
+3. Crear un archivo `.env` basado en `.env.example`
+4. Configurar las variables de entorno de Supabase:
+   ```
+   REACT_APP_SUPABASE_URL=https://ydnygntfkrleiseuciwq.supabase.co
+   REACT_APP_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbnlnbnRma3JsZWlzZXVjaXdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk5OTI0MDYsImV4cCI6MjA1NTU2ODQwNn0.B-dH2Kptzz1oyM4ynno_GjlvjpxL-HbNKC_st4bgf0A
+   ```
+
+### Configuración de Supabase
+
+#### Crear función para ejecutar SQL
+
+Es necesario crear una función en Supabase que permita ejecutar consultas SQL dinámicamente. 
+Esto es utilizado por varios servicios del CRM.
+
+1. Ir al **SQL Editor** en el dashboard de Supabase
+2. Ejecutar el contenido del archivo `create_execute_sql_function.sql` que está en la raíz del proyecto
+3. Verificar que la función se haya creado correctamente ejecutando:
+   ```sql
+   SELECT * FROM pg_proc WHERE proname = 'execute_sql';
+   ```
+
+## Ejecución
+
+### Desarrollo
+
+Para ejecutar en modo desarrollo:
+
+```
+npm start
+```
+
+### Producción
+
+Para compilar para producción:
+
+```
+npm run build
+```
+
+## Estructura del proyecto
+
+- `src/components`: Componentes de UI reutilizables
+- `src/contexts`: Contextos de React para manejar estado global
+- `src/pages`: Páginas principales de la aplicación
+- `src/services`: Servicios para comunicación con API
+- `src/utils`: Utilidades y constantes
+- `src/lib`: Clientes y configuraciones de bibliotecas externas
+
+## Autenticación y seguridad
+
+El sistema utiliza autenticación de Supabase con los siguientes roles:
+- **Super Admin**: Control total del sistema
+- **Company Admin**: Administrador de una empresa específica
+- **Advisor**: Asesor financiero asignado a una empresa
+
+## Troubleshooting
+
+### Error de conexión a la base de datos
+
+Si aparecen errores como "Error ejecutando consulta" o "Failed to fetch", verifica:
+
+1. Que la función `execute_sql` esté correctamente creada en Supabase
+2. Que las credenciales en `.env` o `src/lib/supabaseClient.ts` sean correctas
+3. Que tu conexión a internet sea estable
+
+### Error de datos no mostrados en Dashboard
+
+Si el Dashboard no muestra datos correctamente:
+
+1. Revisa la consola del navegador para ver errores específicos
+2. Verifica que las consultas SQL en los servicios sean correctas
+3. Asegúrate de que existan datos en las tablas correspondientes
+
+## Licencia
+
+Propiedad de Fincentiva. Todos los derechos reservados.

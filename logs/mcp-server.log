@@ -1,0 +1,769 @@
+🚀 Servidor REST ejecutándose en el puerto 3100
+📡 Simulando API REST para 10 tablas
+✅ Endpoints disponibles:
+   - /health
+   - /query (POST)
+   - /auth/signin_with_code (POST)
+   - /rest/v1/{tabla} (GET, POST, PUT, DELETE)
+   - /storage/v1/object/{bucket}/{path} (POST)
+[2025-04-15T20:14:37.088Z] GET /health
+[2025-04-15T20:14:44.018Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:14:44.098Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:14:57.206Z] GET /health
+[2025-04-15T20:15:02.604Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:15:02.612Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:15:22.644Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:15:22.653Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:15:42.623Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:15:42.631Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:16:41.234Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:16:41.240Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:17:41.259Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:17:41.271Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:18:01.058Z] GET /health
+[2025-04-15T20:18:01.714Z] POST /query
+📝 Consulta recibida: 
+      SELECT COUNT(*) as total 
+      FROM applications 
+      WHERE assigned_to = 'adv-1744748057540'
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:01.733Z] POST /query
+📝 Consulta recibida: 
+      SELECT COUNT(*) as total 
+      FROM applications 
+      WHERE assigned_to = 'adv-1744748057540'
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:03.403Z] POST /query
+📝 Consulta recibida: 
+      SELECT status, COUNT(*) as count 
+      FROM applications 
+      WHERE assigned_to = 'adv-1744748057540'
+       AND application_type != 'product_simulations'
+      GROUP BY status
+    
+[2025-04-15T20:18:03.407Z] POST /query
+📝 Consulta recibida: 
+      SELECT status, COUNT(*) as count 
+      FROM applications 
+      WHERE assigned_to = 'adv-1744748057540'
+       AND application_type != 'product_simulations'
+      GROUP BY status
+    
+[2025-04-15T20:18:03.805Z] POST /query
+📝 Consulta recibida: 
+      SELECT 
+        AVG(amount) as avg_amount, 
+        MIN(amount) as min_amount, 
+        MAX(amount) as max_amount 
+      FROM applications 
+      WHERE amount IS NOT NULL
+      AND assigned_to = 'adv-1744748057540'
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:03.812Z] POST /query
+📝 Consulta recibida: 
+      SELECT 
+        AVG(amount) as avg_amount, 
+        MIN(amount) as min_amount, 
+        MAX(amount) as max_amount 
+      FROM applications 
+      WHERE amount IS NOT NULL
+      AND assigned_to = 'adv-1744748057540'
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:03.893Z] HEAD /rest/v1/applications?select=*&limit=1
+🔍 HEAD request para tabla applications
+[2025-04-15T20:18:03.899Z] HEAD /rest/v1/applications?select=*&limit=1
+🔍 HEAD request para tabla applications
+[2025-04-15T20:18:03.952Z] POST /query
+📝 Consulta recibida: 
+      SELECT 
+        TO_CHAR(created_at, 'YYYY-MM') as month,
+        COUNT(*) as count
+      FROM applications
+      WHERE assigned_to = 'adv-1744748057540'
+       AND application_type != 'product_simulations'
+      GROUP BY TO_CHAR(created_at, 'YYYY-MM')
+      ORDER BY month
+    
+[2025-04-15T20:18:03.959Z] POST /query
+📝 Consulta recibida: 
+      SELECT 
+        TO_CHAR(created_at, 'YYYY-MM') as month,
+        COUNT(*) as count
+      FROM applications
+      WHERE assigned_to = 'adv-1744748057540'
+       AND application_type != 'product_simulations'
+      GROUP BY TO_CHAR(created_at, 'YYYY-MM')
+      ORDER BY month
+    
+[2025-04-15T20:18:03.974Z] HEAD /rest/v1/applications?select=*&limit=1
+🔍 HEAD request para tabla applications
+[2025-04-15T20:18:03.975Z] HEAD /rest/v1/application_history?select=*&limit=1
+🔍 HEAD request para tabla application_history
+[2025-04-15T20:18:03.976Z] HEAD /rest/v1/application_history?select=*&limit=1
+🔍 HEAD request para tabla application_history
+[2025-04-15T20:18:03.985Z] POST /query
+📝 Consulta recibida: 
+        SELECT COUNT(DISTINCT u.id) as total 
+        FROM users u
+        JOIN applications a ON a.source_id = u.id
+        WHERE a.assigned_to = 'adv-1744748057540'
+         AND application_type != 'product_simulations'
+      
+[2025-04-15T20:18:03.989Z] POST /query
+📝 Consulta recibida: 
+        SELECT COUNT(DISTINCT u.id) as total 
+        FROM users u
+        JOIN applications a ON a.source_id = u.id
+        WHERE a.assigned_to = 'adv-1744748057540'
+         AND application_type != 'product_simulations'
+      
+[2025-04-15T20:18:03.992Z] POST /query
+📝 Consulta recibida: 
+      SELECT COUNT(DISTINCT company_id) as total 
+      FROM applications 
+      WHERE assigned_to = 'adv-1744748057540'
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:03.995Z] POST /query
+📝 Consulta recibida: 
+      SELECT COUNT(DISTINCT company_id) as total 
+      FROM applications 
+      WHERE assigned_to = 'adv-1744748057540'
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:04.001Z] HEAD /rest/v1/companies?select=*&limit=1
+🔍 HEAD request para tabla companies
+[2025-04-15T20:18:04.215Z] POST /query
+📝 Consulta recibida: 
+      SELECT 
+        COUNT(*) FILTER (WHERE status IN ('approved', 'APROBADO', 'completed')) as approved,
+        COUNT(*) as total
+      FROM applications 
+      WHERE assigned_to = 'adv-1744748057540'
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:04.222Z] HEAD /rest/v1/companies?select=*&limit=1
+🔍 HEAD request para tabla companies
+[2025-04-15T20:18:04.236Z] POST /query
+📝 Consulta recibida: 
+      SELECT 
+        COUNT(*) FILTER (WHERE status IN ('approved', 'APROBADO', 'completed')) as approved,
+        COUNT(*) as total
+      FROM applications 
+      WHERE assigned_to = 'adv-1744748057540'
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:04.253Z] POST /query
+📝 Consulta recibida: 
+      SELECT COUNT(*) as count
+      FROM applications
+      WHERE assigned_to = 'adv-1744748057540'
+      AND status IN ('approved', 'APROBADO', 'completed')
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:04.258Z] POST /query
+📝 Consulta recibida: 
+      SELECT COUNT(*) as count
+      FROM applications
+      WHERE assigned_to = 'adv-1744748057540'
+      AND status IN ('approved', 'APROBADO', 'completed')
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:04.262Z] HEAD /rest/v1/users?select=*&limit=1
+🔍 HEAD request para tabla users
+[2025-04-15T20:18:04.264Z] HEAD /rest/v1/users?select=*&limit=1
+🔍 HEAD request para tabla users
+[2025-04-15T20:18:04.267Z] POST /query
+📝 Consulta recibida: 
+      SELECT COUNT(*) as count
+      FROM applications
+      WHERE assigned_to = 'adv-1744748057540'
+      AND status IN ('rejected', 'RECHAZADO')
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:04.268Z] HEAD /rest/v1/users?select=*&limit=1
+🔍 HEAD request para tabla users
+[2025-04-15T20:18:04.269Z] HEAD /rest/v1/application_history?select=*&limit=1
+🔍 HEAD request para tabla application_history
+[2025-04-15T20:18:04.271Z] POST /query
+📝 Consulta recibida: 
+      SELECT COUNT(*) as count
+      FROM applications
+      WHERE assigned_to = 'adv-1744748057540'
+      AND status IN ('rejected', 'RECHAZADO')
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:04.273Z] HEAD /rest/v1/users?select=*&limit=1
+🔍 HEAD request para tabla users
+[2025-04-15T20:18:04.290Z] POST /query
+📝 Consulta recibida: 
+      SELECT COUNT(*) as count
+      FROM applications
+      WHERE assigned_to = 'adv-1744748057540'
+      AND status IN ('pending', 'PENDIENTE', 'review', 'REVISION')
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:04.290Z] POST /query
+📝 Consulta recibida: 
+      SELECT COUNT(*) as count
+      FROM applications
+      WHERE assigned_to = 'adv-1744748057540'
+      AND status IN ('pending', 'PENDIENTE', 'review', 'REVISION')
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:04.296Z] POST /query
+📝 Consulta recibida: 
+      SELECT 
+        COUNT(*) FILTER (WHERE 
+          (approved_by_advisor = false AND approved_by_company = false) OR
+          (approved_by_advisor = true AND approved_by_company = false) OR
+          (approved_by_advisor = false AND approved_by_company = true)
+        ) as pending_approval
+      FROM applications
+      WHERE assigned_to = 'adv-1744748057540'
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:04.301Z] HEAD /rest/v1/advisors?select=*&limit=1
+🔍 HEAD request para tabla advisors
+[2025-04-15T20:18:04.303Z] POST /query
+📝 Consulta recibida: 
+      SELECT 
+        COUNT(*) FILTER (WHERE 
+          (approved_by_advisor = false AND approved_by_company = false) OR
+          (approved_by_advisor = true AND approved_by_company = false) OR
+          (approved_by_advisor = false AND approved_by_company = true)
+        ) as pending_approval
+      FROM applications
+      WHERE assigned_to = 'adv-1744748057540'
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:04.303Z] HEAD /rest/v1/advisors?select=*&limit=1
+🔍 HEAD request para tabla advisors
+[2025-04-15T20:18:04.303Z] HEAD /rest/v1/companies?select=*&limit=1
+🔍 HEAD request para tabla companies
+[2025-04-15T20:18:04.312Z] POST /query
+📝 Consulta recibida: 
+      SELECT AVG(EXTRACT(EPOCH FROM (approval_date_advisor - created_at))/86400) as avg_days
+      FROM applications 
+      WHERE assigned_to = 'adv-1744748057540'
+      AND approval_date_advisor IS NOT NULL
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:04.314Z] POST /query
+📝 Consulta recibida: 
+      SELECT AVG(EXTRACT(EPOCH FROM (approval_date_advisor - created_at))/86400) as avg_days
+      FROM applications 
+      WHERE assigned_to = 'adv-1744748057540'
+      AND approval_date_advisor IS NOT NULL
+       AND application_type != 'product_simulations'
+    
+[2025-04-15T20:18:04.316Z] HEAD /rest/v1/company_admins?select=*&limit=1
+🔍 HEAD request para tabla company_admins
+[2025-04-15T20:18:04.318Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, created_at, client_name, status, amount, company_name, application_type
+        FROM applications
+        WHERE assigned_to = 'adv-1744748057540'
+        AND application_type = 'selected_plans'
+        ORDER BY created_at DESC
+        LIMIT 10
+      
+[2025-04-15T20:18:04.320Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, created_at, client_name, status, amount, company_name, application_type
+        FROM applications
+        WHERE assigned_to = 'adv-1744748057540'
+        AND application_type = 'selected_plans'
+        ORDER BY created_at DESC
+        LIMIT 10
+      
+[2025-04-15T20:18:04.321Z] HEAD /rest/v1/company_admins?select=*&limit=1
+🔍 HEAD request para tabla company_admins
+[2025-04-15T20:18:04.324Z] HEAD /rest/v1/documents?select=*&limit=1
+🔍 HEAD request para tabla documents
+[2025-04-15T20:18:04.343Z] HEAD /rest/v1/users?select=*&limit=1
+🔍 HEAD request para tabla users
+[2025-04-15T20:18:04.381Z] HEAD /rest/v1/users?select=*&limit=1
+🔍 HEAD request para tabla users
+[2025-04-15T20:18:04.396Z] HEAD /rest/v1/advisors?select=*&limit=1
+🔍 HEAD request para tabla advisors
+[2025-04-15T20:18:04.429Z] HEAD /rest/v1/documents?select=*&limit=1
+🔍 HEAD request para tabla documents
+[2025-04-15T20:18:04.442Z] HEAD /rest/v1/company_admins?select=*&limit=1
+🔍 HEAD request para tabla company_admins
+[2025-04-15T20:18:04.444Z] HEAD /rest/v1/comments?select=*&limit=1
+🔍 HEAD request para tabla comments
+[2025-04-15T20:18:04.445Z] HEAD /rest/v1/comments?select=*&limit=1
+🔍 HEAD request para tabla comments
+[2025-04-15T20:18:04.457Z] HEAD /rest/v1/messages?select=*&limit=1
+🔍 HEAD request para tabla messages
+[2025-04-15T20:18:04.457Z] HEAD /rest/v1/messages?select=*&limit=1
+🔍 HEAD request para tabla messages
+[2025-04-15T20:18:04.486Z] HEAD /rest/v1/documents?select=*&limit=1
+🔍 HEAD request para tabla documents
+[2025-04-15T20:18:04.559Z] HEAD /rest/v1/comments?select=*&limit=1
+🔍 HEAD request para tabla comments
+[2025-04-15T20:18:04.594Z] HEAD /rest/v1/messages?select=*&limit=1
+🔍 HEAD request para tabla messages
+[2025-04-15T20:18:06.746Z] POST /query
+📝 Consulta recibida: 
+            SELECT id, created_at, application_type, client_name, company_name, status, amount
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:18:06.797Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:18:06.809Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:18:28.593Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:18:29.191Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:18:47.325Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:18:47.430Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:19:07.292Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:19:07.323Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:19:27.233Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:19:27.242Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:19:47.168Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:19:47.179Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:20:44.862Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:20:45.727Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:23:41.369Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:23:41.403Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:24:41.344Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:24:41.354Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:25:02.386Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:25:02.406Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:25:27.167Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:25:27.177Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:25:47.199Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:25:47.206Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:26:07.289Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:26:07.303Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:26:41.656Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:26:41.804Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:27:41.414Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:27:41.458Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:28:41.449Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:28:41.477Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:29:03.582Z] POST /query
+📝 Consulta recibida: 
+            SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+            LIMIT 1
+          
+[2025-04-15T20:29:03.760Z] POST /query
+📝 Consulta recibida: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+[2025-04-15T20:29:13.996Z] POST /query
+📝 Consulta recibida: SELECT * FROM advisors WHERE access_code = '0021' LIMIT 1
+[2025-04-15T20:31:45.305Z] POST /query
+📝 Consulta recibida: SELECT NOW();
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T20:31:51.575Z] POST /query
+📝 Consulta recibida: SELECT column_name FROM information_schema.columns WHERE table_name = 'documents';
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:02:31.020Z] POST /query
+📝 Consulta recibida: SELECT * FROM advisors WHERE access_code = '0021' LIMIT 1
+[2025-04-15T22:06:18.669Z] POST /query
+📝 Consulta recibida: SELECT * FROM advisors WHERE access_code = '0021' LIMIT 1
+[2025-04-15T22:06:41.904Z] POST /query
+📝 Consulta recibida: SELECT * FROM advisors WHERE access_code = '0021' LIMIT 1
+[2025-04-15T22:11:02.196Z] POST /query
+📝 Consulta recibida: SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:16:19.561Z] POST /query
+📝 Consulta recibida: SELECT * FROM advisors LIMIT 1
+[2025-04-15T22:16:35.293Z] POST /query
+📝 Consulta recibida: SELECT * FROM advisors WHERE access_code IS NOT NULL LIMIT 5
+[2025-04-15T22:16:40.873Z] POST /query
+📝 Consulta recibida: SELECT * FROM company_admins WHERE access_code IS NOT NULL LIMIT 5
+[2025-04-15T22:16:46.596Z] POST /query
+📝 Consulta recibida: SELECT 'Connection test successful' as message
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:18:09.887Z] POST /query
+📝 Consulta recibida: SELECT * FROM advisors WHERE access_code = '0021' LIMIT 1
+[2025-04-15T22:18:19.278Z] POST /query
+📝 Consulta recibida: SELECT * FROM advisors WHERE access_code = 'code123' LIMIT 1
+[2025-04-15T22:18:20.240Z] POST /query
+📝 Consulta recibida: SELECT * FROM company_admins WHERE access_code = 'admin123' LIMIT 1
+[2025-04-15T22:18:25.214Z] POST /query
+📝 Consulta recibida: SELECT id, email, name, access_code FROM advisors
+[2025-04-15T22:18:30.187Z] POST /query
+📝 Consulta recibida: SELECT id, email, name, access_code, company_id FROM company_admins
+[2025-04-15T22:20:32.830Z] POST /query
+📝 Consulta recibida: `cat db-seed.sql`
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:20:47.185Z] POST /query
+📝 Consulta recibida: CREATE TABLE IF NOT EXISTS advisors (id VARCHAR(36) PRIMARY KEY, email VARCHAR(255) NOT NULL, name VARCHAR(255) NOT NULL, access_code VARCHAR(50) NOT NULL, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP)
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:20:53.539Z] POST /query
+📝 Consulta recibida: CREATE TABLE IF NOT EXISTS company_admins (id VARCHAR(36) PRIMARY KEY, email VARCHAR(255) NOT NULL, name VARCHAR(255) NOT NULL, company_id VARCHAR(36) NOT NULL, access_code VARCHAR(50) NOT NULL, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP)
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:21:01.062Z] POST /query
+📝 Consulta recibida: CREATE TABLE IF NOT EXISTS companies (id VARCHAR(36) PRIMARY KEY, name VARCHAR(255) NOT NULL, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP)
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:21:06.629Z] POST /query
+📝 Consulta recibida: INSERT INTO companies (id, name) VALUES ('comp1', 'Test Company 1'), ('comp2', 'Test Company 2') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:21:13.599Z] POST /query
+📝 Consulta recibida: INSERT INTO advisors (id, email, name, access_code) VALUES ('adv1', 'advisor1@example.com', 'Advisor 1', 'code123'), ('adv2', 'advisor2@example.com', 'Advisor 2', 'code456') ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, name = EXCLUDED.name, access_code = EXCLUDED.access_code
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:21:25.475Z] POST /query
+📝 Consulta recibida: INSERT INTO company_admins (id, email, name, company_id, access_code) VALUES ('admin1', 'admin1@example.com', 'Admin 1', 'comp1', 'admin123'), ('admin2', 'admin2@example.com', 'Admin 2', 'comp2', 'admin456') ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, name = EXCLUDED.name, company_id = EXCLUDED.company_id, access_code = EXCLUDED.access_code
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:21:31.675Z] POST /query
+📝 Consulta recibida: SELECT * FROM advisors
+[2025-04-15T22:21:36.581Z] POST /query
+📝 Consulta recibida: SELECT * FROM company_admins
+[2025-04-15T22:21:40.986Z] POST /query
+📝 Consulta recibida: SELECT * FROM companies
+[2025-04-15T22:21:46.110Z] POST /query
+📝 Consulta recibida: SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'clients'
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:21:51.247Z] POST /query
+📝 Consulta recibida: SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:21:56.291Z] POST /query
+📝 Consulta recibida: SELECT * FROM documents LIMIT 5
+[2025-04-15T22:22:09.973Z] POST /query
+📝 Consulta recibida: SELECT column_name FROM information_schema.columns WHERE table_name = 'documents';
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:22:17.429Z] POST /query
+📝 Consulta recibida: SELECT * FROM documents LIMIT 1;
+[2025-04-15T22:22:27.203Z] POST /query
+📝 Consulta recibida: SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'documents';
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:22:32.999Z] POST /query
+📝 Consulta recibida: SELECT * FROM documents LIMIT 1;
+[2025-04-15T22:22:37.985Z] POST /query
+📝 Consulta recibida: SELECT * FROM documents WHERE client_id = 3d1f7b19-5d80-4acf-aac4-98d696a8;
+[2025-04-15T22:22:47.965Z] POST /query
+📝 Consulta recibida: SELECT * FROM storage.buckets;
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:23:04.224Z] POST /query
+📝 Consulta recibida: SELECT column_name FROM information_schema.columns WHERE table_name = 'documents';
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:23:10.103Z] POST /query
+📝 Consulta recibida: SELECT column_name FROM information_schema.columns WHERE table_name = 'documents';
+Fallback a Supabase falló, retornando respuesta simulada vacía
+[2025-04-15T22:24:05.588Z] POST /query
+📝 Consulta recibida: SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;
+Fallback a Supabase falló, retornando respuesta simulada vacía

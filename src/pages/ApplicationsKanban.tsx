@@ -6,12 +6,25 @@ import Alert from '../components/ui/Alert';
 import { usePermissions } from '../contexts/PermissionsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { PERMISSIONS } from '../utils/constants/permissions';
-import { getApplications, updateApplicationStatus, Application as ApplicationType, ApplicationFilter } from '../services/applicationService';
+import { getApplications, updateApplicationStatusField, Application as ApplicationType, ApplicationFilter, markAsDispersed } from '../services/applicationService';
 import { APPLICATION_STATUS, STATUS_LABELS } from '../utils/constants/statuses';
 import { APPLICATION_TYPE, APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
+import { TABLES } from '../utils/constants/tables';
+import { toast } from 'react-hot-toast';
+import { supabase } from '../services/supabase';
+
+// Objeto para almacenar estados previos de las solicitudes antes de ser rechazadas
+interface PreviousStatuses {
+  [applicationId: string]: {
+    advisor_status?: string;
+    company_status?: string;
+    global_status?: string;
+    status?: string;
+  };
+}
 
 const ApplicationsKanban: React.FC = () => {
-  const { userCan } = usePermissions();
+  const { userCan, isAdvisor, isCompanyAdmin, isAdmin } = usePermissions();
   const { user } = useAuth();
   const { getEntityFilter, shouldFilterByEntity } = usePermissions();
   
@@ -21,16 +34,34 @@ const ApplicationsKanban: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   // Referencia para rastrear si deberíamos actualizar
   const pendingRefreshRef = React.useRef(false);
+  // Almacenar estados previos de aplicaciones antes de rechazar
+  const previousStatusesRef = React.useRef<PreviousStatuses>({});
 
   // Estado para filtros
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('selected_plans');
   const [dateFromFilter, setDateFromFilter] = useState<string>('');
   const [dateToFilter, setDateToFilter] = useState<string>('');
   const [amountMinFilter, setAmountMinFilter] = useState<string>('');
   const [amountMaxFilter, setAmountMaxFilter] = useState<string>('');
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  
+  // Determinar qué campo de estado usar según el rol del usuario
+  const getStatusField = useCallback(() => {
+    if (isAdvisor()) {
+      return 'advisor_status';
+    } else if (isCompanyAdmin()) {
+      return 'company_status';
+    } else if (isAdmin()) {
+      return 'global_status';
+    } else {
+      return 'status'; // Fallback al estado estándar
+    }
+  }, [isAdvisor, isCompanyAdmin, isAdmin]);
+  
+  // Obtener el campo de estado actual
+  const statusField = getStatusField();
   
   const fetchApplications = useCallback(async () => {
     try {
@@ -44,16 +75,28 @@ const ApplicationsKanban: React.FC = () => {
       const filters: ApplicationFilter = {
         status: statusFilter !== 'all' ? statusFilter : undefined,
         searchQuery: searchQuery || undefined,
-        application_type: typeFilter !== 'all' ? typeFilter : undefined,
+        application_type: 'selected_plans', // Siempre usar 'selected_plans' como filtro
         dateFrom: dateFromFilter || undefined,
         dateTo: dateToFilter || undefined,
         amountMin: amountMinFilter ? parseFloat(amountMinFilter) : undefined,
         amountMax: amountMaxFilter ? parseFloat(amountMaxFilter) : undefined
       };
       
+      console.log('Applying filters:', JSON.stringify(filters, null, 2));
+      console.log('Type filter value:', typeFilter);
+      
       // Obtener las aplicaciones
       const data = await getApplications(filters, entityFilter);
-      console.log("Aplicaciones recuperadas:", data);
+      console.log(`Applications retrieved: ${data.length}`);
+      
+      // Debug: check application types
+      const appTypes = new Set(data.map(app => app.application_type));
+      console.log('Retrieved application types:', Array.from(appTypes));
+      
+      if (filters.application_type) {
+        const filteredCount = data.filter(app => app.application_type === filters.application_type).length;
+        console.log(`Expected ${filteredCount} applications with type '${filters.application_type}', got ${data.length}`);
+      }
       
       // Ordenar las aplicaciones de más antiguas a más recientes
       const sortedApplications = [...data].sort((a, b) => {
@@ -95,7 +138,7 @@ const ApplicationsKanban: React.FC = () => {
     
     return () => clearInterval(interval);
   }, [fetchApplications]);
-
+  
   const handleFilterToggle = () => {
     setIsFilterExpanded(!isFilterExpanded);
   };
@@ -103,7 +146,8 @@ const ApplicationsKanban: React.FC = () => {
   const handleClearFilters = () => {
     setSearchQuery('');
     setStatusFilter('all');
-    setTypeFilter('all');
+    // Mantener el filtro de Planes Seleccionados incluso al limpiar los filtros
+    setTypeFilter('selected_plans');
     setDateFromFilter('');
     setDateToFilter('');
     setAmountMinFilter('');
@@ -111,53 +155,130 @@ const ApplicationsKanban: React.FC = () => {
   };
   
   // Función para actualizar una aplicación específica en el estado local
-  const updateLocalApplication = (updatedApp: ApplicationType) => {
+  const updateLocalApplication = (updatedApp: ApplicationType, updatedStatusField: string, updatedStatus: string) => {
     setApplications(prev => 
-      prev.map(app => app.id === updatedApp.id ? updatedApp : app)
+      prev.map(app => {
+        if (app.id === updatedApp.id) {
+          // Creamos una copia de la aplicación
+          const updatedApplication = { ...app };
+          
+          // Actualizamos solo el campo específico que se cambió
+          if (updatedStatusField === 'advisor_status') {
+            updatedApplication.advisor_status = updatedStatus as ApplicationType['status'];
+          } else if (updatedStatusField === 'company_status') {
+            updatedApplication.company_status = updatedStatus as ApplicationType['status'];
+          } else if (updatedStatusField === 'global_status') {
+            updatedApplication.global_status = updatedStatus as ApplicationType['status'];
+          } else {
+            updatedApplication.status = updatedStatus as ApplicationType['status'];
+          }
+          
+          return updatedApplication;
+        }
+        return app;
+      })
     );
   };
   
-  const handleStatusChange = async (application: ApplicationType, newStatus: string): Promise<void> => {
-    if (!user) {
-      setError('No has iniciado sesión. Por favor, inicia sesión para realizar esta acción.');
+  const handleStatusChange = async (applicationId: string, newStatus: string) => {
+    // Obtener la aplicación que se va a actualizar
+    const application = applications.find(app => app.id === applicationId);
+    
+    if (!application) {
+      console.error('No se encontró la aplicación');
       return;
     }
+
+    const currentStatus = getStatusField() === 'advisor_status' ? application.advisor_status :
+                         getStatusField() === 'company_status' ? application.company_status :
+                         getStatusField() === 'global_status' ? application.global_status :
+                         application.status;
     
-    try {
-      const entityFilter = shouldFilterByEntity() ? getEntityFilter() : null;
-      
-      // Actualizar el estado de la aplicación
-      const defaultComment = `Cambio de estado de ${application.status} a ${newStatus} vía Kanban`;
-      
-      await updateApplicationStatus(
-        application.id,
-        newStatus as ApplicationType['status'],
-        defaultComment,
-        user.id,
-        entityFilter
-      );
-      
-      // Actualizar localmente la aplicación con el nuevo estado
-      const updatedApplication = { 
-        ...application, 
-        status: newStatus as ApplicationType['status'] 
-      };
-      updateLocalApplication(updatedApplication);
-      
-      // Marcar que necesitamos una actualización completa en segundo plano
-      pendingRefreshRef.current = true;
-      
-      setSuccess(`Solicitud de ${application.client_name || 'cliente'} actualizada correctamente a "${newStatus}"`);
-      
-      // Limpiar mensaje de éxito después de unos segundos
-      setTimeout(() => {
-        setSuccess(null);
-      }, 3000);
-    } catch (error: any) {
-      console.error('Error updating application status:', error);
-      setError(`Error al actualizar el estado: ${error.message || 'Error desconocido'}`);
-      throw error;
+    // Caso especial - si se mueve a Rechazado, guardar los estados actuales y actualizar todos los estados a RECHAZADO
+    if (newStatus === APPLICATION_STATUS.REJECTED) {
+      try {
+        // Actualizar el estado en la base de datos
+        const updateQuery = `
+          UPDATE applications 
+          SET 
+            status = '${APPLICATION_STATUS.REJECTED}', 
+            advisor_status = '${APPLICATION_STATUS.REJECTED}', 
+            company_status = '${APPLICATION_STATUS.REJECTED}', 
+            global_status = '${APPLICATION_STATUS.REJECTED}',
+            rejected_by_advisor = ${getStatusField() === 'advisor_status' ? 'TRUE' : 'FALSE'},
+            rejected_by_company = ${getStatusField() === 'company_status' ? 'TRUE' : 'FALSE'},
+            previous_status = '${currentStatus}',
+            previous_advisor_status = '${getStatusField() === 'advisor_status' ? currentStatus : ''}',
+            previous_company_status = '${getStatusField() === 'company_status' ? currentStatus : ''}',
+            previous_global_status = '${getStatusField() === 'global_status' ? currentStatus : ''}'
+          WHERE id = '${applicationId}'
+        `;
+        
+        await supabase.rpc('execute_sql', { query_text: updateQuery });
+        
+        // Actualizar el estado local
+        updateLocalApplication(application, getStatusField(), APPLICATION_STATUS.REJECTED);
+
+        // Mostrar notificación
+        toast.success(`La solicitud ha sido rechazada correctamente.`);
+        
+        // Forzar una actualización completa
+        if (pendingRefreshRef.current) {
+          fetchApplications();
+        }
+        
+        return;
+      } catch (error: any) {
+        console.error('Error al actualizar el estado de la solicitud:', error.message);
+        toast.error('Error al actualizar el estado de la solicitud');
+        return;
+      }
     }
+    
+    // Caso especial - si se reactivar desde Rechazado, restaurar estados previos
+    if (currentStatus === APPLICATION_STATUS.REJECTED && newStatus !== APPLICATION_STATUS.REJECTED) {
+      try {
+        // Determinar los estados correctos para cada rol
+        const previousStatus = application.previous_status || APPLICATION_STATUS.NEW;
+        const previousAdvisorStatus = application.previous_advisor_status || APPLICATION_STATUS.NEW;
+        const previousCompanyStatus = application.previous_company_status || APPLICATION_STATUS.NEW;
+        const previousGlobalStatus = application.previous_global_status || APPLICATION_STATUS.NEW;
+        
+        // Actualizar el estado en la base de datos
+        const updateQuery = `
+          UPDATE applications 
+          SET 
+            status = '${previousStatus}', 
+            advisor_status = '${previousAdvisorStatus}', 
+            company_status = '${previousCompanyStatus}', 
+            global_status = '${previousGlobalStatus}',
+            rejected_by_advisor = FALSE,
+            rejected_by_company = FALSE
+          WHERE id = '${applicationId}'
+        `;
+        
+        await supabase.rpc('execute_sql', { query_text: updateQuery });
+        
+        // Actualizar el estado local
+        updateLocalApplication(application, getStatusField(), previousStatus);
+
+        // Mostrar notificación
+        toast.success(`La solicitud ha sido reactivada correctamente.`);
+        
+        // Forzar una actualización completa
+        if (pendingRefreshRef.current) {
+          fetchApplications();
+        }
+        
+        return;
+      } catch (error: any) {
+        console.error('Error al reactivar la solicitud:', error.message);
+        toast.error('Error al reactivar la solicitud');
+        return;
+      }
+    }
+
+    // ... resto del código existente ...
   };
   
   if (!userCan(PERMISSIONS.VIEW_APPLICATIONS)) {
@@ -176,10 +297,35 @@ const ApplicationsKanban: React.FC = () => {
   return (
     <MainLayout>
       <div className="p-6 max-w-[2000px] mx-auto">
+        {/* Debug info for filters - Only show in development */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="bg-gray-100 p-3 mb-4 rounded text-xs font-mono overflow-x-auto">
+            <p>Debug - Current filters:</p>
+            <ul>
+              <li>Type filter: {typeFilter}</li>
+              <li>Status filter: {statusFilter}</li>
+              <li>Status field: {statusField}</li>
+            </ul>
+          </div>
+        )}
+        
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-primary">Tablero Kanban</h1>
-            <p className="text-gray-600 mt-1">Visualiza y gestiona tus solicitudes arrastrando las tarjetas entre columnas</p>
+            <h1 className="text-3xl font-bold text-primary">Tablero Kanban - Planes Seleccionados</h1>
+            <p className="text-gray-600 mt-1">
+              {statusField === 'advisor_status' && 'Vista de Asesor: Gestiona tus planes seleccionados independientemente de otros roles'}
+              {statusField === 'company_status' && 'Vista de Empresa: Gestiona tus planes seleccionados independientemente de otros roles'}
+              {statusField === 'global_status' && 'Vista Global: Supervisa todos los planes seleccionados en el sistema'}
+              {statusField === 'status' && 'Visualiza y gestiona tus planes seleccionados arrastrando las tarjetas entre columnas'}
+            </p>
+            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+              <p className="text-blue-700 text-sm flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Este tablero muestra exclusivamente solicitudes de tipo "Planes Seleccionados".
+              </p>
+            </div>
           </div>
           
           <div className="flex gap-2">
@@ -219,6 +365,24 @@ const ApplicationsKanban: React.FC = () => {
               </svg>
               Filtros
             </button>
+          </div>
+        </div>
+        
+        {/* Indicador de Vista */}
+        <div className="mb-4 bg-base-200 p-3 rounded-lg shadow-sm">
+          <div className="flex items-center">
+            <div className="badge badge-primary mr-2">
+              {statusField === 'advisor_status' && 'Vista de Asesor'}
+              {statusField === 'company_status' && 'Vista de Empresa'}
+              {statusField === 'global_status' && 'Vista Global'}
+              {statusField === 'status' && 'Vista Estándar'}
+            </div>
+            <p className="text-sm">
+              {statusField === 'advisor_status' && 'Los cambios que hagas aquí no afectarán la vista de Empresa'}
+              {statusField === 'company_status' && 'Los cambios que hagas aquí no afectarán la vista de Asesor'}
+              {statusField === 'global_status' && 'Supervisando el estado global del proceso'}
+              {statusField === 'status' && 'Vista estándar del sistema'}
+            </p>
           </div>
         </div>
         
@@ -273,19 +437,15 @@ const ApplicationsKanban: React.FC = () => {
               <div className="form-control">
                 <label className="label">
                   <span className="label-text">Tipo</span>
+                  <span className="label-text-alt text-primary">Enfocado en Planes Seleccionados</span>
                 </label>
-                <select 
-                  className="select select-bordered w-full"
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                >
-                  <option value="all">Todos los tipos</option>
-                  {Object.entries(APPLICATION_TYPE).map(([key, value]) => (
-                    <option key={key} value={value}>
-                      {APPLICATION_TYPE_LABELS[key as keyof typeof APPLICATION_TYPE_LABELS] || key}
-                    </option>
-                  ))}
-                </select>
+                <div className="border border-primary rounded-md p-2 bg-primary bg-opacity-10 flex items-center justify-between">
+                  <span className="font-medium text-primary">Planes Seleccionados</span>
+                  <span className="badge badge-primary">Predeterminado</span>
+                </div>
+                <label className="label">
+                  <span className="label-text-alt text-info">El tablero Kanban solo muestra Planes Seleccionados</span>
+                </label>
               </div>
               
               {/* Filtro por fecha desde */}
@@ -383,9 +543,15 @@ const ApplicationsKanban: React.FC = () => {
           </div>
         ) : (
           <div className="bg-base-100 shadow-xl rounded-xl overflow-hidden border border-base-300">
+            {/* Pre-filtrar las aplicaciones para mostrar solo Planes Seleccionados */}
             <KanbanBoard 
-              applications={applications}
-              onStatusChange={userCan(PERMISSIONS.EDIT_APPLICATION) ? handleStatusChange : undefined}
+              applications={applications.filter(app => app.application_type === 'selected_plans')} 
+              onStatusChange={userCan(PERMISSIONS.EDIT_APPLICATION) ? 
+                async (app, newStatus, fieldToUpdate = statusField) => {
+                  return handleStatusChange(app.id, newStatus);
+                } : undefined}
+              statusField={statusField}
+              applicationTypeFilter={'selected_plans'} // Forzar siempre el filtro de planes seleccionados
             />
           </div>
         )}

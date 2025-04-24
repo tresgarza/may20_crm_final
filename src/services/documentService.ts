@@ -39,7 +39,7 @@ export interface DocumentUpload {
 export type UploadDocumentParams = DocumentUpload;
 
 const DOCUMENTS_TABLE = TABLES.DOCUMENTS;
-const STORAGE_BUCKET = 'documents';
+const STORAGE_BUCKET = 'client-documents';
 
 // Ensure storage bucket exists
 export const ensureStorageBucketExists = async (client?: SupabaseClient) => {
@@ -93,18 +93,32 @@ export const getApplicationDocuments = async (applicationId: string) => {
 
 // Get all documents for a client
 export const getClientDocuments = async (clientId: string) => {
-  const { data, error } = await supabase
-    .from(DOCUMENTS_TABLE)
-    .select('*')
-    .eq('client_id', clientId)
-    .order('created_at', { ascending: false });
+  try {
+    // First check if the documents table exists
+    const tableExists = await checkTableExists(DOCUMENTS_TABLE);
+    if (!tableExists) {
+      console.warn(`Documents table ${DOCUMENTS_TABLE} does not exist.`);
+      return [];
+    }
 
-  if (error) {
-    console.error(`Error fetching documents for client ${clientId}:`, error);
-    throw error;
+    const { data, error } = await supabase
+      .from(DOCUMENTS_TABLE)
+      .select('id, created_at, file_name, file_path, file_type, file_size, category, application_id, client_id, uploaded_by_user_id')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error(`Error fetching documents for client ${clientId}:`, error);
+      throw error;
+    }
+
+    console.log(`Retrieved ${data?.length || 0} documents for client ${clientId}`);
+    return data || [];
+  } catch (error) {
+    console.error(`Error in getClientDocuments for client ${clientId}:`, error);
+    // Return empty array instead of throwing to prevent UI crashes
+    return [];
   }
-
-  return data;
 };
 
 // Get a single document by ID

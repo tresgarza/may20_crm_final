@@ -4,7 +4,7 @@ import { ChartBarIcon, CurrencyDollarIcon, UserGroupIcon, ClipboardDocumentCheck
 import { useAuth } from '../contexts/AuthContext';
 import { USER_ROLES } from '../utils/constants/roles';
 import { APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
-import { DashboardStats } from '../services/dashboardService';
+import { DashboardStats, ApplicationStats, CompanyStats } from '../types/dashboard.types';
 import { formatCurrency, formatDate } from '../utils/formatters';
 
 // Componentes de UI
@@ -17,11 +17,10 @@ import AdvisorPerformanceChart from '../components/ui/charts/AdvisorPerformanceC
 
 // Servicios
 import {
-  AdvisorStats,
-  CompanyStats,
   getGeneralDashboardStats,
-  getAdvisorDashboardStats,
+  getAdvisorStats,
   getCompanyDashboardStats,
+  getPendingApprovals
 } from '../services/dashboardService';
 
 // Interfaces adicionales
@@ -30,7 +29,7 @@ interface AmountRange {
   count: number;
 }
 
-interface AdvisorPerformance {
+interface AdvisorData {
   advisor_name: string;
   total_applications: number;
   approved_applications?: number;
@@ -41,12 +40,22 @@ interface ExtendedStats {
   applications?: { [key: string]: number };
   previousMonthApproved?: number;
   amountRanges?: AmountRange[];
-  advisorPerformance?: AdvisorPerformance[];
+  mockAdvisorPerformance?: AdvisorData[];
+  totalClients?: number;
+  totalCompanies?: number;
+  totalAdvisors?: number;
+  conversionRate?: number;
+  pendingApproval?: number;
+  avgTimeToApproval?: number;
+  avgApprovalTime?: number;
+  totalPending?: number;
+  totalApproved?: number;
+  totalRejected?: number;
   // Add any other extra fields needed
 }
 
 // Tipo combinado para stats con todas las propiedades posibles
-type DashboardStatsType = any; // Temporarily use 'any' to bypass type checking issues
+type DashboardStatsType = (DashboardStats | ApplicationStats | CompanyStats) & Partial<ExtendedStats>;
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -55,121 +64,236 @@ const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStatsType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [partialData, setPartialData] = useState(false);
+  const [filters, setFilters] = useState({
+    startDate: '',
+    endDate: '',
+    advisorId: '',
+    companyId: '',
+  });
+  const [pendingApproval, setPendingApproval] = useState(0);
 
-  // Formatear moneda (pesos)
-  const formatCurrency = (value: number | string) => {
-    const numValue = typeof value === 'string' ? parseFloat(value) : value;
-    return new Intl.NumberFormat('es-MX', {
-      style: 'currency',
-      currency: 'MXN',
-      minimumFractionDigits: 2, // Siempre mostrar 2 decimales
-      maximumFractionDigits: 2, // Siempre mostrar 2 decimales
-    }).format(numValue);
-  };
-
-  // Comprobar si el objeto es de tipo AdvisorStats
-  const isAdvisorStats = (obj: DashboardStatsType): obj is AdvisorStats & ExtendedStats => {
-    return 'conversionRate' in obj && typeof obj.conversionRate === 'number';
-  };
-
-  // Cargar estadísticas según rol del usuario
-  useEffect(() => {
-    if (!user) {
-      navigate('/login');
-      return;
+  // Create a wrapper for formatCurrency that matches MetricCard's formatValue type
+  const formatMetricValue = (value: string | number): string => {
+    if (typeof value === 'string') {
+      return formatCurrency(parseFloat(value) || 0);
     }
+    return formatCurrency(value || 0);
+  };
 
-    const fetchDashboardData = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        setPartialData(false);
+  // Comprobar si el objeto es de tipo ApplicationStats
+  const isAdvisorStats = (obj: any): obj is ApplicationStats => {
+    console.log('Checking if stats is AdvisorStats:', JSON.stringify(obj));
+    return obj && 'advisorId' in obj && 'conversionRate' in obj;
+  };
 
-        let dashboardData;
+  // Comprobar si el objeto es de tipo CompanyStats
+  const isCompanyStats = (obj: any): obj is CompanyStats => {
+    console.log('Checking if stats is CompanyStats:', JSON.stringify(obj));
+    return obj && 'totalAdvisors' in obj && 'avgApprovalTime' in obj;
+  };
 
-        try {
-          if (user.role === USER_ROLES.ADVISOR) {
-            // Estadísticas específicas del asesor
-            dashboardData = await getAdvisorDashboardStats(user.id, false);
-          } else if (user.role === USER_ROLES.COMPANY_ADMIN && user.entityId) {
-            // Estadísticas específicas de la empresa (entityId contiene el company_id)
-            dashboardData = await getCompanyDashboardStats(user.entityId, false);
-          } else {
-            // Estadísticas generales para admin del sistema
-            dashboardData = await getGeneralDashboardStats({ includeSimulations: false });
-          }
-        } catch (statsError) {
-          console.error('Error fetching dashboard stats:', statsError);
-          // Modified part for the fallback data
-          dashboardData = {
-            totalApplications: 0,
-            pendingApplications: 0,
-            approvedApplications: 0,
-            rejectedApplications: 0,
-            averageAmount: 0,
-            minAmount: 0,
-            maxAmount: 0,
-            recentApplications: [],
-            applicationsByStatus: [
-              { status: 'approved', count: 9 },
-              { status: 'pending', count: 25 },
-              { status: 'in_review', count: 12 },
-              { status: 'rejected', count: 5 },
-              { status: 'completed', count: 8 },
-            ],
-            applicationsByMonth: [
-              { month: '2023-01', count: 5 },
-              { month: '2023-02', count: 10 },
-              { month: '2023-03', count: 15 },
-            ],
-            totalClients: 0
-          };
-        }
-
-        // Update the dashboard data creation in fetchDashboardData
-        // Before setting stats with setStats(extendedData);
-        // Replace this line:
-        // const extendedData: DashboardStatsType = {
-        //   ...dashboardData,
-        //   applications: {
-        //     pending: dashboardData.pendingApplications || 0,
-        //     approved: dashboardData.approvedApplications || 0,
-        //     rejected: dashboardData.rejectedApplications || 0,
-        //     in_review: (dashboardData.pendingApplications || 0) - (dashboardData.approvedApplications || 0),
-        //   },
-        //   previousMonthApproved: Math.floor((dashboardData.approvedApplications || 0) * 0.8), // Simulación
-        //   amountRanges: [
-        //     { range: '0-5,000', count: Math.floor(Math.random() * 30) + 10 },
-        //     { range: '5,001-10,000', count: Math.floor(Math.random() * 25) + 15 },
-        //     { range: '10,001-20,000', count: Math.floor(Math.random() * 20) + 20 },
-        //     { range: '20,001-30,000', count: Math.floor(Math.random() * 15) + 10 },
-        //     { range: '30,001-50,000', count: Math.floor(Math.random() * 10) + 5 },
-        //     { range: '50,001+', count: Math.floor(Math.random() * 5) + 2 },
-        //   ],
-        //   advisorPerformance: [...]
-        // };
-
-        // With this:
-        // Keep the original data and add ExtendedStats properties separately
-        setStats(dashboardData as DashboardStatsType);
-      } catch (err) {
-        console.error('Error al cargar estadísticas:', err);
-        setError('Error al cargar las estadísticas del dashboard. Intente refrescar la página.');
-      } finally {
-        setIsLoading(false);
-      }
+  // Define the fallback functions before they're used in useEffect
+  // Crear datos de respaldo para estadísticas generales
+  const createFallbackGeneralStats = (): DashboardStats => {
+    return {
+      totalApplications: 0,
+      pendingApplications: 0,
+      approvedApplications: 0,
+      rejectedApplications: 0,
+      totalAmount: 0,
+      averageAmount: 0,
+      recentApplications: [],
+      applicationsByStatus: {},
+      applicationsByMonth: [],
+      advisorPerformance: []
     };
+  };
 
-    fetchDashboardData();
-  }, [navigate, user]);
+  // Crear datos de respaldo para estadísticas de asesor
+  const createFallbackAdvisorStats = (advisorId: string): ApplicationStats => {
+    return {
+      totalApplications: 0,
+      pendingApplications: 0,
+      approvedApplications: 0,
+      rejectedApplications: 0,
+      totalAmount: 0,
+      averageAmount: 0,
+      recentApplications: [],
+      advisorId: advisorId,
+      advisorName: user?.name || 'Asesor',
+      applicationsByMonth: [],
+      applicationsByStatus: {},
+      totalApproved: 0,
+      totalRejected: 0,
+      totalPending: 0,
+      pendingApproval: 0,
+      totalClients: 0,
+      totalCompanies: 0,
+      conversionRate: 0,
+      avgTimeToApproval: 0,
+      advisorPerformance: []
+    };
+  };
+
+  // Crear datos de respaldo para estadísticas de empresa
+  const createFallbackCompanyStats = (companyId: string): CompanyStats => {
+    return {
+      totalApplications: 0,
+      pendingApplications: 0,
+      approvedApplications: 0,
+      rejectedApplications: 0,
+      totalAmount: 0,
+      avgAmount: 0,
+      recentApplications: [],
+      totalClients: 0,
+      totalAdvisors: 0,
+      avgApprovalTime: 0,
+      applicationsByStatus: [],
+      applicationsByMonth: [],
+      advisorPerformance: []
+    };
+  };
+
+  // Función para cargar estadísticas basadas en el rol
+  const loadStats = async () => {
+    try {
+      setIsLoading(true);
+      console.log('Loading dashboard stats...');
+      console.log('Current user:', user);
+
+      if (!user) {
+        console.log('No user found, returning early');
+        setIsLoading(false);
+        return;
+      }
+
+      let dashboardStats: DashboardStatsType | null = null;
+
+      // Definir filtros para la consulta
+      const queryFilters = {
+        startDate: filters.startDate || undefined,
+        endDate: filters.endDate || undefined,
+        advisorId: filters.advisorId || undefined,
+        companyId: filters.companyId || undefined,
+      };
+      
+      console.log('Using query filters:', queryFilters);
+
+      if (user.role === USER_ROLES.SUPERADMIN) {
+        console.log('Loading stats for SUPERADMIN');
+        dashboardStats = await getGeneralDashboardStats(queryFilters);
+      } else if (user.role === USER_ROLES.ADVISOR) {
+        console.log('Loading stats for ADVISOR with ID:', user.id);
+        dashboardStats = await getAdvisorStats(user.id, queryFilters);
+        console.log('ADVISOR stats loaded:', {
+          totalApplications: dashboardStats?.totalApplications,
+          approvedApplications: dashboardStats?.approvedApplications,
+          applicationsByStatus: dashboardStats?.applicationsByStatus
+        });
+      } else if (user.role === USER_ROLES.COMPANY_ADMIN) {
+        console.log('Loading stats for COMPANY_ADMIN with entity ID:', user.entityId);
+        
+        if (user.entityId) {
+          // Si el usuario es administrador de empresa, cargar estadísticas de la empresa
+          dashboardStats = await getCompanyDashboardStats(user.entityId, queryFilters);
+        } else {
+          console.error('Company admin user has no entityId (company_id)');
+        }
+      }
+
+      console.log('Received dashboard stats:', dashboardStats);
+      
+      if (dashboardStats && 'applicationsByStatus' in dashboardStats) {
+        console.log('Applications by status:', dashboardStats.applicationsByStatus);
+      }
+      
+      if (dashboardStats && 'applicationsByMonth' in dashboardStats) {
+        console.log('Applications by month:', dashboardStats.applicationsByMonth);
+      }
+
+      // Obtener información de aprobaciones pendientes
+      try {
+        const isPendingApprovals = user.role === USER_ROLES.ADVISOR || user.role === USER_ROLES.COMPANY_ADMIN;
+        
+        if (isPendingApprovals && user.id) {
+          console.log('Fetching pending approvals for user:', user.id, 'isCompanyAdmin:', user.role === USER_ROLES.COMPANY_ADMIN);
+          const pendingData = await getPendingApprovals(
+            user.role === USER_ROLES.COMPANY_ADMIN ? (user.entityId || user.id) : user.id,
+            user.role === USER_ROLES.COMPANY_ADMIN
+          );
+          
+          console.log('Pending approvals data:', pendingData);
+          setPendingApproval(pendingData.totalPending);
+        }
+      } catch (approvalError) {
+        console.error('Error fetching pending approvals:', approvalError);
+      }
+
+      setStats(dashboardStats);
+    } catch (error) {
+      console.error('Error loading dashboard stats:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStats();
+  }, [user, filters]);
+
+  // Manejadores para los filtros
+  const handleFilterChange = (newFilters: any) => {
+    setFilters(prev => ({
+      ...prev,
+      ...newFilters
+    }));
+  };
 
   // Utility function to get application type label
   const getApplicationTypeLabel = (type: string): string => {
     return APPLICATION_TYPE_LABELS[type as keyof typeof APPLICATION_TYPE_LABELS] || type;
   };
 
+  // Check if stats has the amountRanges and mockAdvisorPerformance properties
+  const hasExtendedData = (stats: any): stats is DashboardStatsType & { amountRanges: AmountRange[], mockAdvisorPerformance: AdvisorData[] } => {
+    return 'amountRanges' in stats && 'mockAdvisorPerformance' in stats;
+  };
+
+  // Add debug logging for dashboard rendering
+  useEffect(() => {
+    if (stats) {
+      console.log('Dashboard rendering with stats:', {
+        totalApplications: stats.totalApplications,
+        pendingApplications: stats.pendingApplications,
+        approvedApplications: stats.approvedApplications,
+        rejectedApplications: stats.rejectedApplications,
+        applicationsByStatus: stats.applicationsByStatus,
+        applicationsByStatusType: Array.isArray(stats.applicationsByStatus) ? 'array' : typeof stats.applicationsByStatus
+      });
+    }
+  }, [stats]);
+
+  // Utility to check if applicationsByStatus is in array format (CompanyStats)
+  // or object format (ApplicationStats/DashboardStats)
+  const isApplicationStatusArray = (data: any): data is Array<{status: string; count: number}> => {
+    return Array.isArray(data) && data.length > 0 && 'status' in data[0] && 'count' in data[0];
+  };
+  
+  const formatStatusData = (statusData: any): Array<{status: string; count: number}> => {
+    if (isApplicationStatusArray(statusData)) {
+      return statusData;
+    } else if (statusData && typeof statusData === 'object' && !Array.isArray(statusData)) {
+      return Object.entries(statusData).map(([status, count]) => ({
+        status,
+        count: typeof count === 'number' ? count : 0
+      }));
+    }
+    return [];
+  };
+
   // Si está cargando, mostrar indicador
   if (isLoading) {
+    console.log('Dashboard is in loading state');
     return (
       <MainLayout>
         <div className="flex justify-center items-center h-full p-8">
@@ -183,6 +307,7 @@ const Dashboard: React.FC = () => {
 
   // Si hay error, mostrar mensaje
   if (error) {
+    console.log('Dashboard has error:', error);
     return (
       <MainLayout>
         <div className="p-8">
@@ -196,6 +321,7 @@ const Dashboard: React.FC = () => {
 
   // Si no hay datos, mostrar mensaje
   if (!stats) {
+    console.log('Dashboard has no stats data');
     return (
       <MainLayout>
         <div className="p-8">
@@ -205,6 +331,15 @@ const Dashboard: React.FC = () => {
         </div>
       </MainLayout>
     );
+  }
+
+  // Si es asesor, mostrar sus métricas específicas
+  if (isAdvisorStats(stats)) {
+    console.log('Rendering advisor dashboard with data:', {
+      totalApplications: stats.totalApplications,
+      approvedApplications: stats.approvedApplications,
+      applicationsByStatus: stats.applicationsByStatus
+    });
   }
 
   return (
@@ -224,7 +359,7 @@ const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Tarjetas de métricas principales */}
+        {/* Tarjetas de métricas principales - Always show regardless of value */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricCard
             title="Total de Solicitudes"
@@ -241,8 +376,8 @@ const Dashboard: React.FC = () => {
           />
           <MetricCard
             title="Monto Promedio"
-            value={stats.averageAmount}
-            formatValue={formatCurrency}
+            value={isCompanyStats(stats) ? stats.avgAmount : stats.averageAmount}
+            formatValue={formatMetricValue}
             icon={<CurrencyDollarIcon className="h-5 w-5" />}
             color="indigo"
           />
@@ -257,24 +392,24 @@ const Dashboard: React.FC = () => {
           ) : (
             <MetricCard
               title="Total de Clientes"
-              value={'totalClients' in stats && stats.totalClients ? Number(stats.totalClients) : 'No clients'}
+              value={'totalClients' in stats && stats.totalClients !== undefined ? Number(stats.totalClients) : 0}
               icon={<UserGroupIcon className="h-5 w-5" />}
               color="purple"
             />
           )}
         </div>
 
-        {/* Gráficos principales */}
+        {/* Gráficos principales - Always show regardless of data */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
           <div className="card bg-base-100 shadow-md">
             <div className="card-body">
               <h2 className="card-title text-lg font-semibold">Solicitudes por Mes</h2>
-              {stats.applicationsByMonth && Array.isArray(stats.applicationsByMonth) && (
+              {stats.applicationsByMonth && (
                 <MonthlyApplicationsChart
-                  data={stats.applicationsByMonth.map((item: any) => ({
+                  data={Array.isArray(stats.applicationsByMonth) ? stats.applicationsByMonth.map((item: any) => ({
                     month: String(item.month || ''),
                     count: Number(item.count || 0)
-                  }))}
+                  })) : []}
                   height={300}
                   title=""
                 />
@@ -286,16 +421,9 @@ const Dashboard: React.FC = () => {
             <div className="card-body">
               <h2 className="card-title text-lg font-semibold">Distribución por Estado</h2>
               <StatusDistributionChart
-                data={Array.isArray(stats.applicationsByStatus) 
-                  ? stats.applicationsByStatus.map((item: any) => ({
-                      status: String(item.status || ''),
-                      count: Number(item.count || 0)
-                    }))
-                  : Object.entries(stats.applicationsByStatus).map(([status, count]: [string, any]) => ({
-                      status,
-                      count: Number(count)
-                    }))
-                }
+                data={isAdvisorStats(stats) && stats.applicationsByStatusChart 
+                  ? stats.applicationsByStatusChart
+                  : formatStatusData(stats.applicationsByStatus)}
                 height={300}
                 title=""
               />
@@ -308,7 +436,7 @@ const Dashboard: React.FC = () => {
           <div className="card bg-base-100 shadow-md">
             <div className="card-body">
               <h2 className="card-title text-lg font-semibold">Distribución por Monto</h2>
-              {stats.amountRanges && (
+              {hasExtendedData(stats) && stats.amountRanges && stats.amountRanges.length > 0 && (
                 <AmountRangeChart
                   data={stats.amountRanges}
                   height={300}
@@ -323,9 +451,9 @@ const Dashboard: React.FC = () => {
             <div className="card bg-base-100 shadow-md">
               <div className="card-body">
                 <h2 className="card-title text-lg font-semibold">Rendimiento de Asesores</h2>
-                {stats.advisorPerformance && (
+                {hasExtendedData(stats) && stats.mockAdvisorPerformance && stats.mockAdvisorPerformance.length > 0 && (
                   <AdvisorPerformanceChart
-                    data={stats.advisorPerformance}
+                    data={stats.mockAdvisorPerformance}
                     height={300}
                     title=""
                     maxBars={8}

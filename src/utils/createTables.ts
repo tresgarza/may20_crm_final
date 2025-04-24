@@ -136,3 +136,4 @@ export default {
   createDocumentsTable,
   ensureTablesExist
 }; 
+ 

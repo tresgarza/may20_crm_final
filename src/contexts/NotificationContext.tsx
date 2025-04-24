@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import NotificationPopup from '../components/ui/NotificationPopup';
+import { supabase } from '../lib/supabaseClient';
 
 // Generate a proper UUID for notification IDs
 function generateUUID() {
@@ -201,30 +202,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Inicializar con el timestamp de la última aplicación
   const initializeWithLastApplicationTimestamp = async () => {
     try {
-      // Obtener la última aplicación para usarla como referencia inicial
-      const response = await fetch('http://localhost:3100/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          query: `
-            SELECT id, created_at, application_type, client_name, company_name, status, amount
-            FROM applications 
-            ORDER BY created_at DESC
-            LIMIT 1
-          `
-        })
-      });
+      // Obtain the latest application directly with Supabase SDK instead of raw SQL
+      const { data: latestApp, error } = await supabase
+        .from('applications')
+        .select('id, created_at, application_type, client_name, company_name, status, amount')
+        .order('created_at', { ascending: false })
+        .limit(1);
       
-      if (!response.ok) {
-        throw new Error('Error querying most recent application');
+      if (error) {
+        throw error;
       }
       
-      const data = await response.json();
-      
-      if (data.data && data.data.length > 0) {
-        const lastApp = data.data[0];
+      if (latestApp && latestApp.length > 0) {
+        const lastApp = latestApp[0];
         const lastAppId = lastApp.id;
         const lastAppCreatedAt = new Date(lastApp.created_at);
         
@@ -391,41 +381,25 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Función para obtener la consulta SQL optimizada según el tipo de aplicación más reciente
   const getOptimizedQuery = async (): Promise<string> => {
     try {
-      // Primero, verificar el tipo de la aplicación más reciente para optimizar la consulta
-      const typeCheckResponse = await fetch('http://localhost:3100/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          query: `
-            SELECT application_type
-            FROM applications 
-            ORDER BY created_at DESC
-            LIMIT 1
-          `
-        })
-      });
+      // Get the latest application type directly with Supabase SDK
+      const { data: latestType, error } = await supabase
+        .from('applications')
+        .select('application_type')
+        .order('created_at', { ascending: false })
+        .limit(1);
       
-      if (!typeCheckResponse.ok) {
+      if (error || !latestType || latestType.length === 0) {
         console.warn('Error checking latest application type, using default query');
         return getDefaultQuery();
       }
       
-      const typeData = await typeCheckResponse.json();
-      
-      if (!typeData.data || typeData.data.length === 0) {
-        console.log('No applications found, using default query');
-        return getDefaultQuery();
-      }
-      
-      const latestType = typeData.data[0].application_type;
-      console.log(`Latest application type: ${latestType}`);
+      const appType = latestType[0].application_type;
+      console.log(`Latest application type: ${appType}`);
       
       // Personalizar los campos según el tipo de aplicación
       let additionalFields = '';
       
-      switch(latestType) {
+      switch(appType) {
         case 'selected_plans':
           // Para planes seleccionados, necesitamos plazo, tasa y pago mensual
           additionalFields = '';

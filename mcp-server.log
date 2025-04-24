@@ -1,0 +1,1896 @@
+Iniciando servidor MCP para Supabase...
+Escuchando en http://localhost:3100
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+GET /health
+GET /health
+GET /health
+GET /health
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+GET /health
+GET /health
+GET /health
+GET /health
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+      SELECT * FROM applications
+      WHERE client_name = 'Prueba Apellido Materno'
+      ORDER BY created_at DESC
+    
+POST /query
+Ejecutando consulta: 
+      SELECT * FROM applications
+      WHERE client_name = 'Prueba Apellido Materno'
+      ORDER BY created_at DESC
+    
+POST /query
+Ejecutando consulta: 
+      SELECT * FROM applications
+      WHERE client_name = 'SAN MARADONIA CANTU9 DIAZ'
+      ORDER BY created_at DESC
+    
+POST /query
+Ejecutando consulta: 
+      SELECT * FROM applications
+      WHERE client_name = 'SAN MARADONIA CANTU9 DIAZ'
+      ORDER BY created_at DESC
+    
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+GET /health
+GET /health
+GET /health
+GET /health
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+GET /health
+GET /health
+GET /health
+GET /health
+OPTIONS /query
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+GET /health
+GET /health
+GET /health
+GET /health
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+OPTIONS /query
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+OPTIONS /query
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+POST /query
+Ejecutando consulta: 
+        SELECT id, client_name, application_type, company_name, created_at, status, 
+               amount, term, interest_rate, monthly_payment, client_email, client_phone 
+        FROM applications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 5
+      
+Recibida señal SIGTERM, cerrando servidores...
+Servidor HTTP cerrado

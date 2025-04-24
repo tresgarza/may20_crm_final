@@ -74,7 +74,11 @@ const Login: React.FC = () => {
           return;
         }
         
+        console.log(`Attempting login with access code: ${accessCode}, user type: ${userType}`);
+        
         const { data, error: loginError } = await signInWithCode(accessCode, userType);
+        
+        console.log('Login response:', { data: data ? 'Data available' : 'No data', error: loginError });
         
         if (loginError) {
           // Ensure loginError is converted to string if it's an Error object
@@ -166,6 +170,11 @@ const Login: React.FC = () => {
                     required
                   />
                 </div>
+                
+                <div className="text-xs text-gray-500 mt-2">
+                  <p>Usuario de prueba: admin@fincentiva.com</p>
+                  <p>Contraseña: admin123</p>
+                </div>
               </>
             ) : (
               // Formulario de código de acceso
@@ -196,6 +205,12 @@ const Login: React.FC = () => {
                     onChange={(e) => setAccessCode(e.target.value)}
                     required
                   />
+                </div>
+                
+                <div className="text-xs text-gray-500 mt-2">
+                  <p>Códigos de prueba:</p>
+                  <p>Asesor: 0095</p>
+                  <p>Administrador de empresa: 1234</p>
                 </div>
               </>
             )}

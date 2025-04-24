@@ -1,9 +1,10 @@
-import React, { useEffect } from 'react';
+import * as React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { PermissionsProvider } from './contexts/PermissionsContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import HealthCheck from './components/HealthCheck';
 import Login from './pages/auth/Login';
 import Dashboard from './pages/Dashboard';
 import Applications from './pages/Applications';
@@ -26,13 +27,13 @@ import { initDbStructureCheck } from './utils/dbStructureCheck';
 
 const App: React.FC = () => {
   // Verificar estructura de BD al iniciar la aplicación
-  useEffect(() => {
+  React.useEffect(() => {
     initDbStructureCheck();
   }, []);
 
   // Add event listener to track if user has interacted with the page
   // This helps with browser autoplay restrictions
-  useEffect(() => {
+  React.useEffect(() => {
     const markUserInteraction = () => {
       document.documentElement.setAttribute('data-user-interacted', 'true');
     };
@@ -56,6 +57,7 @@ const App: React.FC = () => {
       <AuthProvider>
         <PermissionsProvider>
           <NotificationProvider>
+            <HealthCheck />
             <Routes>
               {/* Public routes */}
               <Route path="/login" element={<Login />} />

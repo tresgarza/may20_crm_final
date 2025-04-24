@@ -1,690 +1,1034 @@
-import { TABLES } from '../utils/constants/tables';
-import { executeQuery } from '../utils/databaseUtils';
+import { supabase } from '../lib/supabaseClient';
+import { 
+  DashboardStats, 
+  ApplicationStats, 
+  AdvisorPerformance, 
+  AdvisorPerformanceStats,
+  CompanyStats,
+  QueryResult,
+  QueryFilters
+} from '../types/dashboard.types';
+import type { Database } from '../types/database.types';
 
-interface DashboardStatsFilter {
-  dateFrom?: string;
-  dateTo?: string;
-  companyId?: string;
-  advisorId?: string;
-  includeSimulations?: boolean; // Nuevo parámetro para controlar si se incluyen simulaciones
-}
+// Local type definitions
+type Tables = Database['public']['Tables'];
+type Application = Tables['applications']['Row'];
 
-interface AdvisorPerformanceStats {
-  advisorId: string;
-  advisorName: string;
-  totalApplications: number;
-  approvedApplications: number;
-  rejectedApplications: number;
-  approvalRate: number;
-}
+// Constants
+const TABLES = {
+  APPLICATIONS: 'applications',
+  ADVISORS: 'advisors',
+  COMPANIES: 'companies',
+  CLIENTS: 'clients',
+  USERS: 'users'
+};
 
-export interface DashboardStats {
-  totalApplications: number;
-  pendingApplications: number;
-  approvedApplications: number;
-  rejectedApplications: number;
-  averageAmount: number;
-  minAmount: number;
-  maxAmount: number;
-  recentApplications: any[];
-  applicationsByStatus: Record<string, number>;
-  applicationsByMonth: Record<string, number>;
-  advisorsPerformance?: AdvisorPerformanceStats[];
-  totalClients: number;
-}
-
-export interface AdvisorStats extends Omit<DashboardStats, 'applicationsByMonth' | 'applicationsByStatus'> {
-  advisorId: string;
-  advisorName: string;
-  applicationsByMonth: Array<{month: string, count: number}>;
-  applicationsByStatus: Array<{status: string, count: number}>;
-  totalApproved: number;
-  totalRejected: number;
-  totalPending: number;
-  pendingApproval: number;
-  totalCompanies: number;
-  conversionRate: number;
-  avgTimeToApproval: number;
-}
-
-export interface CompanyStats extends Omit<DashboardStats, 'applicationsByMonth' | 'applicationsByStatus'> {
-  totalAdvisors: number;
-  totalClientsCompany: number;
-  avgApprovalTime: number;
-  pendingApplications: number;
-  applicationsByStatus: Array<{status: string, count: number}>;
-  applicationsByMonth: Array<{month: string, count: number}>;
-}
-
-/**
- * Obtiene estadísticas generales para el dashboard
- */
-export const getGeneralDashboardStats = async (filters: DashboardStatsFilter = {}): Promise<DashboardStats> => {
-  const { dateFrom, dateTo, companyId, advisorId, includeSimulations = false } = filters;
-  
-  // Construir la parte de la consulta para los filtros de fecha
-  let dateFilter = '';
-  if (dateFrom) {
-    dateFilter += ` AND created_at >= '${dateFrom}'`;
-  }
-  if (dateTo) {
-    dateFilter += ` AND created_at <= '${dateTo}'`;
-  }
-  
-  // Filtro por compañía si se proporciona
-  let companyFilter = '';
-  if (companyId) {
-    companyFilter = ` AND company_id = '${companyId}'`;
-  }
-  
-  // Filtro por asesor si se proporciona
-  let advisorFilter = '';
-  if (advisorId) {
-    advisorFilter = ` AND assigned_to = '${advisorId}'`;
-  }
-  
-  // Filtro para excluir simulaciones por defecto
-  let simulationFilter = '';
-  if (!includeSimulations) {
-    simulationFilter = ` AND application_type != 'product_simulations'`;
-  }
-
+// Helper function to execute SQL queries
+const executeQuery = async (query: string): Promise<any[]> => {
   try {
-    // 1. Total de aplicaciones
-    const totalApplicationsQuery = `
-      SELECT COUNT(*) as total 
-      FROM ${TABLES.APPLICATIONS} 
-      WHERE 1=1 ${dateFilter} ${companyFilter} ${advisorFilter} ${simulationFilter}
-    `;
+    console.log('---------------------------------------------');
+    console.log('EXECUTING QUERY:', query);
+    console.log('---------------------------------------------');
     
-    let totalApplicationsData;
-    try {
-      totalApplicationsData = await executeQuery(totalApplicationsQuery);
-    } catch (error) {
-      console.error('Error al obtener total de aplicaciones:', error);
-      totalApplicationsData = [{ total: 0 }]; // Valor por defecto si falla
+    // Extract table name
+    const tableMatch = query.match(/FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)/i);
+    const tableName = tableMatch?.[1];
+    
+    if (!tableName) {
+      console.error('Could not determine table name from query:', query);
+      return [];
     }
+
+    console.log(`Table: ${tableName}`);
     
-    const totalApplications = totalApplicationsData[0]?.total || 0;
+    // Define base query
+    let supabaseQuery = supabase.from(tableName).select('*');
+    console.log(`Created base Supabase query for table: ${tableName}`);
     
-    // 2. Aplicaciones por estado
-    const applicationsByStatusQuery = `
-      SELECT status, COUNT(*) as count 
-      FROM ${TABLES.APPLICATIONS} 
-      WHERE 1=1 ${dateFilter} ${companyFilter} ${advisorFilter} ${simulationFilter}
-      GROUP BY status
-    `;
+    // Define useful query pattern checks
+    const q = query.toLowerCase();
+    const hasCount = q.includes('count(*)');
+    const hasGroupBy = q.includes('group by');
     
-    let applicationsByStatusData;
-    try {
-      applicationsByStatusData = await executeQuery(applicationsByStatusQuery);
-    } catch (error) {
-      console.error('Error al obtener aplicaciones por estado:', error);
-      applicationsByStatusData = []; // Valor por defecto si falla
-    }
-    
-    const applicationsByStatus: Record<string, number> = {};
-    applicationsByStatusData.forEach((item: any) => {
-      applicationsByStatus[item.status] = parseInt(item.count);
-    });
-    
-    const pendingApplications = applicationsByStatus['pending'] || 0;
-    const approvedApplications = applicationsByStatus['approved'] || 0;
-    const rejectedApplications = applicationsByStatus['rejected'] || 0;
-    
-    // 3. Promedio, mínimo y máximo de montos
-    const amountStatsQuery = `
-      SELECT 
-        AVG(amount) as avg_amount, 
-        MIN(amount) as min_amount, 
-        MAX(amount) as max_amount 
-      FROM ${TABLES.APPLICATIONS} 
-      WHERE 1=1 ${dateFilter} ${companyFilter} ${advisorFilter} ${simulationFilter}
-    `;
-    
-    let amountStatsData;
-    try {
-      amountStatsData = await executeQuery(amountStatsQuery);
-    } catch (error) {
-      console.error('Error al obtener estadísticas de montos:', error);
-      amountStatsData = [{ avg_amount: 0, min_amount: 0, max_amount: 0 }]; // Valor por defecto si falla
-    }
-    
-    const averageAmount = parseFloat(amountStatsData[0]?.avg_amount) || 0;
-    const minAmount = parseFloat(amountStatsData[0]?.min_amount) || 0;
-    const maxAmount = parseFloat(amountStatsData[0]?.max_amount) || 0;
-    
-    // 4. Aplicaciones recientes
-    const recentApplicationsQuery = `
-      SELECT id, client_name, company_name, created_at, status, amount, application_type
-      FROM ${TABLES.APPLICATIONS} 
-      WHERE 1=1 ${dateFilter} ${companyFilter} ${advisorFilter} ${simulationFilter}
-      AND application_type = 'selected_plans'
-      ORDER BY created_at DESC 
-      LIMIT 5
-    `;
-    
-    let recentApplicationsData;
-    try {
-      recentApplicationsData = await executeQuery(recentApplicationsQuery);
-    } catch (error) {
-      console.error('Error al obtener aplicaciones recientes:', error);
-      recentApplicationsData = []; // Valor por defecto si falla
-    }
-    
-    // 5. Aplicaciones por mes (para gráfico de líneas)
-    const applicationsByMonthQuery = `
-      SELECT 
-        TO_CHAR(created_at, 'YYYY-MM') as month, 
-        COUNT(*) as count 
-      FROM ${TABLES.APPLICATIONS} 
-      WHERE 1=1 ${dateFilter} ${companyFilter} ${advisorFilter} ${simulationFilter}
-      GROUP BY month 
-      ORDER BY month
-    `;
-    
-    let applicationsByMonthData;
-    try {
-      applicationsByMonthData = await executeQuery(applicationsByMonthQuery);
-    } catch (error) {
-      console.error('Error al obtener aplicaciones por mes:', error);
-      applicationsByMonthData = []; // Valor por defecto si falla
-    }
-    
-    const applicationsByMonth: Record<string, number> = {};
-    applicationsByMonthData.forEach((item: any) => {
-      applicationsByMonth[item.month] = parseInt(item.count);
-    });
-    
-    // 6. Rendimiento de asesores (solo para superadmin o filtrado por compañía)
-    let advisorsPerformance: AdvisorPerformanceStats[] = [];
-    
-    if (!advisorId) { // Solo si no estamos filtrando por un asesor específico
-      const advisorsPerformanceQuery = `
-        SELECT 
-          a.assigned_to as advisor_id, 
-          u.name as advisor_name,
-          COUNT(*) as total_applications,
-          SUM(CASE WHEN a.status = 'approved' THEN 1 ELSE 0 END) as approved_applications,
-          SUM(CASE WHEN a.status = 'rejected' THEN 1 ELSE 0 END) as rejected_applications
-        FROM ${TABLES.APPLICATIONS} a
-        LEFT JOIN ${TABLES.ADVISORS} u ON a.assigned_to = u.id
-        WHERE 1=1 ${dateFilter} ${companyFilter} ${simulationFilter}
-        GROUP BY a.assigned_to, u.name
-        ORDER BY total_applications DESC
-      `;
+    // Handle simple COUNT queries (without GROUP BY)
+    if (hasCount && !hasGroupBy) {
+      console.log('Processing simple COUNT query (without GROUP BY)...');
+      // Extract WHERE conditions if they exist
+      const whereMatch = query.match(/WHERE\s+(.*?)(?:\s+GROUP BY|\s+ORDER BY|\s+LIMIT|$)/i);
       
-      try {
-        const advisorsData = await executeQuery(advisorsPerformanceQuery);
-        advisorsPerformance = advisorsData.map((advisor: any) => ({
-          advisorId: advisor.advisor_id,
-          advisorName: advisor.advisor_name || 'Desconocido',
-          totalApplications: parseInt(advisor.total_applications) || 0,
-          approvedApplications: parseInt(advisor.approved_applications) || 0,
-          rejectedApplications: parseInt(advisor.rejected_applications) || 0,
-          approvalRate: advisor.total_applications > 0 
-            ? (parseInt(advisor.approved_applications) / parseInt(advisor.total_applications)) * 100 
-            : 0
-        }));
-      } catch (error) {
-        console.error('Error al obtener rendimiento de asesores:', error);
-        // Continuamos incluso si esta consulta falla
+      if (whereMatch && whereMatch[1]) {
+        const conditions = whereMatch[1];
+        console.log(`WHERE conditions found: ${conditions}`);
+        
+        try {
+          // Check for common filters and apply them
+          if (conditions.includes('assigned_to =')) {
+            const advisorMatch = conditions.match(/assigned_to\s*=\s*'([^']+)'/i);
+            if (advisorMatch && advisorMatch[1]) {
+              supabaseQuery = supabaseQuery.eq('assigned_to', advisorMatch[1]);
+              console.log(`Applied advisor filter: assigned_to = ${advisorMatch[1]}`);
+            }
+          }
+          
+          if (conditions.includes('company_id =')) {
+            const companyMatch = conditions.match(/company_id\s*=\s*'([^']+)'/i);
+            if (companyMatch && companyMatch[1]) {
+              supabaseQuery = supabaseQuery.eq('company_id', companyMatch[1]);
+              console.log(`Applied company filter: company_id = ${companyMatch[1]}`);
+            }
+          }
+          
+          // Handle date conditions
+          if (conditions.includes('created_at >=')) {
+            const dateMatch = conditions.match(/created_at\s*>=\s*'([^']+)'/i);
+            if (dateMatch && dateMatch[1]) {
+              supabaseQuery = supabaseQuery.gte('created_at', dateMatch[1]);
+              console.log(`Applied date filter: created_at >= ${dateMatch[1]}`);
+            }
+          }
+          
+          if (conditions.includes('created_at <=')) {
+            const dateMatch = conditions.match(/created_at\s*<=\s*'([^']+)'/i);
+            if (dateMatch && dateMatch[1]) {
+              supabaseQuery = supabaseQuery.lte('created_at', dateMatch[1]);
+              console.log(`Applied date filter: created_at <= ${dateMatch[1]}`);
+            }
+          }
+        } catch (filterError) {
+          console.error('Error applying filters:', filterError);
+        }
+      } else {
+        console.log('No WHERE conditions found in query');
+      }
+      
+      // For counts, just fetch all matching data and count it
+      console.log('Executing count query with Supabase...');
+      const { data, error } = await supabaseQuery;
+      
+      if (error) {
+        console.error('Error executing count query:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        return [{ total: 0 }];
+      }
+      
+      console.log(`Count result: ${data?.length || 0} items`);
+      return [{ total: data?.length || 0 }];
+    }
+    
+    // Handle status distribution queries
+    if (hasGroupBy && q.includes('group by status')) {
+      console.log('Processing GROUP BY STATUS query...');
+      
+      // Extract WHERE conditions if they exist
+      const whereMatch = query.match(/WHERE\s+(.*?)(?:\s+GROUP BY|\s+ORDER BY|\s+LIMIT|$)/i);
+      
+      if (whereMatch && whereMatch[1]) {
+        const conditions = whereMatch[1];
+        console.log(`WHERE conditions for status groups: ${conditions}`);
+        
+        // Apply filters
+        if (conditions.includes('company_id =')) {
+          const companyMatch = conditions.match(/company_id\s*=\s*'([^']+)'/i);
+          if (companyMatch && companyMatch[1]) {
+            supabaseQuery = supabaseQuery.eq('company_id', companyMatch[1]);
+            console.log(`Applied company filter for status groups: company_id = ${companyMatch[1]}`);
+          }
+        }
+      }
+      
+      // Get all rows first (with potential filters)
+      console.log('Executing status distribution query with Supabase...');
+      const { data, error } = await supabaseQuery;
+      
+      if (error) {
+        console.error('Error fetching data for status distribution:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        return [];
+      }
+      
+      console.log(`Status distribution query returned ${data?.length || 0} items`);
+      
+      // Process the data to get status counts
+      const statusCounts: Record<string, number> = {};
+      
+      data?.forEach(row => {
+        const status = row.status || 'unknown';
+        statusCounts[status] = (statusCounts[status] || 0) + 1;
+      });
+      
+      // Convert to array of status and count
+      const result = Object.entries(statusCounts).map(([status, count]) => ({
+        status,
+        count
+      }));
+      
+      console.log('Status distribution result:', result);
+      return result;
+    }
+    
+    // Handle SUM/AVG queries
+    if (q.includes('sum(amount)') || q.includes('avg(amount)')) {
+      console.log('Processing SUM/AVG query...');
+      
+      // Extract WHERE conditions if they exist
+      const whereMatch = query.match(/WHERE\s+(.*?)(?:\s+GROUP BY|\s+ORDER BY|\s+LIMIT|$)/i);
+      
+      if (whereMatch && whereMatch[1]) {
+        const conditions = whereMatch[1];
+        console.log(`WHERE conditions for amount calculation: ${conditions}`);
+        
+        // Apply filters
+        if (conditions.includes('company_id =')) {
+          const companyMatch = conditions.match(/company_id\s*=\s*'([^']+)'/i);
+          if (companyMatch && companyMatch[1]) {
+            supabaseQuery = supabaseQuery.eq('company_id', companyMatch[1]);
+            console.log(`Applied company filter for amount calculation: company_id = ${companyMatch[1]}`);
+          }
+        }
+      }
+      
+      console.log('Executing amount calculation query with Supabase...');
+      const { data, error } = await supabaseQuery;
+      
+      if (error) {
+        console.error('Error fetching data for amount calculations:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        return [{ total_amount: 0, avg_amount: 0 }];
+      }
+      
+      console.log(`Amount calculation query returned ${data?.length || 0} items`);
+      console.log('Raw amount data sample:', data?.slice(0, 3));
+      
+      // Process data to calculate sum and average
+      const amounts = data
+        ?.filter(row => {
+          const validAmount = row.amount !== null && !isNaN(Number(row.amount));
+          if (!validAmount) {
+            console.log(`Filtering out invalid amount value:`, row.amount);
+          }
+          return validAmount;
+        })
+        .map(row => {
+          const amount = Number(row.amount);
+          console.log(`Converting amount ${row.amount} to number: ${amount}`);
+          return amount;
+        }) || [];
+      
+      const totalAmount = amounts.reduce((sum, amount) => {
+        console.log(`Adding ${amount} to sum ${sum}`);
+        return sum + amount;
+      }, 0);
+      const avgAmount = amounts.length > 0 ? totalAmount / amounts.length : 0;
+      
+      console.log(`Amount calculations - Total: ${totalAmount}, Average: ${avgAmount}, Count: ${amounts.length}`);
+      return [{ total_amount: totalAmount, avg_amount: avgAmount }];
+    }
+    
+    // Handle recent applications query
+    if (q.includes('order by created_at desc') && q.includes('limit')) {
+      console.log('Processing RECENT APPLICATIONS query...');
+      
+      // Extract WHERE conditions if they exist
+      const whereMatch = query.match(/WHERE\s+(.*?)(?:\s+ORDER BY|\s+LIMIT|$)/i);
+      
+      if (whereMatch && whereMatch[1]) {
+        const conditions = whereMatch[1];
+        console.log(`WHERE conditions for recent applications: ${conditions}`);
+        
+        // Apply filters
+        if (conditions.includes('company_id =') || conditions.includes('a.company_id =')) {
+          const companyMatch = conditions.match(/(?:a\.)?company_id\s*=\s*'([^']+)'/i);
+          if (companyMatch && companyMatch[1]) {
+            supabaseQuery = supabaseQuery.eq('company_id', companyMatch[1]);
+            console.log(`Applied company filter for recent applications: company_id = ${companyMatch[1]}`);
+          }
+        }
+      }
+      
+      // Extract limit value
+      const limitMatch = query.match(/LIMIT\s+(\d+)/i);
+      const limit = limitMatch ? parseInt(limitMatch[1], 10) : 5;
+      
+      // Apply ordering and limit
+      console.log(`Executing recent applications query with limit ${limit}...`);
+      supabaseQuery = supabaseQuery.order('created_at', { ascending: false }).limit(limit);
+      
+      // Execute query
+      const { data, error } = await supabaseQuery;
+      
+      if (error) {
+        console.error('Error fetching recent applications:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        return [];
+      }
+      
+      console.log(`Recent applications query returned ${data?.length || 0} items`);
+      console.log('Recent applications sample:', data?.slice(0, 1));
+      return data || [];
+    }
+    
+    // Handle applications by month
+    if (q.includes("to_char(created_at, 'yyyy-mm')") && hasGroupBy) {
+      console.log('Processing APPLICATIONS BY MONTH query...');
+      
+      // Extract WHERE conditions if they exist
+      const whereMatch = query.match(/WHERE\s+(.*?)(?:\s+GROUP BY|\s+ORDER BY|\s+LIMIT|$)/i);
+      
+      if (whereMatch && whereMatch[1]) {
+        const conditions = whereMatch[1];
+        console.log(`WHERE conditions for applications by month: ${conditions}`);
+        
+        // Apply filters
+        if (conditions.includes('company_id =')) {
+          const companyMatch = conditions.match(/company_id\s*=\s*'([^']+)'/i);
+          if (companyMatch && companyMatch[1]) {
+            supabaseQuery = supabaseQuery.eq('company_id', companyMatch[1]);
+            console.log(`Applied company filter for applications by month: company_id = ${companyMatch[1]}`);
+          }
+        }
+      }
+      
+      console.log('Executing applications by month query with Supabase...');
+      const { data, error } = await supabaseQuery;
+      
+      if (error) {
+        console.error('Error fetching data for monthly breakdown:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        return [];
+      }
+      
+      console.log(`Applications by month query returned ${data?.length || 0} items`);
+      
+      // Process data to get counts by month
+      const monthCounts: Record<string, number> = {};
+      
+      data?.forEach(row => {
+        try {
+          const date = new Date(row.created_at);
+          const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          monthCounts[monthYear] = (monthCounts[monthYear] || 0) + 1;
+        } catch (dateError) {
+          console.error('Error processing date:', row.created_at, dateError);
+        }
+      });
+      
+      // Convert to expected format
+      const result = Object.entries(monthCounts).map(([month, count]) => ({
+        month,
+        count
+      }));
+      
+      console.log('Applications by month result:', result);
+      return result;
+    }
+    
+    // Default case - just fetch the data
+    console.log('Executing default query...');
+    
+    // Extract WHERE conditions if they exist
+    const whereMatch = query.match(/WHERE\s+(.*?)(?:\s+GROUP BY|\s+ORDER BY|\s+LIMIT|$)/i);
+    
+    if (whereMatch && whereMatch[1]) {
+      const conditions = whereMatch[1];
+      console.log(`WHERE conditions for default query: ${conditions}`);
+      
+      // Apply filters
+      if (conditions.includes('company_id =')) {
+        const companyMatch = conditions.match(/company_id\s*=\s*'([^']+)'/i);
+        if (companyMatch && companyMatch[1]) {
+          supabaseQuery = supabaseQuery.eq('company_id', companyMatch[1]);
+          console.log(`Applied company filter for default query: company_id = ${companyMatch[1]}`);
+        }
       }
     }
     
-    // 7. Total de clientes
-    let totalClients = 0;
-    const totalClientsQuery = `
-      SELECT COUNT(DISTINCT source_id) as total 
-      FROM ${TABLES.APPLICATIONS} 
-      WHERE source_id IS NOT NULL ${dateFilter} ${companyFilter} ${advisorFilter} ${simulationFilter}
-    `;
+    const { data, error } = await supabaseQuery;
     
-    try {
-      const totalClientsData = await executeQuery(totalClientsQuery);
-      totalClients = parseInt(totalClientsData[0]?.total) || 0;
-    } catch (error) {
-      console.error('Error al obtener total de clientes:', error);
-      // Continuamos incluso si esta consulta falla
+    if (error) {
+      console.error('Error executing query:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      return [];
     }
     
-    return {
-      totalApplications: parseInt(totalApplications),
-      pendingApplications,
-      approvedApplications,
-      rejectedApplications,
-      averageAmount,
-      minAmount,
-      maxAmount,
-      recentApplications: recentApplicationsData,
-      applicationsByStatus,
-      applicationsByMonth,
-      advisorsPerformance,
-      totalClients
-    };
-    
-  } catch (error) {
-    console.error('Error obteniendo estadísticas del dashboard:', error);
-    // En caso de error, devolvemos datos vacíos para evitar que la UI se rompa
-    return {
-      totalApplications: 0,
-      pendingApplications: 0,
-      approvedApplications: 0,
-      rejectedApplications: 0,
-      averageAmount: 0,
-      minAmount: 0,
-      maxAmount: 0,
-      recentApplications: [],
-      applicationsByStatus: {},
-      applicationsByMonth: {},
-      totalClients: 0
-    };
+    console.log(`Query returned ${data?.length || 0} items`);
+    return data || [];
+  } catch (err) {
+    console.error('Error handling query execution:', err);
+    console.error('Error stack:', err instanceof Error ? err.stack : 'Unknown error');
+    return [];
   }
 };
 
 /**
- * Obtiene estadísticas específicas para un asesor
- * @param advisorId ID del asesor
- * @param includeSimulations Si es true, incluye las simulaciones en las estadísticas
+ * Get general dashboard stats based on filters
  */
-export const getAdvisorDashboardStats = async (advisorId: string, includeSimulations: boolean = false): Promise<AdvisorStats> => {
+export const getGeneralDashboardStats = async (
+  filters: { advisorId?: string; companyId?: string; startDate?: string; endDate?: string }
+): Promise<DashboardStats> => {
   try {
-    // Filtro para excluir simulaciones por defecto
-    let simulationFilter = '';
-    if (!includeSimulations) {
-      simulationFilter = ` AND application_type != 'product_simulations'`;
+    // Filter conditions
+    let filterConditions = '';
+    const conditions: string[] = [];
+    
+    if (filters.advisorId) {
+      conditions.push(`assigned_to = '${filters.advisorId}'`);
     }
     
-    // No obtener estadísticas generales, sino filtrar todo por el asesor
+    if (filters.companyId) {
+      conditions.push(`company_id = '${filters.companyId}'`);
+    }
     
-    // Total de aplicaciones del asesor
-    const advisorApplicationsQuery = `
-      SELECT COUNT(*) as total 
-      FROM ${TABLES.APPLICATIONS} 
-      WHERE assigned_to = '${advisorId}'
-      ${simulationFilter}
-    `;
-    const advisorAppResult = await executeQuery(advisorApplicationsQuery);
-    const totalAdvisorApplications = parseInt(advisorAppResult[0]?.total || '0');
+    if (filters.startDate) {
+      conditions.push(`created_at >= '${filters.startDate}'`);
+    }
+    
+    if (filters.endDate) {
+      conditions.push(`created_at <= '${filters.endDate}'`);
+    }
+    
+    if (conditions.length > 0) {
+      filterConditions = ` WHERE ${conditions.join(' AND ')}`;
+    }
 
-    // Aplicaciones por estado del asesor
-    const advisorStatusQuery = `
+    // Get total applications
+    const totalApplicationsQuery = `
+      SELECT COUNT(*) as total 
+      FROM ${TABLES.APPLICATIONS}${filterConditions}
+    `;
+    const totalApplicationsResult = await executeQuery(totalApplicationsQuery);
+    const totalApplications = parseInt(totalApplicationsResult[0]?.total || '0');
+
+    // Get applications by status
+    const applicationsByStatusQuery = `
       SELECT status, COUNT(*) as count 
-      FROM ${TABLES.APPLICATIONS} 
-      WHERE assigned_to = '${advisorId}'
-      ${simulationFilter}
+      FROM ${TABLES.APPLICATIONS}${filterConditions}
       GROUP BY status
     `;
-    const advisorStatusResult = await executeQuery(advisorStatusQuery);
-    const advisorApplicationsByStatus = advisorStatusResult.map((row: any) => ({
-      status: row.status,
-      count: parseInt(row.count)
+    const applicationsByStatusResult = await executeQuery(applicationsByStatusQuery);
+    const applicationsByStatus: Record<string, number> = {};
+    
+    if (applicationsByStatusResult && Array.isArray(applicationsByStatusResult)) {
+      applicationsByStatusResult.forEach((item: any) => {
+        if (!item || !item.status) return;
+        
+        const status = item.status;
+        let count = 0;
+        
+        if (typeof item.count === 'number') {
+          count = item.count;
+        } else if (typeof item.count === 'string') {
+          count = parseInt(item.count, 10) || 0;
+        } else if (item.count) {
+          count = parseInt(String(item.count), 10) || 0;
+        }
+        
+        applicationsByStatus[status] = count;
+      });
+    }
+    
+    // Calcular aplicaciones aprobadas, rechazadas y pendientes
+    const approvedApplications = applicationsByStatus['approved'] || 0;
+    const rejectedApplications = applicationsByStatus['rejected'] || 0;
+    const pendingApplications = applicationsByStatus['pending'] || 0;
+    
+    // Get total amount and average amount
+    const amountQuery = `
+      SELECT 
+        SUM(amount) as total_amount,
+        AVG(amount) as avg_amount
+      FROM ${TABLES.APPLICATIONS}${filterConditions}
+    `;
+    const amountResult = await executeQuery(amountQuery);
+    const totalAmount = parseFloat(amountResult[0]?.total_amount || '0');
+    const averageAmount = parseFloat(amountResult[0]?.avg_amount || '0');
+
+    // Get recent applications
+    const recentApplicationsQuery = `
+      SELECT *
+      FROM ${TABLES.APPLICATIONS}${filterConditions}
+      ORDER BY created_at DESC 
+      LIMIT 5
+    `;
+    const recentApplicationsResult = await executeQuery(recentApplicationsQuery);
+    const recentApplications = recentApplicationsResult as Application[];
+
+    // Get applications by month
+    const applicationsByMonthQuery = `
+      SELECT 
+        TO_CHAR(created_at, 'YYYY-MM') as month, 
+        COUNT(*) as count 
+      FROM ${TABLES.APPLICATIONS}${filterConditions}
+      GROUP BY month 
+      ORDER BY month
+    `;
+    const applicationsByMonthResult = await executeQuery(applicationsByMonthQuery);
+    const applicationsByMonth = applicationsByMonthResult.map((item: any) => ({
+      month: item.month,
+      count: parseInt(item.count)
     }));
 
-    // Estadísticas de montos específicas del asesor
-    const amountStatsQuery = `
-      SELECT 
-        AVG(amount) as avg_amount, 
-        MIN(amount) as min_amount, 
-        MAX(amount) as max_amount 
-      FROM ${TABLES.APPLICATIONS} 
-      WHERE amount IS NOT NULL
-      AND assigned_to = '${advisorId}'
-      ${simulationFilter}
+    // Get advisor performance
+    const advisorPerformanceQuery = `
+        SELECT 
+        assigned_to as advisor_id,
+          COUNT(*) as total_applications,
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_applications
+      FROM ${TABLES.APPLICATIONS}${filterConditions}
+      GROUP BY assigned_to
     `;
-    const amountResult = await executeQuery(amountStatsQuery);
-    const avgAmount = parseFloat(amountResult[0]?.avg_amount || '0');
-    const minAmount = parseFloat(amountResult[0]?.min_amount || '0');
-    const maxAmount = parseFloat(amountResult[0]?.max_amount || '0');
+    
+    const advisorPerformanceResult = await executeQuery(advisorPerformanceQuery);
+    const advisorPerformance: AdvisorPerformance[] = advisorPerformanceResult.map((item: any) => {
+      const applications = parseInt(item.total_applications);
+      const approvedApplications = parseInt(item.approved_applications);
+      
+      return {
+        advisorId: item.advisor_id,
+        applications,
+        approvalRate: applications > 0 ? (approvedApplications / applications) * 100 : 0
+      };
+    });
+    
+    return {
+      totalApplications,
+      pendingApplications,
+      approvedApplications,
+      rejectedApplications,
+      totalAmount,
+      averageAmount,
+      recentApplications,
+      applicationsByMonth,
+      applicationsByStatus,
+      advisorPerformance
+    };
+  } catch (error) {
+    console.error('Error al obtener estadísticas del dashboard:', error);
+    throw error;
+  }
+};
 
-    // Calcular aplicaciones por mes para este asesor
-    const monthlyQuery = `
+/**
+ * Map a raw status string to a normalized dashboard status
+ */
+const mapToDashboardStatus = (raw?: string): string => {
+  if (!raw) return 'pending';
+  
+  const status = raw.toLowerCase();
+  
+  if (status === 'new' || status === 'solicitud' || status === 'pending') {
+    return 'pending';
+  } else if (status === 'in_review') {
+    return 'in_review';
+  } else if (status === 'approved' || status === 'por_dispersar' || status === 'completed') {
+    return 'approved';
+  } else if (status === 'rejected' || status === 'cancelled' || status === 'expired') {
+    return 'rejected';
+  }
+  
+  return 'pending'; // Default fallback
+};
+
+/**
+ * Normalize application status to one of the four dashboard categories:
+ * pending, in_review, approved, rejected
+ */
+const normalizeApplicationStatus = (status?: string): string => {
+  return mapToDashboardStatus(status);
+};
+
+/**
+ * Get stats for a specific advisor
+ */
+export const getAdvisorStats = async (
+  advisorId: string,
+  filters: QueryFilters = {}
+): Promise<ApplicationStats> => {
+  console.log(`Getting advisor stats for advisorId: ${advisorId} with filters:`, filters);
+
+  try {
+    // Get advisor details to construct the name
+    const advisorQuery = `
+      SELECT a.id, a.email, a.name, a.access_code, u.first_name, u.last_name, u.email as user_email
+      FROM ${TABLES.ADVISORS} a
+      LEFT JOIN ${TABLES.USERS} u ON a.email = u.email
+      WHERE a.id = '${advisorId}'
+    `;
+
+    const advisorResult = await executeQuery(advisorQuery);
+    
+    if (!advisorResult || !advisorResult.length || !advisorResult[0]) {
+      console.error(`No advisor found with ID: ${advisorId}`);
+      throw new Error(`No advisor found with ID: ${advisorId}`);
+    }
+
+    const advisor = advisorResult[0];
+    console.log(`Found advisor:`, advisor);
+
+    // Get the applications by status
+    const applicationsByStatusQuery = `
+      SELECT 
+        status,
+        COUNT(*) as count
+      FROM ${TABLES.APPLICATIONS}
+      WHERE assigned_to = '${advisorId}'
+      ${filters.startDate ? `AND created_at >= '${filters.startDate}'` : ''}
+      ${filters.endDate ? `AND created_at <= '${filters.endDate}'` : ''}
+      GROUP BY status
+    `;
+
+    // Execute the query and get the results
+    const statusResults = await executeQuery(applicationsByStatusQuery);
+    console.log('Status query results:', statusResults);
+
+    // Initialize the applicationsByStatus with default values
+    const applicationsByStatus: { [key: string]: number } = {
+      'pending': 0,
+      'in_review': 0,
+      'approved': 0,
+      'rejected': 0
+    };
+
+    // Map them to the normalized dashboard statuses
+    if (statusResults && Array.isArray(statusResults)) {
+      statusResults.forEach(result => {
+        if (result && typeof result === 'object' && 'status' in result && 'count' in result) {
+          const status = String(result.status || '');
+          const count = typeof result.count === 'number' ? result.count : 
+                        (result.count ? Number(result.count) : 0);
+          
+          // Using the normalized status
+          const normalizedStatus = normalizeApplicationStatus(status);
+          
+          // Add to the appropriate status count (defensively)
+          if (normalizedStatus && applicationsByStatus[normalizedStatus] !== undefined) {
+            applicationsByStatus[normalizedStatus] += count;
+          }
+          
+          console.log(`Mapped status ${status} (normalized: ${normalizedStatus}) with count ${count}`);
+        }
+      });
+    }
+    
+    console.log('Final applicationsByStatus:', applicationsByStatus);
+
+    // Calculate total applications
+    const totalApplicationsQuery = `
+      SELECT COUNT(*) as count
+      FROM ${TABLES.APPLICATIONS}
+      WHERE assigned_to = '${advisorId}'
+      ${filters.startDate ? `AND created_at >= '${filters.startDate}'` : ''}
+      ${filters.endDate ? `AND created_at <= '${filters.endDate}'` : ''}
+    `;
+
+    const totalResult = await executeQuery(totalApplicationsQuery);
+    const totalApplications = totalResult && totalResult[0] ? Number(totalResult[0].count || 0) : 0;
+    console.log(`Total applications: ${totalApplications}`);
+
+    // Get total amount and average amount
+    const amountQuery = `
+      SELECT 
+        SUM(amount) as total_amount,
+        AVG(amount) as avg_amount
+      FROM ${TABLES.APPLICATIONS}
+      WHERE assigned_to = '${advisorId}'
+      ${filters.startDate ? `AND created_at >= '${filters.startDate}'` : ''}
+      ${filters.endDate ? `AND created_at <= '${filters.endDate}'` : ''}
+    `;
+
+    const amountResult = await executeQuery(amountQuery);
+    const totalAmount = amountResult && amountResult[0] ? Number(amountResult[0].total_amount || 0) : 0;
+    const averageAmount = amountResult && amountResult[0] ? Number(amountResult[0].avg_amount || 0) : 0;
+    console.log(`Total amount: ${totalAmount}, Average amount: ${averageAmount}`);
+
+    // Prepare the application by status chart data (array format for charts)
+    const applicationsByStatusChart = Object.entries(applicationsByStatus).map(([status, count]) => ({
+      status,
+      count
+    }));
+    console.log('applicationsByStatusChart array format:', applicationsByStatusChart);
+
+    // Calculate the conversion rate (approved / total)
+    const approvedApplications = applicationsByStatus['approved'] || 0;
+    const rejectedApplications = applicationsByStatus['rejected'] || 0;
+    const pendingApplications = (applicationsByStatus['pending'] || 0) + (applicationsByStatus['in_review'] || 0);
+    
+    const conversionRate = totalApplications > 0 ? Number(((approvedApplications / totalApplications) * 100).toFixed(2)) : 0;
+    console.log(`Calculated conversion rate: ${conversionRate}%`);
+
+    // Create the advisor stats object
+    const advisorStats: ApplicationStats = {
+      advisorId,
+      advisorName: advisor.name || `${advisor.first_name || ''} ${advisor.last_name || ''}`.trim() || advisor.email,
+      totalApplications,
+      approvedApplications,
+      rejectedApplications,
+      pendingApplications,
+      totalAmount,
+      averageAmount,
+      conversionRate,
+      applicationsByStatus,
+      applicationsByStatusChart,
+      applicationsByMonth: [],  // Will be populated later if needed
+      recent: [],  // Will be populated later if needed
+      
+      // Add missing required properties from the ApplicationStats interface
+      recentApplications: [], // This will be filled later if needed
+      advisorPerformance: [], // Not applicable for single advisor stats
+      totalApproved: approvedApplications,
+      totalRejected: rejectedApplications,
+      totalPending: pendingApplications,
+      pendingApproval: 0, // This would need to be calculated separately if needed
+      totalClients: 0, // Would need a separate query to get this
+      totalCompanies: 0, // Would need a separate query to get this
+      avgTimeToApproval: 0 // Would need a separate query to calculate this
+    };
+
+    // Get applications by month
+    const applicationsByMonthQuery = `
       SELECT 
         TO_CHAR(created_at, 'YYYY-MM') as month,
         COUNT(*) as count
       FROM ${TABLES.APPLICATIONS}
       WHERE assigned_to = '${advisorId}'
-      ${simulationFilter}
+      ${filters.startDate ? `AND created_at >= '${filters.startDate}'` : ''}
+      ${filters.endDate ? `AND created_at <= '${filters.endDate}'` : ''}
       GROUP BY TO_CHAR(created_at, 'YYYY-MM')
       ORDER BY month
     `;
-    
-    let applicationsByMonth: {month: string, count: number}[] = [];
-    try {
-      const monthlyResult = await executeQuery(monthlyQuery);
-      applicationsByMonth = monthlyResult.map((row: any) => ({
-        month: row.month,
-        count: parseInt(row.count)
+
+    const monthResults = await executeQuery(applicationsByMonthQuery);
+    if (monthResults && Array.isArray(monthResults)) {
+      advisorStats.applicationsByMonth = monthResults.map(result => ({
+        month: String(result.month || ''),
+        count: typeof result.count === 'number' ? result.count : Number(result.count || 0)
       }));
-    } catch (error) {
-      console.error(`Error al obtener aplicaciones por mes para asesor ${advisorId}:`, error);
-      applicationsByMonth = [];
     }
+    console.log(`Applications by month (${advisorStats.applicationsByMonth.length} entries)`, advisorStats.applicationsByMonth);
 
-    // Total de clientes del asesor
-    let totalClients = 0;
-    try {
-      // First attempt: try to get clients from users table instead of clients
-      const clientsQuery = `
-        SELECT COUNT(DISTINCT u.id) as total 
-        FROM ${TABLES.USERS} u
-        JOIN ${TABLES.APPLICATIONS} a ON a.source_id = u.id
-        WHERE a.assigned_to = '${advisorId}'
-        ${simulationFilter}
-      `;
-      
-      const clientsResult = await executeQuery(clientsQuery);
-      totalClients = parseInt(clientsResult[0]?.total || '0');
-    } catch (error) {
-      // Fallback: count distinct client names from applications
-      try {
-        const clientNamesQuery = `
-          SELECT COUNT(DISTINCT client_name) as total 
-          FROM ${TABLES.APPLICATIONS} 
-          WHERE assigned_to = '${advisorId}'
-          ${simulationFilter}
-        `;
-        const clientNamesResult = await executeQuery(clientNamesQuery);
-        totalClients = parseInt(clientNamesResult[0]?.total || '0');
-      } catch (innerError) {
-        console.error(`Error counting clients for advisor ${advisorId}:`, innerError);
-        // If that also fails, default to 0
-        totalClients = 0;
-      }
+    // Get recent applications
+    const recentApplicationsQuery = `
+      SELECT a.*, c.name as company_name
+      FROM ${TABLES.APPLICATIONS} a
+      LEFT JOIN ${TABLES.COMPANIES} c ON a.company_id = c.id
+      WHERE a.assigned_to = '${advisorId}'
+      ${filters.startDate ? `AND a.created_at >= '${filters.startDate}'` : ''}
+      ${filters.endDate ? `AND a.created_at <= '${filters.endDate}'` : ''}
+      ORDER BY a.created_at DESC
+      LIMIT 5
+    `;
+
+    const recentResults = await executeQuery(recentApplicationsQuery);
+    if (recentResults && Array.isArray(recentResults)) {
+      advisorStats.recent = recentResults;
+      advisorStats.recentApplications = recentResults; // Also populate the recentApplications field
     }
+    console.log(`Recent applications (${advisorStats.recent?.length || 0} entries)`, advisorStats.recent || []);
 
-    // Total de empresas asignadas al asesor
-    const companiesQuery = `
-      SELECT COUNT(DISTINCT company_id) as total 
-      FROM ${TABLES.APPLICATIONS} 
-      WHERE assigned_to = '${advisorId}'
-      ${simulationFilter}
-    `;
-    const companiesResult = await executeQuery(companiesQuery);
-    const totalCompanies = parseInt(companiesResult[0]?.total || '0');
-
-    // Tasa de conversión (aprobados / total)
-    const conversionRateQuery = `
-      SELECT 
-        COUNT(*) FILTER (WHERE status IN ('approved', 'APROBADO', 'completed')) as approved,
-        COUNT(*) as total
-      FROM ${TABLES.APPLICATIONS} 
-      WHERE assigned_to = '${advisorId}'
-      ${simulationFilter}
-    `;
-    const conversionResult = await executeQuery(conversionRateQuery);
-    const approved = parseInt(conversionResult[0]?.approved || '0');
-    const total = parseInt(conversionResult[0]?.total || '0');
-    const conversionRate = total > 0 ? (approved / total) * 100 : 0;
-
-    // Calcular totales específicos para cada estado
-    const totalApprovedQuery = `
-      SELECT COUNT(*) as count
-      FROM ${TABLES.APPLICATIONS}
-      WHERE assigned_to = '${advisorId}'
-      AND status IN ('approved', 'APROBADO', 'completed')
-      ${simulationFilter}
-    `;
-    const totalApprovedResult = await executeQuery(totalApprovedQuery);
-    const totalApproved = parseInt(totalApprovedResult[0]?.count || '0');
-
-    const totalRejectedQuery = `
-      SELECT COUNT(*) as count
-      FROM ${TABLES.APPLICATIONS}
-      WHERE assigned_to = '${advisorId}'
-      AND status IN ('rejected', 'RECHAZADO')
-      ${simulationFilter}
-    `;
-    const totalRejectedResult = await executeQuery(totalRejectedQuery);
-    const totalRejected = parseInt(totalRejectedResult[0]?.count || '0');
-
-    const totalPendingQuery = `
-      SELECT COUNT(*) as count
-      FROM ${TABLES.APPLICATIONS}
-      WHERE assigned_to = '${advisorId}'
-      AND status IN ('pending', 'PENDIENTE', 'review', 'REVISION')
-      ${simulationFilter}
-    `;
-    const totalPendingResult = await executeQuery(totalPendingQuery);
-    const totalPending = parseInt(totalPendingResult[0]?.count || '0');
-
-    const pendingApprovalQuery = `
-      SELECT 
-        COUNT(*) FILTER (WHERE 
-          (approved_by_advisor = false AND approved_by_company = false) OR
-          (approved_by_advisor = true AND approved_by_company = false) OR
-          (approved_by_advisor = false AND approved_by_company = true)
-        ) as pending_approval
-      FROM ${TABLES.APPLICATIONS}
-      WHERE assigned_to = '${advisorId}'
-      ${simulationFilter}
-    `;
-    const pendingApprovalResult = await executeQuery(pendingApprovalQuery);
-    const pendingApproval = parseInt(pendingApprovalResult[0]?.pending_approval || '0');
-
-    // Tiempo promedio hasta aprobación
-    const avgTimeQuery = `
-      SELECT AVG(EXTRACT(EPOCH FROM (approval_date_advisor - created_at))/86400) as avg_days
-      FROM ${TABLES.APPLICATIONS} 
-      WHERE assigned_to = '${advisorId}'
-      AND approval_date_advisor IS NOT NULL
-      ${simulationFilter}
-    `;
-    const timeResult = await executeQuery(avgTimeQuery);
-    const avgTimeToApproval = parseFloat(timeResult[0]?.avg_days || '0');
-
-    // Aplicaciones recientes del asesor
-    let recentAdvisorApps = [];
-    try {
-      const recentAdvisorAppsQuery = `
-        SELECT id, created_at, client_name, status, amount, company_name, application_type
-        FROM ${TABLES.APPLICATIONS}
-        WHERE assigned_to = '${advisorId}'
-        AND application_type = 'selected_plans'
-        ORDER BY created_at DESC
-        LIMIT 10
-      `;
-      recentAdvisorApps = await executeQuery(recentAdvisorAppsQuery);
-      
-      // Asegurarse de que application_type esté presente en todos los registros
-      recentAdvisorApps = recentAdvisorApps.map((app: any) => {
-        if (!app.application_type) {
-          // Si no tiene application_type, intentar determinar por otros campos
-          if (app.status && app.status.toLowerCase().includes('simul')) {
-            app.application_type = 'product_simulations';
-          } else if (app.status && app.status.toLowerCase().includes('solicit')) {
-            app.application_type = 'selected_plans';
-          }
-        }
-        return app;
-      });
-    } catch (error) {
-      console.error(`Error al obtener aplicaciones recientes del asesor ${advisorId}:`, error);
-      recentAdvisorApps = [];
-    }
-
-    return {
-      totalApplications: totalAdvisorApplications,
-      applicationsByStatus: advisorApplicationsByStatus,
-      averageAmount: avgAmount,
-      minAmount,
-      maxAmount,
-      recentApplications: recentAdvisorApps,
-      applicationsByMonth,
-      totalApproved,
-      totalRejected,
-      totalPending,
-      pendingApproval,
-      totalClients,
-      totalCompanies,
-      conversionRate,
-      avgTimeToApproval,
-      advisorId,
-      advisorName: '',  // This would be populated from user data
-      pendingApplications: totalPending,
-      approvedApplications: totalApproved,
-      rejectedApplications: totalRejected
-    };
+    return advisorStats;
   } catch (error) {
-    console.error(`Error al obtener estadísticas del asesor ${advisorId}:`, error);
+    console.error('Error getting advisor stats:', error);
     throw error;
   }
 };
 
 /**
- * Obtiene estadísticas específicas para una empresa
- * @param companyId ID de la empresa
- * @param includeSimulations Si es true, incluye las simulaciones en las estadísticas
+ * Get stats for a specific company
  */
-export const getCompanyDashboardStats = async (companyId: string, includeSimulations: boolean = false): Promise<CompanyStats> => {
+export const getCompanyDashboardStats = async (
+  companyId: string,
+  filters: { startDate?: string; endDate?: string }
+): Promise<CompanyStats> => {
   try {
-    // Filtro para excluir simulaciones por defecto
-    let simulationFilter = '';
-    if (!includeSimulations) {
-      simulationFilter = ` AND application_type != 'product_simulations'`;
+    console.log('=====================================================');
+    console.log(`COMPANY DASHBOARD STATS - Company ID: ${companyId}`);
+    console.log('=====================================================');
+    console.log('Filters:', JSON.stringify(filters));
+    
+    // Filter conditions for date range
+    let dateFilterConditions = '';
+    const dateConditions: string[] = [];
+    
+    if (filters.startDate) {
+      dateConditions.push(`created_at >= '${filters.startDate}'`);
     }
     
-    // Obtenemos las estadísticas generales primero con el mismo filtro
-    const baseStats = await getGeneralDashboardStats({ companyId, includeSimulations });
+    if (filters.endDate) {
+      dateConditions.push(`created_at <= '${filters.endDate}'`);
+    }
+    
+    if (dateConditions.length > 0) {
+      dateFilterConditions = ` AND ${dateConditions.join(' AND ')}`;
+    }
 
-    // Estadísticas específicas de la empresa
-    // Total de aplicaciones de la empresa
-    const companyApplicationsQuery = `
+    // Base filter for company
+    const baseFilter = `company_id = '${companyId}'${dateFilterConditions}`;
+    console.log(`SQL base filter: ${baseFilter}`);
+
+    // Get total applications
+    const totalApplicationsQuery = `
       SELECT COUNT(*) as total 
       FROM ${TABLES.APPLICATIONS} 
-      WHERE company_id = '${companyId}'
-      ${simulationFilter}
+      WHERE ${baseFilter}
     `;
-    const companyAppResult = await executeQuery(companyApplicationsQuery);
-    const totalCompanyApplications = parseInt(companyAppResult[0]?.total || '0');
+    console.log('Fetching total applications...');
+    const totalApplicationsResult = await executeQuery(totalApplicationsQuery);
+    const totalApplications = parseInt(totalApplicationsResult[0]?.total || '0');
+    console.log(`Total applications: ${totalApplications}`);
 
-    // Aplicaciones por estado de la empresa
-    const companyStatusQuery = `
+    // Get applications by status
+    const applicationsByStatusQuery = `
       SELECT status, COUNT(*) as count 
       FROM ${TABLES.APPLICATIONS} 
-      WHERE company_id = '${companyId}'
-      ${simulationFilter}
+      WHERE ${baseFilter}
       GROUP BY status
     `;
-    const companyStatusResult = await executeQuery(companyStatusQuery);
-    const companyApplicationsByStatus = companyStatusResult.map((row: any) => ({
-      status: row.status,
-      count: parseInt(row.count)
-    }));
-
-    // Total de asesores asignados a la empresa
-    const advisorsQuery = `
-      SELECT COUNT(DISTINCT assigned_to) as total 
-      FROM ${TABLES.APPLICATIONS} 
-      WHERE company_id = '${companyId}'
-      ${simulationFilter}
-    `;
-    const advisorsResult = await executeQuery(advisorsQuery);
-    const totalAdvisors = parseInt(advisorsResult[0]?.total || '0');
-
-    // Total de clientes de la empresa
-    const clientNamesQuery = `
-      SELECT COUNT(DISTINCT client_name) as total 
-      FROM ${TABLES.APPLICATIONS} 
-      WHERE company_id = '${companyId}'
-      ${simulationFilter}
-    `;
-    const clientNamesResult = await executeQuery(clientNamesQuery);
-    const totalClientsCompany = parseInt(clientNamesResult[0]?.total || '0');
-
-    // Tiempo promedio de aprobación
-    const avgTimeQuery = `
-      SELECT AVG(EXTRACT(EPOCH FROM (approval_date_company - created_at))/86400) as avg_days
-      FROM ${TABLES.APPLICATIONS} 
-      WHERE company_id = '${companyId}'
-      AND approval_date_company IS NOT NULL
-      ${simulationFilter}
-    `;
-    const timeResult = await executeQuery(avgTimeQuery);
-    const avgApprovalTime = parseFloat(timeResult[0]?.avg_days || '0');
-
-    // Aplicaciones recientes de la empresa
-    let recentCompanyApps = [];
-    try {
-      const recentCompanyAppsQuery = `
-        SELECT id, created_at, client_name, status, amount, assigned_to, application_type
-        FROM ${TABLES.APPLICATIONS}
-        WHERE company_id = '${companyId}'
-        AND application_type = 'selected_plans'
-        ORDER BY created_at DESC
-        LIMIT 10
-      `;
-      recentCompanyApps = await executeQuery(recentCompanyAppsQuery);
-      
-      // Asegurarse de que application_type esté presente en todos los registros
-      recentCompanyApps = recentCompanyApps.map((app: any) => {
-        if (!app.application_type) {
-          // Si no tiene application_type, intentar determinar por otros campos
-          if (app.status && app.status.toLowerCase().includes('simul')) {
-            app.application_type = 'product_simulations';
-          } else if (app.status && app.status.toLowerCase().includes('solicit')) {
-            app.application_type = 'selected_plans';
-          }
+    console.log('Fetching applications by status...');
+    const applicationsByStatusResult = await executeQuery(applicationsByStatusQuery);
+    console.log('Applications by status raw result:', applicationsByStatusResult);
+    
+    // Convert the result to the required format and calculate totals by status
+    const statusMap: Record<string, number> = {};
+    const applicationsByStatus: {status: string; count: number}[] = [];
+    
+    if (applicationsByStatusResult && Array.isArray(applicationsByStatusResult)) {
+      applicationsByStatusResult.forEach((item: any) => {
+        if (!item) return;
+        
+        const status = item.status || 'unknown';
+        let count = 0;
+        
+        if (typeof item.count === 'number') {
+          count = item.count;
+        } else if (typeof item.count === 'string') {
+          count = parseInt(item.count, 10) || 0;
+        } else if (item.count) {
+          count = parseInt(String(item.count), 10) || 0;
         }
-        return app;
+        
+        // Store in a map for easy access
+        statusMap[status] = count;
+        
+        // Also add to the array format
+        applicationsByStatus.push({ status, count });
       });
-    } catch (error) {
-      console.error(`Error al obtener aplicaciones recientes de la empresa ${companyId}:`, error);
-      // Datos de muestra en caso de error
-      recentCompanyApps = [
-        { id: '1', created_at: new Date().toISOString(), client_name: 'Cliente de Empresa', status: 'pending', amount: '15000', assigned_to: 'Asesor Asignado', application_type: 'selected_plans' }
-      ];
     }
+    
+    // Get the counts for specific statuses - defaulting to 0 if not found
+    const approvedApplications = statusMap['approved'] || 0;
+    const rejectedApplications = statusMap['rejected'] || 0;
+    const pendingApplications = statusMap['pending'] || 0;
+    
+    console.log('Status totals:', { 
+      approved: approvedApplications, 
+      rejected: rejectedApplications, 
+      pending: pendingApplications
+    });
 
-    return {
-      ...baseStats,
-      totalApplications: totalCompanyApplications,
-      applicationsByStatus: companyApplicationsByStatus,
-      recentApplications: recentCompanyApps,
+    // Get total amount and average amount
+    const amountQuery = `
+      SELECT 
+        SUM(amount) as total_amount,
+        AVG(amount) as avg_amount
+      FROM ${TABLES.APPLICATIONS} 
+      WHERE ${baseFilter}
+    `;
+    console.log('Fetching amount totals...');
+    const amountResult = await executeQuery(amountQuery);
+    const totalAmount = parseFloat(amountResult[0]?.total_amount || '0');
+    const avgAmount = parseFloat(amountResult[0]?.avg_amount || '0');
+    console.log(`Amount totals: total=${totalAmount}, average=${avgAmount}`);
+
+    // Get recent applications with advisor info
+    const recentApplicationsQuery = `
+      SELECT a.*, adv.id as advisor_id, adv.user_id, adv.specialization
+      FROM ${TABLES.APPLICATIONS} a
+      LEFT JOIN ${TABLES.ADVISORS} adv ON a.assigned_to = adv.user_id
+      WHERE a.${baseFilter}
+      ORDER BY a.created_at DESC
+      LIMIT 5
+    `;
+    console.log('Fetching recent applications...');
+    const recentApplicationsResult = await executeQuery(recentApplicationsQuery);
+    console.log(`Retrieved ${recentApplicationsResult.length} recent applications`);
+    
+    // Map the results to include advisor info
+    const recentApplications = recentApplicationsResult.map((app: any) => {
+      // Check if app has advisor-related fields
+      const hasAdvisorInfo = !!app.advisor_id;
+      console.log(`Application ${app.id} has advisor info: ${hasAdvisorInfo}`);
+      
+      return {
+        ...app,
+        advisor: hasAdvisorInfo ? {
+          id: app.advisor_id,
+          user_id: app.user_id,
+          specialization: app.specialization
+        } : null
+      };
+    }) as Application[];
+
+    // Get applications by month
+    const applicationsByMonthQuery = `
+      SELECT 
+        TO_CHAR(created_at, 'YYYY-MM') as month,
+        COUNT(*) as count
+      FROM ${TABLES.APPLICATIONS} 
+      WHERE ${baseFilter}
+      GROUP BY month
+      ORDER BY month
+    `;
+    console.log('Fetching applications by month...');
+    const applicationsByMonthResult = await executeQuery(applicationsByMonthQuery);
+    const applicationsByMonth = applicationsByMonthResult.map((item: any) => ({
+      month: item.month || '',
+      count: parseInt(String(item.count), 10) || 0 // Ensure count is always a number
+    }));
+    console.log(`Retrieved ${applicationsByMonth.length} months of application data`);
+
+    // Get total unique clients
+    const totalClientsQuery = `
+      SELECT COUNT(DISTINCT client_id) as total
+      FROM ${TABLES.APPLICATIONS} 
+      WHERE ${baseFilter}
+    `;
+    console.log('Fetching total clients...');
+    const totalClientsResult = await executeQuery(totalClientsQuery);
+    const totalClients = parseInt(totalClientsResult[0]?.total || '0');
+    console.log(`Total clients: ${totalClients}`);
+
+    // Get total advisors for this company
+    const totalAdvisorsQuery = `
+      SELECT COUNT(*) as total
+      FROM ${TABLES.ADVISORS}
+      WHERE company_id = '${companyId}'
+    `;
+    console.log('Fetching total advisors...');
+    const totalAdvisorsResult = await executeQuery(totalAdvisorsQuery);
+    const totalAdvisors = parseInt(totalAdvisorsResult[0]?.total || '0');
+    console.log(`Total advisors: ${totalAdvisors}`);
+
+    // Calculate average time to approval for company
+    const avgApprovalTimeQuery = `
+      SELECT AVG(
+        EXTRACT(EPOCH FROM (approval_date_company - created_at)) / 3600
+      ) as avg_time
+      FROM ${TABLES.APPLICATIONS} 
+      WHERE ${baseFilter}
+      AND approval_date_company IS NOT NULL
+    `;
+    console.log('Fetching average approval time...');
+    const avgApprovalTimeResult = await executeQuery(avgApprovalTimeQuery);
+    const avgApprovalTime = parseFloat(avgApprovalTimeResult[0]?.avg_time || '0');
+    console.log(`Average approval time: ${avgApprovalTime} hours`);
+
+    // Get advisor performance for this company
+    try {
+      const advisorPerformanceQuery = `
+        SELECT 
+          a.assigned_to as advisor_id,
+          u.first_name || ' ' || u.last_name as advisor_name,
+          COUNT(*) as total_applications,
+          SUM(CASE WHEN a.status = 'approved' THEN 1 ELSE 0 END) as approved_applications,
+          SUM(CASE WHEN a.status = 'rejected' THEN 1 ELSE 0 END) as rejected_applications,
+          SUM(CASE WHEN a.status = 'pending' THEN 1 ELSE 0 END) as pending_applications,
+          AVG(
+            CASE 
+              WHEN a.approval_date_advisor IS NOT NULL 
+              THEN EXTRACT(EPOCH FROM (a.approval_date_advisor - a.created_at)) / 3600
+              ELSE NULL
+            END
+          ) as avg_approval_time
+        FROM ${TABLES.APPLICATIONS} a
+        JOIN ${TABLES.USERS} u ON a.assigned_to = u.id
+        WHERE a.${baseFilter}
+        GROUP BY a.assigned_to, u.first_name, u.last_name
+      `;
+      
+      console.log('Fetching advisor performance...');
+      const advisorPerformanceResult = await executeQuery(advisorPerformanceQuery);
+      console.log(`Retrieved advisor performance for ${advisorPerformanceResult.length} advisors`);
+      
+      const advisorPerformance: AdvisorPerformanceStats[] = advisorPerformanceResult.map((item: any) => {
+        const totalApplications = parseInt(item.total_applications || '0');
+        const approvedApplications = parseInt(item.approved_applications || '0');
+        const rejectedApplications = parseInt(item.rejected_applications || '0');
+        const pendingApplications = parseInt(item.pending_applications || '0');
+        
+        return {
+          advisorId: item.advisor_id || '',
+          advisorName: item.advisor_name || '',
+          totalApplications,
+          approvedApplications,
+          rejectedApplications,
+          pendingApplications,
+          approvalRate: totalApplications > 0 ? (approvedApplications / totalApplications) * 100 : 0,
+          avgApprovalTime: parseFloat(item.avg_approval_time || '0')
+        };
+      });
+
+      // Build the final result object
+      const result: CompanyStats = {
+        totalApplications,
+        pendingApplications,
+        approvedApplications,
+        rejectedApplications,
+        totalAmount,
+        avgAmount,
+        recentApplications,
+        applicationsByMonth,
+        applicationsByStatus,
+        advisorPerformance,
+        totalClients,
+        totalAdvisors,
+        avgApprovalTime
+      };
+      
+      console.log('Successfully compiled complete company dashboard stats');
+      return result;
+    } catch (error) {
+      console.error('Error in advisor performance section:', error);
+      console.error('Error stack:', error instanceof Error ? error.stack : 'Unknown error');
+      
+      // Return data without advisor performance if there's an error
+      const result: CompanyStats = {
+        totalApplications,
+        pendingApplications,
+        approvedApplications,
+        rejectedApplications,
+        totalAmount,
+        avgAmount,
+        recentApplications,
+        applicationsByMonth,
+        applicationsByStatus,
+        advisorPerformance: [],
+        totalClients,
       totalAdvisors,
-      totalClientsCompany,
-      avgApprovalTime,
-      pendingApplications: parseInt(baseStats.pendingApplications?.toString() || '0'),
-      applicationsByMonth: Array.isArray(baseStats.applicationsByMonth) 
-        ? baseStats.applicationsByMonth 
-        : Object.entries(baseStats.applicationsByMonth || {}).map(([month, count]) => ({
-            month,
-            count: Number(count)
-          }))
-    };
+        avgApprovalTime
+      };
+      
+      console.log('Returning company dashboard stats without advisor performance due to error');
+      return result;
+    }
   } catch (error) {
-    console.error(`Error al obtener estadísticas de la empresa ${companyId}:`, error);
+    console.error('Error getting company dashboard stats:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'Unknown error');
     throw error;
   }
 };
 
 /**
- * Obtiene estadísticas de aplicaciones pendientes de aprobación
- * @param userId ID del usuario (asesor o admin de empresa)
- * @param isCompanyAdmin Indica si el usuario es un admin de empresa
+ * Get pending approvals for user
  */
-export const getPendingApprovalStats = async (userId: string, isCompanyAdmin: boolean): Promise<any> => {
+export const getPendingApprovals = async (userId: string, isCompanyAdmin: boolean) => {
   try {
     let query = '';
     
     if (isCompanyAdmin) {
-      // Obtener ID de la compañía del admin
-      const companyQuery = `
-        SELECT company_id FROM ${TABLES.COMPANY_ADMINS} WHERE id = '${userId}'
-      `;
-      const companyResult = await executeQuery(companyQuery);
-      const companyId = companyResult[0]?.company_id;
-      
-      if (!companyId) {
-        throw new Error('No se encontró la compañía para este administrador');
-      }
-      
-      // Aplicaciones pendientes de aprobación por la compañía
+      // Aplicaciones pendientes de aprobación por la empresa
       query = `
         SELECT COUNT(*) as pending_count
         FROM ${TABLES.APPLICATIONS}
-        WHERE company_id = '${companyId}'
-        AND approved_by_advisor = true
+        WHERE company_id = '${userId}'
         AND approved_by_company = false
       `;
     } else {
@@ -698,8 +1042,25 @@ export const getPendingApprovalStats = async (userId: string, isCompanyAdmin: bo
     }
     
     const result = await executeQuery(query);
+    const totalPending = parseInt(result[0]?.pending_count || '0');
+
+    // Obtener aplicaciones pendientes de aprobación
+    const pendingApplicationsQuery = `
+      SELECT *
+      FROM ${TABLES.APPLICATIONS}
+      WHERE ${isCompanyAdmin ? 'company_id' : 'assigned_to'} = '${userId}'
+      AND ${isCompanyAdmin ? 'approved_by_company = false' : 'approved_by_advisor = false'}
+    `;
+    const pendingApplicationsResult = await executeQuery(pendingApplicationsQuery);
+    const pendingApplications = pendingApplicationsResult.map((app: any) => ({
+      ...app,
+      approval_date_company: app.approval_date_company ? new Date(app.approval_date_company).toISOString() : null,
+      approval_date_advisor: app.approval_date_advisor ? new Date(app.approval_date_advisor).toISOString() : null
+    }));
+
     return {
-      pendingCount: parseInt(result[0]?.pending_count || '0')
+      totalPending,
+      pendingApplications
     };
   } catch (error) {
     console.error('Error al obtener estadísticas de aprobaciones pendientes:', error);

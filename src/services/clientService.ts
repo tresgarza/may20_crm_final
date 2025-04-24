@@ -13,6 +13,7 @@ import {
 } from '../utils/errorHandling';
 import { parseNumericString, processNumericField } from '../utils/numberFormatting';
 import { uploadClientDocuments as uploadDocs } from '../utils/documentUpload';
+import * as clientDocumentService from './client/clientDocumentService';
 
 // Re-exportamos las interfaces para mantener compatibilidad
 export type { Client, ClientDocument };
@@ -356,309 +357,201 @@ export const createClient = async (client: Omit<Client, 'id' | 'created_at'>, do
       maternal_surname: client.maternal_surname || '',
       phone: client.phone,
       birth_date: client.birth_date,
-      company_id: client.company_id,
-      rfc: client.rfc,
-      curp: client.curp,
-      advisor_id: client.advisor_id,
-      address: client.address,
-      city: client.city,
-      state: client.state,
-      postal_code: client.postal_code,
-      gender: client.gender,
-      marital_status: client.marital_status,
-      employment_type: client.employment_type,
-      employment_years: client.employment_years,
-      monthly_income: client.monthly_income,
-      additional_income: client.additional_income,
-      monthly_expenses: client.monthly_expenses,
-      other_loan_balances: client.other_loan_balances,
-      bank_name: client.bank_name,
-      bank_clabe: client.bank_clabe,
-      bank_account_number: client.bank_account_number,
-      bank_account_type: client.bank_account_type,
-      bank_account_origin: client.bank_account_origin,
-      street_number_ext: client.street_number_ext,
-      street_number_int: client.street_number_int,
-      neighborhood: client.neighborhood,
-      home_phone: client.home_phone,
-      birth_state: client.birth_state,
-      nationality: client.nationality,
-      job_position: client.job_position,
-      employer_name: client.employer_name,
-      employer_phone: client.employer_phone,
-      employer_address: client.employer_address,
-      employer_activity: client.employer_activity,
-      mortgage_payment: client.mortgage_payment,
-      rent_payment: client.rent_payment,
-      dependent_persons: client.dependent_persons,
-      income_frequency: client.income_frequency,
-      payment_method: client.payment_method,
-      credit_purpose: client.credit_purpose,
-      spouse_paternal_surname: client.spouse_paternal_surname,
-      spouse_maternal_surname: client.spouse_maternal_surname,
-      reference1_name: client.reference1_name,
-      reference1_relationship: client.reference1_relationship,
-      reference1_address: client.reference1_address,
-      reference1_phone: client.reference1_phone,
-      reference2_name: client.reference2_name,
-      reference2_relationship: client.reference2_relationship,
-      reference2_address: client.reference2_address,
-      reference2_phone: client.reference2_phone,
+      company_id: client.company_id || "70b2aa97-a5b6-4b5e-91db-be8acbd3701a",
+      rfc: client.rfc || '',
+      curp: client.curp || '',
     };
-
-    // Asegurarse de que no se incluyan campos calculados
-    // Estos campos son calculados en la aplicación pero no existen en la base de datos
-    delete (userData as any).name;
-    delete (userData as any).warningMessage;
-
-    // Process numeric fields
-    if (userData.employment_years !== undefined) {
-      const processed = processNumericField(userData.employment_years);
-      userData.employment_years = processed === null ? undefined : processed;
-    }
-    if (userData.monthly_income !== undefined) {
-      const processed = processNumericField(userData.monthly_income);
-      userData.monthly_income = processed === null ? undefined : processed;
-    }
-    if (userData.additional_income !== undefined) {
-      const processed = processNumericField(userData.additional_income);
-      userData.additional_income = processed === null ? undefined : processed;
-    }
-    if (userData.monthly_expenses !== undefined) {
-      const processed = processNumericField(userData.monthly_expenses);
-      userData.monthly_expenses = processed === null ? undefined : processed;
-    }
-    if (userData.other_loan_balances !== undefined) {
-      const processed = processNumericField(userData.other_loan_balances);
-      userData.other_loan_balances = processed === null ? undefined : processed;
-    }
-
-    // Ensure company_id is present as it's required by the database schema
-    if (!userData.company_id) {
-      console.warn('No company_id provided when creating client - using default company');
-      userData.company_id = "70b2aa97-a5b6-4b5e-91db-be8acbd3701a"; // Default company (Herramental)
-    }
 
     // Log sanitized data for debugging
     console.log(`Creating client with sanitized data:`, JSON.stringify(userData));
 
-    // Get the service client for this operation to evitar problemas de autenticación
+    // Get the service client for this operation
     const serviceClient = getServiceClient();
 
-    const { data, error, count } = await serviceClient
-      .from(USERS_TABLE)
-      .insert([userData])
-      .select();
+    // Use our direct SQL function to create the client
+    const { data, error } = await serviceClient.rpc('create_client', {
+      p_first_name: userData.first_name,
+      p_paternal_surname: userData.paternal_surname,
+      p_maternal_surname: userData.maternal_surname,
+      p_email: userData.email,
+      p_phone: userData.phone,
+      p_company_id: userData.company_id,
+      p_birth_date: userData.birth_date,
+      p_rfc: userData.rfc,
+      p_curp: userData.curp
+    });
 
     if (error) {
-      // Verificar si es una violación de RLS
-      if (isRlsViolation(error)) {
-        throw createRlsViolationError('crear', 'cliente', 'nuevo', error);
+      console.error("Error creating client using RPC:", error);
+      // Fallback to direct SQL if RPC fails
+      const { data: sqlData, error: sqlError } = await serviceClient.rpc('execute_sql', {
+        sql: `
+          INSERT INTO users (
+            id, first_name, paternal_surname, maternal_surname, email, phone, 
+            company_id, birth_date, rfc, curp, is_sso_user, is_anonymous
+          ) VALUES (
+            gen_random_uuid(), 
+            '${userData.first_name}', 
+            '${userData.paternal_surname}', 
+            '${userData.maternal_surname}', 
+            '${userData.email}', 
+            '${userData.phone}', 
+            '${userData.company_id}', 
+            '${userData.birth_date}', 
+            '${userData.rfc}', 
+            '${userData.curp}',
+            false,
+            false
+          ) RETURNING id;
+        `
+      });
+      
+      if (sqlError) {
+        logError(sqlError, 'createClient - direct SQL fallback');
+        throw handleApiError(sqlError);
       }
       
-      logError(error, 'createClient');
-      throw handleApiError(error);
-    }
-
-    // Verify that rows were affected
-    if (!data || data.length === 0 || count === 0) {
-      const noDataError = createAppError(
-        ErrorType.SERVER,
-        'No se pudo crear el cliente. No se recibieron datos del servidor.'
-      );
-      logError(noDataError, 'createClient');
-      throw noDataError;
-    }
-
-    const newClient = mapUserToClient(data[0]);
-    let documentResult = null;
-    
-    if (documents && documents.length > 0 && userId && newClient.id) {
-      try {
-        console.log(`Uploading ${documents.length} documents for new client ${newClient.id}`);
+      if (!sqlData || !sqlData[0] || !sqlData[0].id) {
+        throw new Error("No se pudo crear el cliente (SQL directo no retornó id)");
+      }
+      
+      // Get the newly created client
+      const { data: newClient, error: fetchError } = await serviceClient
+        .from(USERS_TABLE)
+        .select('*')
+        .eq('id', sqlData[0].id)
+        .single();
         
-        // Usar la versión mejorada de uploadClientDocuments de utils
-        documentResult = await uploadDocs(newClient.id, documents);
-        
-        // Check if any documents uploaded successfully
-        if (documentResult && documentResult.length > 0) {
-          console.log(`${documentResult.length} documents uploaded successfully during client creation`);
-        } else {
-          console.warn(`No documents were successfully uploaded during client creation`);
-          newClient.warningMessage = 'Se creó el cliente, pero no se pudieron subir los documentos. Puede intentar agregarlos nuevamente más tarde.';
+      if (fetchError) {
+        logError(fetchError, 'createClient - fetch after direct SQL');
+        throw handleApiError(fetchError);
+      }
+      
+      const mappedClient = mapUserToClient(newClient);
+      
+      // Handle documents if provided
+      if (documents && documents.length > 0 && userId && mappedClient.id) {
+        try {
+          console.log(`Uploading ${documents.length} documents for new client ${mappedClient.id}`);
+          const documentResult = await uploadDocs(mappedClient.id, documents);
+          console.log(`${documentResult.length} documents uploaded successfully`);
+        } catch (docError) {
+          console.error('Error uploading documents during client creation:', docError);
+          mappedClient.warningMessage = `Se creó el cliente, pero hubo un problema al subir los documentos. Puede intentar agregarlos nuevamente más tarde.`;
         }
+      }
+      
+      return mappedClient;
+    }
+
+    // If RPC was successful
+    const clientId = data;
+    
+    if (!clientId) {
+      throw new Error("No se pudo crear el cliente (RPC no retornó id)");
+    }
+    
+    // Get the newly created client
+    const { data: newClient, error: fetchError } = await serviceClient
+      .from(USERS_TABLE)
+      .select('*')
+      .eq('id', clientId)
+      .single();
+      
+    if (fetchError) {
+      logError(fetchError, 'createClient - fetch after RPC');
+      throw handleApiError(fetchError);
+    }
+    
+    const mappedClient = mapUserToClient(newClient);
+    
+    // Handle documents if provided
+    if (documents && documents.length > 0 && userId && mappedClient.id) {
+      try {
+        console.log(`Uploading ${documents.length} documents for new client ${mappedClient.id}`);
+        const documentResult = await uploadDocs(mappedClient.id, documents);
+        console.log(`${documentResult.length} documents uploaded successfully`);
       } catch (docError) {
         console.error('Error uploading documents during client creation:', docError);
-        
-        // Información más detallada del error
-        const errorMessage = docError instanceof Error ? docError.message : 'Error desconocido';
-        console.error(`Error detail: ${errorMessage}`);
-        
-        // Continue with client creation but add warning
-        newClient.warningMessage = `Se creó el cliente, pero hubo un problema al subir los documentos: ${errorMessage}. Puede intentar agregarlos nuevamente más tarde.`;
+        mappedClient.warningMessage = `Se creó el cliente, pero hubo un problema al subir los documentos. Puede intentar agregarlos nuevamente más tarde.`;
       }
     }
 
-    return newClient;
+    return mappedClient;
   } catch (error) {
     logError(error, 'createClient', { clientData: client });
     throw handleApiError(error);
   }
 };
 
-export const updateClient = async (id: string, updates: Partial<Client>, documents?: ClientDocument[], userId?: string) => {
+export const updateClient = async (
+  id: string, 
+  data: Partial<Client>, 
+  documents?: ClientDocument[],
+  userId?: string
+): Promise<Partial<Client>> => {
   try {
-    console.log(`Starting client update for ID ${id}`, updates);
-    
-    // Create a copy to avoid modifying the original object
-    const userUpdates: any = { ...updates };
-    
-    // Eliminar campos calculados o virtuales que no existen en la base de datos
-    // El campo 'name' es calculado en mapUserToClient pero no existe en la tabla
-    delete userUpdates.name;
-    delete userUpdates.warningMessage;
-    
-    // Process specific numeric fields
-    if ('employment_years' in updates) {
-      const processed = processNumericField(updates.employment_years);
-      userUpdates.employment_years = processed === null ? undefined : processed;
-    }
-    if ('monthly_income' in updates) {
-      const processed = processNumericField(updates.monthly_income);
-      userUpdates.monthly_income = processed === null ? undefined : processed;
-    }
-    if ('additional_income' in updates) {
-      const processed = processNumericField(updates.additional_income);
-      userUpdates.additional_income = processed === null ? undefined : processed;
-    }
-    if ('monthly_expenses' in updates) {
-      const processed = processNumericField(updates.monthly_expenses);
-      userUpdates.monthly_expenses = processed === null ? undefined : processed;
-    }
-    if ('other_loan_balances' in updates) {
-      const processed = processNumericField(updates.other_loan_balances);
-      userUpdates.other_loan_balances = processed === null ? undefined : processed;
-    }
-    if ('mortgage_payment' in updates) {
-      const processed = processNumericField(updates.mortgage_payment);
-      userUpdates.mortgage_payment = processed === null ? undefined : processed;
-    }
-    if ('rent_payment' in updates) {
-      const processed = processNumericField(updates.rent_payment);
-      userUpdates.rent_payment = processed === null ? undefined : processed;
-    }
-    if ('dependent_persons' in updates) {
-      const processed = processNumericField(updates.dependent_persons);
-      userUpdates.dependent_persons = processed === null ? undefined : processed;
-    }
+    // Log the update operation for debugging
+    console.log(`Updating client with ID ${id}`);
+    console.log('Update data:', data);
+    console.log('Documents to upload:', documents?.length || 0);
 
-    // Remove undefined fields
-    Object.keys(userUpdates).forEach(key => {
-      const typedKey = key as keyof typeof userUpdates;
-      if (userUpdates[typedKey] === undefined) {
-        delete userUpdates[typedKey];
-      }
-    });
-
-    console.log(`Updating client ${id} with sanitized data:`, JSON.stringify(userUpdates));
-
-    // Get the service client for this operation to evitar problemas de permisos
+    // Get the service client for operations that require elevated privileges
     const serviceClient = getServiceClient();
-
-    // First, verify the client exists
-    const { data: existingClient, error: existingError } = await serviceClient
-      .from(USERS_TABLE)
-      .select('id')
-      .eq('id', id)
-      .single();
-
-    if (existingError || !existingClient) {
-      const notFoundError = createAppError(
-        ErrorType.NOT_FOUND,
-        `No se encontró el cliente con ID ${id}. Verifique que el cliente exista.`
-      );
-      logError(notFoundError, 'updateClient', { clientId: id });
-      throw notFoundError;
-    }
-
-    // Perform the update with the service client
-    const { data, error, count } = await serviceClient
-      .from(USERS_TABLE)
-      .update(userUpdates)
-      .eq('id', id)
-      .select();
-
+    
+    // Use our stored procedure to update the client
+    const { data: updateResult, error } = await serviceClient.rpc('update_client', {
+      p_id: id,
+      p_updates: data
+    });
+    
+    // If there was an error with the update
     if (error) {
-      // Verificar si es una violación de RLS
-      if (isRlsViolation(error)) {
-        throw createRlsViolationError('actualizar', 'cliente', id, error);
-      }
-      
-      logError(error, 'updateClient', { clientId: id });
-      throw handleApiError(error);
-    }
-
-    // Verify that the update affected rows
-    if (!data || data.length === 0 || count === 0) {
-      console.warn(`Update operation didn't affect any rows for client ${id}`);
-      throw createNoEffectError('update', 'cliente', id);
-    }
-
-    let updatedClient: Client;
-
-    if (!data || data.length === 0) {
-      console.log(`No data returned when updating client with ID ${id}, fetching client data separately`);
-      
-      // Fallback: fetch the client data separately
-      const { data: fetchedData, error: fetchError } = await serviceClient
-        .from(USERS_TABLE)
-        .select('*')
-        .eq('id', id)
-        .single();
-      
-      if (fetchError) {
-        console.error('Error fetching updated client:', fetchError);
-        throw fetchError;
-      }
-      
-      updatedClient = mapUserToClient(fetchedData);
-    } else {
-      updatedClient = mapUserToClient(data[0]);
+      console.error('Error updating client:', error);
+      throw new Error(`Error al actualizar cliente: ${error.message}`);
     }
     
-    let documentResult = null;
+    // If no rows were affected (no update performed)
+    if (!updateResult) {
+      console.warn(`The update for client ${id} had no effect`);
+      throw new Error(`La actualización no tuvo efecto. Es posible que no tenga permisos para actualizar este cliente o que no haya cambios para guardar.`);
+    }
     
-    // Upload documents if provided
+    // If we have documents to upload
     if (documents && documents.length > 0 && userId) {
+      console.log(`Processing ${documents.length} documents for client ${id}`);
       try {
-        console.log(`Uploading ${documents.length} documents for client ${id}`);
+        // Use the clientDocumentService function for better error handling
+        const documentResult = await clientDocumentService.uploadClientDocuments(id, userId, documents);
+        console.log('Document upload result:', documentResult);
         
-        // Usar la versión mejorada de uploadClientDocuments de utils
-        documentResult = await uploadDocs(id, documents);
-        
-        // Check if any documents failed to upload
-        if (documentResult && documentResult.length > 0) {
-          console.log(`${documentResult.length} documents uploaded successfully during client update`);
-        } else {
-          console.warn(`No documents were successfully uploaded during client update`);
-          updatedClient.warningMessage = 'Se actualizó el cliente, pero no se pudieron subir los documentos. Puede intentar agregarlos nuevamente más tarde.';
+        if (!documentResult.allSuccessful && documentResult.warningMessage) {
+          // Return the client data with a warning message about document issues
+          return {
+            ...data,
+            id,
+            warningMessage: documentResult.warningMessage
+          };
         }
       } catch (docError) {
-        console.error(`Error uploading documents for client ${id}:`, docError);
+        console.error('Error uploading documents during client update:', docError);
         
-        // Información más detallada del error
-        const errorMessage = docError instanceof Error ? docError.message : 'Error desconocido';
-        console.error(`Error detail: ${errorMessage}`);
-        
-        // Continue with client update but add warning
-        updatedClient.warningMessage = `Se actualizó el cliente, pero hubo un problema al subir los documentos: ${errorMessage}. Puede intentar agregarlos nuevamente más tarde.`;
+        // We still return the updated client data but with a warning message
+        return {
+          ...data,
+          id,
+          warningMessage: `Se actualizó la información del cliente, pero hubo un problema al subir los documentos: ${docError instanceof Error ? docError.message : 'Error desconocido'}`
+        };
       }
     }
-
-    console.log(`Client update complete for ID ${id}`);
-    return updatedClient;
+    
+    // Return the updated client data
+    return {
+      ...data,
+      id
+    };
   } catch (error) {
-    logError(error, 'updateClient', { clientId: id, updates });
+    logError(error, 'updateClient', { clientId: id });
     throw handleApiError(error);
   }
 };

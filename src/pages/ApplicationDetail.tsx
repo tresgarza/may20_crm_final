@@ -1,15 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import * as React from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import { 
   getApplicationById, 
-  Application, 
+  Application as ApplicationType, 
   getApprovalStatus, 
   approveByAdvisor, 
   approveByCompany,
   cancelCompanyApproval,
   updateApplicationStatus,
-  ApplicationStatus 
+  ApplicationStatus,
+  markAsDispersed
 } from '../services/applicationService';
 import { usePermissions } from '../contexts/PermissionsContext';
 import { PERMISSIONS } from '../utils/constants/permissions';
@@ -24,18 +26,24 @@ import { formatDate } from '../utils/formatters';
 
 // Interfaces para estados de aprobación
 interface ApprovalStatus {
+  isFullyApproved: boolean;
   approvedByAdvisor: boolean;
   approvedByCompany: boolean;
   approvalDateAdvisor?: string;
   approvalDateCompany?: string;
+  advisorStatus?: string;
+  companyStatus?: string;
+  globalStatus?: string;
 }
 
-const ApplicationDetail: React.FC = () => {
+const ApplicationDetail = () => {
+  console.log('React at start', React); // Diagnostic log to check for shadowing
+  
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { addNotification, showPopup } = useNotifications();
-  const [application, setApplication] = useState<Application | null>(null);
+  const [application, setApplication] = useState<ApplicationType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [approvalStatus, setApprovalStatus] = useState<ApprovalStatus | null>(null);
@@ -43,47 +51,68 @@ const ApplicationDetail: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const { shouldFilterByEntity, getEntityFilter, userCan, isAdvisor, isCompanyAdmin } = usePermissions();
   
-  useEffect(() => {
-    const loadApplication = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        // Validar que el ID tenga un formato válido de UUID
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if (!id || !uuidRegex.test(id)) {
-          throw new Error('ID de solicitud inválido');
-        }
-        
-        const data = await getApplicationById(id);
-        setApplication(data);
-        
-        // Obtener estado de aprobación
-        const approvalData = await getApprovalStatus(id);
-        setApprovalStatus(approvalData);
-      } catch (err) {
-        console.error('Error al cargar la solicitud:', err);
-        setError(err instanceof Error ? err.message : 'Error al cargar los datos de la solicitud');
-        
-        // Mostrar notificación de error
-        showPopup({
-          title: 'Solicitud no encontrada',
-          message: 'No se pudo encontrar la solicitud especificada. Es posible que haya sido eliminada o que no tengas permisos para verla.',
-          type: NotificationType.ERROR,
-          playSound: true,
-          soundType: 'alert'
-        });
-        
-        // Redirigir al listado de aplicaciones después de 3 segundos
-        setTimeout(() => {
-          navigate('/applications');
-        }, 3000);
-      } finally {
-        setLoading(false);
-      }
+  // Función auxiliar para construir el estado de aprobación localmente si es necesario
+  const buildApprovalStatus = (app: ApplicationType): ApprovalStatus => {
+    return {
+      approvedByAdvisor: app.approved_by_advisor === true,
+      approvedByCompany: app.approved_by_company === true,
+      approvalDateAdvisor: app.approval_date_advisor,
+      approvalDateCompany: app.approval_date_company,
+      isFullyApproved: app.approved_by_advisor === true && app.approved_by_company === true,
+      advisorStatus: app.advisor_status,
+      companyStatus: app.company_status,
+      globalStatus: app.global_status || app.status
     };
+  };
+  
+  // Función para cargar/recargar datos de la aplicación
+  const loadApplicationData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Validar que el ID tenga un formato válido de UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!id || !uuidRegex.test(id)) {
+        throw new Error('ID de solicitud inválido');
+      }
+      
+      const entityFilter = shouldFilterByEntity() ? getEntityFilter() : null;
+      const data = await getApplicationById(id, entityFilter);
+      setApplication(data);
+      
+      // Obtener estado de aprobación
+      const approvalData = await getApprovalStatus(id, entityFilter);
+      // Only set approval status if we got a valid response
+      if (approvalData) {
+        setApprovalStatus(approvalData);
+      } else {
+        setApprovalStatus(buildApprovalStatus(data));
+      }
+    } catch (err) {
+      console.error('Error al cargar la solicitud:', err);
+      setError(err instanceof Error ? err.message : 'Error al cargar los datos de la solicitud');
+      
+      // Mostrar notificación de error
+      showPopup({
+        title: 'Solicitud no encontrada',
+        message: 'No se pudo encontrar la solicitud especificada. Es posible que haya sido eliminada o que no tengas permisos para verla.',
+        type: NotificationType.ERROR,
+        playSound: true,
+        soundType: 'alert'
+      });
+      
+      // Redirigir al listado de aplicaciones después de 3 segundos
+      setTimeout(() => {
+        navigate('/applications');
+      }, 3000);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    loadApplication();
+  useEffect(() => {
+    loadApplicationData();
   }, [id, showPopup, navigate]);
   
   // Función para aprobar como asesor
@@ -102,18 +131,14 @@ const ApplicationDetail: React.FC = () => {
         entityFilter
       );
       
-      // Recargar datos
-      const updatedApp = await getApplicationById(id, entityFilter);
-      setApplication(updatedApp);
-      
-      const updatedApproval = await getApprovalStatus(id, entityFilter);
-      setApprovalStatus(updatedApproval);
-      
-      setSuccessMessage('Solicitud aprobada correctamente como asesor');
+      // Recargar datos para asegurar que tenemos la info más actualizada
+      await loadApplicationData();
       
       // Si ambos han aprobado, mostrar mensaje adicional
-      if (updatedApproval.approvedByAdvisor && updatedApproval.approvedByCompany) {
+      if (approvalStatus?.approvedByCompany) {
         setSuccessMessage('¡Aprobación completa! La solicitud ha sido aprobada por ambas partes.');
+      } else {
+        setSuccessMessage('Solicitud aprobada correctamente como asesor');
       }
       
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -147,18 +172,14 @@ const ApplicationDetail: React.FC = () => {
         entityFilter
       );
       
-      // Recargar datos
-      const updatedApp = await getApplicationById(id, entityFilter);
-      setApplication(updatedApp);
-      
-      const updatedApproval = await getApprovalStatus(id, entityFilter);
-      setApprovalStatus(updatedApproval);
-      
-      setSuccessMessage('Solicitud aprobada correctamente como empresa');
+      // Recargar datos para asegurar que tenemos la info más actualizada
+      await loadApplicationData();
       
       // Si ambos han aprobado, mostrar mensaje adicional
-      if (updatedApproval.approvedByAdvisor && updatedApproval.approvedByCompany) {
+      if (approvalStatus?.approvedByAdvisor) {
         setSuccessMessage('¡Aprobación completa! La solicitud ha sido aprobada por ambas partes.');
+      } else {
+        setSuccessMessage('Solicitud aprobada correctamente como empresa');
       }
       
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -192,17 +213,13 @@ const ApplicationDetail: React.FC = () => {
         entityFilter
       );
       
-      // Recargar datos
-      const updatedApp = await getApplicationById(id, entityFilter);
-      setApplication(updatedApp);
-      
-      const updatedApproval = await getApprovalStatus(id, entityFilter);
-      setApprovalStatus(updatedApproval);
+      // Recargar datos para asegurar que tenemos la info más actualizada
+      await loadApplicationData();
       
       setSuccessMessage('Aprobación de empresa cancelada correctamente');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (error: any) {
-      console.error('Error canceling company approval:', error);
+      console.error('Error canceling approval:', error);
       setError(`Error al cancelar aprobación: ${error.message || 'Error desconocido'}`);
     } finally {
       setApproving(false);
@@ -254,16 +271,10 @@ const ApplicationDetail: React.FC = () => {
           
           console.log("✅ Aprobación de empresa removida correctamente");
           
-          // Recargar los datos de aprobación
-          const updatedApproval = await getApprovalStatus(id, entityFilter);
-          setApprovalStatus(updatedApproval);
+          // Recargar los datos completos
+          await loadApplicationData();
           
           setSuccessMessage(`Aprobación de empresa removida y solicitud actualizada a "${statusText}"`);
-          
-          // Recargar datos completos de la aplicación
-          const updatedApp = await getApplicationById(id, entityFilter);
-          setApplication(updatedApp);
-          
           setTimeout(() => setSuccessMessage(null), 3000);
           setApproving(false);
           return;
@@ -282,13 +293,8 @@ const ApplicationDetail: React.FC = () => {
         entityFilter
       );
       
-      // Recargar datos
-      const updatedApp = await getApplicationById(id, entityFilter);
-      setApplication(updatedApp);
-      
-      // Si cambiamos estado, recargar también el estado de aprobación
-      const updatedApproval = await getApprovalStatus(id, entityFilter);
-      setApprovalStatus(updatedApproval);
+      // Recargar datos completos
+      await loadApplicationData();
       
       // Mostrar mensaje de éxito
       setSuccessMessage(`Solicitud actualizada correctamente a "${statusText}"`);
@@ -359,6 +365,9 @@ const ApplicationDetail: React.FC = () => {
     // Si no hay coincidencia, retornar el valor original
     return type;
   };
+  
+  // Verificar si la solicitud está totalmente aprobada
+  const isFullyApproved = approvalStatus?.approvedByAdvisor && approvalStatus?.approvedByCompany;
   
   if (!userCan(PERMISSIONS.VIEW_APPLICATIONS)) {
     return (
@@ -442,10 +451,9 @@ const ApplicationDetail: React.FC = () => {
                         if (appType === 'product_simulations') return 'Simulación de Producto';
                         if (appType === 'cash_requests') return 'Solicitud de Efectivo';
                         
-                        // Try to find in APPLICATION_TYPE_LABELS if imported
-                        const { APPLICATION_TYPE_LABELS } = require('../utils/constants/applications');
-                        if (APPLICATION_TYPE_LABELS && APPLICATION_TYPE_LABELS[appType]) {
-                          return APPLICATION_TYPE_LABELS[appType];
+                        // Use the imported APPLICATION_TYPE_LABELS directly
+                        if (APPLICATION_TYPE_LABELS[appType as keyof typeof APPLICATION_TYPE_LABELS]) {
+                          return APPLICATION_TYPE_LABELS[appType as keyof typeof APPLICATION_TYPE_LABELS];
                         }
                         
                         // Format nicely as fallback
@@ -476,80 +484,109 @@ const ApplicationDetail: React.FC = () => {
                 {approvalStatus && (
                   <div className="mt-6 pt-4 border-t">
                     <h3 className="font-semibold mb-4">Estado de Aprobación</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    {/* Indicador de aprobación completa */}
+                    {approvalStatus.isFullyApproved && (
+                      <div className="mb-4 p-3 bg-success text-white rounded-lg">
+                        <div className="flex items-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                          <span className="font-medium">Solicitud completamente aprobada</span>
+                        </div>
+                        <p className="text-sm mt-1">Esta solicitud ha sido aprobada tanto por el asesor como por la empresa</p>
+                      </div>
+                    )}
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                       {/* Aprobación por asesor */}
                       <div className="border rounded-lg p-3">
                         <div className="flex items-center justify-between">
-                          <p className="font-medium">Asesor</p>
+                          <p className="font-medium">Estado Asesor</p>
                           {approvalStatus.approvedByAdvisor ? (
                             <span className="badge badge-success">Aprobado</span>
                           ) : (
                             <span className="badge badge-warning">Pendiente</span>
                           )}
                         </div>
+                        {application && application.advisor_status && (
+                          <div className="flex items-center mt-2">
+                            <p className="text-xs text-gray-500 mr-2">Estado en vista de Asesor:</p>
+                            <span className={`badge badge-sm ${getStatusClass(application.advisor_status)}`}>
+                              {STATUS_LABELS[application.advisor_status as keyof typeof STATUS_LABELS] || application.advisor_status}
+                            </span>
+                          </div>
+                        )}
                         {approvalStatus.approvalDateAdvisor && (
                           <p className="text-xs text-gray-500 mt-1">
-                            Fecha: {formatDate(approvalStatus.approvalDateAdvisor, 'short')}
+                            Fecha de aprobación: {formatDate(approvalStatus.approvalDateAdvisor, 'short')}
                           </p>
-                        )}
-                        
-                        {/* Botón para aprobar como asesor */}
-                        {isAdvisor() && !approvalStatus.approvedByAdvisor && (
-                          <button 
-                            onClick={handleAdvisorApproval}
-                            disabled={approving}
-                            className="btn btn-sm btn-primary mt-2 w-full"
-                          >
-                            {approving ? (
-                              <span className="loading loading-spinner loading-xs"></span>
-                            ) : 'Aprobar como Asesor'}
-                          </button>
                         )}
                       </div>
                       
                       {/* Aprobación por empresa */}
                       <div className="border rounded-lg p-3">
                         <div className="flex items-center justify-between">
-                          <p className="font-medium">Empresa</p>
+                          <p className="font-medium">Estado Empresa</p>
                           {approvalStatus.approvedByCompany ? (
                             <span className="badge badge-success">Aprobado</span>
                           ) : (
                             <span className="badge badge-warning">Pendiente</span>
                           )}
                         </div>
+                        {application && application.company_status && (
+                          <div className="flex items-center mt-2">
+                            <p className="text-xs text-gray-500 mr-2">Estado en vista de Empresa:</p>
+                            <span className={`badge badge-sm ${getStatusClass(application.company_status)}`}>
+                              {STATUS_LABELS[application.company_status as keyof typeof STATUS_LABELS] || application.company_status}
+                            </span>
+                          </div>
+                        )}
                         {approvalStatus.approvalDateCompany && (
                           <p className="text-xs text-gray-500 mt-1">
-                            Fecha: {formatDate(approvalStatus.approvalDateCompany, 'short')}
+                            Fecha de aprobación: {formatDate(approvalStatus.approvalDateCompany, 'short')}
                           </p>
-                        )}
-                        
-                        {/* Botón para aprobar como empresa */}
-                        {isCompanyAdmin() && !approvalStatus.approvedByCompany && (
-                          <button 
-                            onClick={handleCompanyApproval}
-                            disabled={approving}
-                            className="btn btn-sm btn-primary mt-2 w-full"
-                          >
-                            {approving ? (
-                              <span className="loading loading-spinner loading-xs"></span>
-                            ) : 'Aprobar como Empresa'}
-                          </button>
-                        )}
-                        
-                        {/* Botón para deshacer aprobación como empresa */}
-                        {isCompanyAdmin() && approvalStatus.approvedByCompany && (
-                          <button 
-                            onClick={handleCancelCompanyApproval}
-                            disabled={approving}
-                            className="btn btn-sm btn-warning mt-2 w-full"
-                          >
-                            {approving ? (
-                              <span className="loading loading-spinner loading-xs"></span>
-                            ) : 'Deshacer Aprobación'}
-                          </button>
                         )}
                       </div>
                     </div>
+                    
+                    {/* Estado Global */}
+                    {application && application.global_status && (
+                      <div className="border rounded-lg p-3 mt-2">
+                        <div className="flex items-center justify-between">
+                          <p className="font-medium">Estado Global del Proceso</p>
+                          <span className={`badge ${getStatusClass(application.global_status)}`}>
+                            {STATUS_LABELS[application.global_status as keyof typeof STATUS_LABELS] || application.global_status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Este es el estado consolidado que refleja el progreso global de la solicitud en el sistema.
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Sección de depuración para administradores del sistema */}
+                    {application && (isCompanyAdmin() || isAdvisor()) && userCan(PERMISSIONS.VIEW_REPORTS) && (
+                      <div className="mt-4 pt-4 border-t border-dashed">
+                        <div className="bg-base-300 p-3 rounded-lg">
+                          <h4 className="text-sm font-bold mb-2">Debug: Todos los estados (Solo administradores)</h4>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <span className="font-bold">Estado Principal:</span> {application.status}
+                            </div>
+                            <div>
+                              <span className="font-bold">Estado Asesor:</span> {application.advisor_status || 'No definido'}
+                            </div>
+                            <div>
+                              <span className="font-bold">Estado Empresa:</span> {application.company_status || 'No definido'}
+                            </div>
+                            <div>
+                              <span className="font-bold">Estado Global:</span> {application.global_status || 'No definido'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -627,41 +664,143 @@ const ApplicationDetail: React.FC = () => {
           </div>
         )}
         
-        {/* Agregar botón para mover a estado "Por Dispersar" después de aprobación */}
-        {application && application.status === APPLICATION_STATUS.APPROVED && 
-          isAdvisor() && (
-          <div className="mt-4 p-4 bg-base-200 rounded-lg">
-            <h3 className="font-medium mb-2">Acciones disponibles</h3>
-            <div className="flex flex-col space-y-2">
-              <button 
-                onClick={() => handleStatusChange(APPLICATION_STATUS.POR_DISPERSAR)}
-                className="btn btn-accent"
-                disabled={approving}
-              >
-                {approving ? (
-                  <span className="loading loading-spinner loading-xs"></span>
-                ) : 'Marcar como Por Dispersar'}
-              </button>
-            </div>
+        {/* Acciones de aprobación */}
+        {application && approvalStatus && (
+          <div className="mt-6 space-y-4">
+            {/* Botones de aprobación para asesores */}
+            {isAdvisor() && !approvalStatus.approvedByAdvisor && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && (
+              <div className="p-4 bg-base-200 rounded-lg">
+                <h3 className="text-lg font-semibold mb-2">Aprobación del Asesor</h3>
+                <p className="mb-4 text-gray-600">Como asesor, puedes aprobar esta solicitud para avanzar en el proceso.</p>
+                <button 
+                  onClick={handleAdvisorApproval} 
+                  disabled={approving}
+                  className="btn btn-primary"
+                >
+                  {approving ? (
+                    <>
+                      <span className="loading loading-spinner loading-xs mr-2"></span>
+                      Procesando...
+                    </>
+                  ) : 'Aprobar como Asesor'}
+                </button>
+              </div>
+            )}
+            
+            {/* Botones de aprobación para administradores de empresa */}
+            {isCompanyAdmin() && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && (
+              <div className="p-4 bg-base-200 rounded-lg">
+                <h3 className="text-lg font-semibold mb-2">Aprobación de la Empresa</h3>
+                <p className="mb-4 text-gray-600">Como administrador de empresa, puedes aprobar esta solicitud.</p>
+                
+                {!approvalStatus.approvedByCompany ? (
+                  <button 
+                    onClick={handleCompanyApproval} 
+                    disabled={approving}
+                    className="btn btn-primary"
+                  >
+                    {approving ? (
+                      <>
+                        <span className="loading loading-spinner loading-xs mr-2"></span>
+                        Procesando...
+                      </>
+                    ) : 'Aprobar como Empresa'}
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="alert alert-success">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      <span>Esta solicitud ya ha sido aprobada por la empresa</span>
+                    </div>
+                    
+                    <button 
+                      onClick={handleCancelCompanyApproval} 
+                      disabled={approving}
+                      className="btn btn-outline btn-error"
+                    >
+                      {approving ? (
+                        <>
+                          <span className="loading loading-spinner loading-xs mr-2"></span>
+                          Procesando...
+                        </>
+                      ) : 'Cancelar Aprobación'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
         
-        {application && application.status === APPLICATION_STATUS.POR_DISPERSAR && 
-          isAdvisor() && (
-          <div className="mt-4 p-4 bg-base-200 rounded-lg">
-            <h3 className="font-medium mb-2">Acciones disponibles</h3>
-            <div className="flex flex-col space-y-2">
-              <button 
-                onClick={() => handleStatusChange(APPLICATION_STATUS.COMPLETED)}
-                className="btn btn-primary"
-                disabled={approving}
-              >
-                {approving ? (
-                  <span className="loading loading-spinner loading-xs"></span>
-                ) : 'Marcar como Completado (Dispersado)'}
-              </button>
-            </div>
-          </div>
+        {/* Acciones de flujo de trabajo - Solo mostrar si ya están las aprobaciones necesarias */}
+        {application && approvalStatus && (
+          <>
+            {/* Botón para mover a estado "Por Dispersar" después de aprobación */}
+            {application.status === APPLICATION_STATUS.APPROVED && 
+              isAdvisor() && 
+              approvalStatus.approvedByAdvisor && 
+              approvalStatus.approvedByCompany && (
+              <div className="mt-4 p-4 bg-base-200 rounded-lg">
+                <h3 className="font-medium mb-2">Acciones disponibles</h3>
+                <div className="flex flex-col space-y-2">
+                  <button 
+                    onClick={() => handleStatusChange(APPLICATION_STATUS.POR_DISPERSAR)}
+                    className="btn btn-accent"
+                    disabled={approving}
+                  >
+                    {approving ? (
+                      <span className="loading loading-spinner loading-xs"></span>
+                    ) : 'Marcar como Por Dispersar'}
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* Botón para marcar como completado si está en estado "Por Dispersar" */}
+            {application.status === APPLICATION_STATUS.POR_DISPERSAR && 
+              isAdvisor() && (
+              <div className="mt-4 p-4 bg-base-200 rounded-lg">
+                <h3 className="font-medium mb-2">Acciones disponibles</h3>
+                <div className="flex flex-col space-y-2">
+                  <button 
+                    onClick={async () => {
+                      if (!id || !user || !application) return;
+                      
+                      try {
+                        setApproving(true);
+                        setError(null);
+                        
+                        const entityFilter = shouldFilterByEntity() ? getEntityFilter() : null;
+                        await markAsDispersed(
+                          id, 
+                          'Solicitud marcada como dispersada',
+                          user.id,
+                          entityFilter
+                        );
+                        
+                        // Recargar datos para asegurar que tenemos la info más actualizada
+                        await loadApplicationData();
+                        
+                        setSuccessMessage('Solicitud marcada como dispersada correctamente');
+                        setTimeout(() => setSuccessMessage(null), 3000);
+                      } catch (error: any) {
+                        console.error('Error marking as dispersed:', error);
+                        setError(`Error al marcar como dispersada: ${error.message || 'Error desconocido'}`);
+                      } finally {
+                        setApproving(false);
+                      }
+                    }}
+                    className="btn btn-primary"
+                    disabled={approving}
+                  >
+                    {approving ? (
+                      <span className="loading loading-spinner loading-xs"></span>
+                    ) : 'Marcar como Dispersado'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </MainLayout>

@@ -41,3 +41,4 @@ print(execute_sql)
 print("\nEste script debe ejecutarse desde el panel de administración de Supabase > SQL Editor")
 print("Copia y pega el SQL anterior en el editor y ejecuta la consulta.")
 print("Todas las columnas del formulario de crédito serán agregadas a la tabla 'users'.") 
+ 

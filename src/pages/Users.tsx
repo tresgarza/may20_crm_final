@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import { Link } from 'react-router-dom';
 import { PERMISSIONS } from '../utils/constants/permissions';
 import { usePermissions } from '../contexts/PermissionsContext';

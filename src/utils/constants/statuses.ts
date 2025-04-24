@@ -1,14 +1,17 @@
+/**
+ * Application status constants
+ */
 export enum APPLICATION_STATUS {
-  NEW = 'new',
   PENDING = 'pending',
   IN_REVIEW = 'in_review',
   APPROVED = 'approved',
   REJECTED = 'rejected',
-  POR_DISPERSAR = 'por_dispersar',
-  COMPLETED = 'completed',
   CANCELLED = 'cancelled',
   EXPIRED = 'expired',
-  SOLICITUD = 'solicitud'
+  COMPLETED = 'completed',
+  SOLICITUD = 'solicitud',
+  NEW = 'new',
+  POR_DISPERSAR = 'por_dispersar'
 }
 
 export const STATUS_LABELS = {

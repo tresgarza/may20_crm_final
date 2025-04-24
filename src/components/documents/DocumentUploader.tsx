@@ -13,12 +13,20 @@ interface DocumentFile {
   name: string;
 }
 
+interface ServerUploadedDocument {
+  id: string;
+  name: string;
+  category: string;
+  url?: string;
+}
+
 interface DocumentUploaderProps {
   categories: DocumentCategory[];
   onDocumentAdded: (document: DocumentFile) => void;
   onDocumentRemoved: (index: number) => void;
   existingDocuments: DocumentFile[];
   clientId?: string;
+  existingServerDocuments?: ServerUploadedDocument[];
 }
 
 const DocumentUploader: React.FC<DocumentUploaderProps> = ({
@@ -26,7 +34,8 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
   onDocumentAdded,
   onDocumentRemoved,
   existingDocuments,
-  clientId
+  clientId,
+  existingServerDocuments = []
 }) => {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [documentName, setDocumentName] = useState('');
@@ -40,7 +49,8 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
   // Log component props on mount to debug
   useEffect(() => {
     console.log('DocumentUploader montado con clientId:', clientId);
-    console.log('Documentos existentes:', existingDocuments);
+    console.log('Documentos existentes en sesión:', existingDocuments);
+    console.log('Documentos existentes en servidor:', existingServerDocuments);
     
     return () => {
       // Clean up any resources on component unmount
@@ -48,7 +58,7 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
         setSelectedFile(null);
       }
     };
-  }, [clientId, existingDocuments]);
+  }, [clientId, existingDocuments, existingServerDocuments]);
   
   // Safely handle file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -330,10 +340,10 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
       </div>
       
       {/* Lista de documentos agregados */}
-      {existingDocuments.length > 0 && (
+      {(existingDocuments.length > 0 || existingServerDocuments.length > 0) && (
         <div className="card bg-base-100 border border-gray-200">
           <div className="card-body">
-            <h3 className="card-title text-base mb-4">Documentos ({existingDocuments.length})</h3>
+            <h3 className="card-title text-base mb-4">Documentos ({existingDocuments.length + existingServerDocuments.length})</h3>
             
             <div className="overflow-x-auto">
               <table className="table w-full">
@@ -346,19 +356,40 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {existingDocuments.map((doc, index) => (
-                    <tr key={index}>
-                      <td className="flex items-center">
-                        <FiFile className="mr-2" />
+                  {/* Server documents (already uploaded) */}
+                  {existingServerDocuments.map((doc, index) => (
+                    <tr key={`server-${doc.id}`} className="bg-gray-50">
+                      <td className="flex items-center gap-2">
+                        <FiFile className="text-green-500" /> 
                         {doc.name}
+                        <span className="badge badge-sm badge-success">Guardado</span>
+                      </td>
+                      <td>{getCategoryLabel(doc.category)}</td>
+                      <td>-</td>
+                      <td>
+                        {/* No remove option for server documents as they're already saved */}
+                        <span className="text-xs text-green-600">
+                          <FiCheck /> En servidor
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {/* Session documents (newly added) */}
+                  {existingDocuments.map((doc, index) => (
+                    <tr key={`session-${index}`}>
+                      <td className="flex items-center gap-2">
+                        <FiFile /> 
+                        {doc.name}
+                        <span className="badge badge-sm badge-warning">Pendiente</span>
                       </td>
                       <td>{getCategoryLabel(doc.category)}</td>
                       <td>{formatFileSize(doc.file.size)}</td>
                       <td>
-                        <button
+                        <button 
                           type="button"
-                          className="btn btn-error btn-sm"
                           onClick={() => onDocumentRemoved(index)}
+                          className="btn btn-sm btn-ghost text-error"
                         >
                           <FiX />
                         </button>

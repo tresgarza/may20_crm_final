@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import { Pie } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, Title } from 'chart.js';
 import { APPLICATION_STATUS } from '../../../utils/constants/statuses';

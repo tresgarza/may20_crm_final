@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Session } from '@supabase/supabase-js';
+import { Session, createClient, PostgrestError } from '@supabase/supabase-js';
 import { USER_ROLES } from '../utils/constants/roles';
 
 // Tipos
@@ -15,6 +15,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  error: Error | null;
   signIn: (email: string, password: string) => Promise<{
     error: any | null;
     data: any | null;
@@ -46,6 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true); // Cambiado a true para evitar parpadeo
+  const [error, setError] = useState<Error | null>(null);
 
   // Generar un token único para la sesión (simplificado)
   const generateToken = (): string => {
@@ -124,6 +126,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true);
+      setError(null);
       
       // Simulación de autenticación
       if (email === 'admin@fincentiva.com' && password === 'admin123') {
@@ -145,9 +148,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { data: { user: mockUser }, error: null };
       }
       
-      return { data: null, error: 'Credenciales inválidas' };
+      const errorMsg = 'Credenciales inválidas';
+      setError(new Error(errorMsg));
+      return { data: null, error: errorMsg };
     } catch (error) {
       console.error('Error signing in:', error);
+      setError(error instanceof Error ? error : new Error('Error al iniciar sesión'));
       return { error, data: null };
     } finally {
       setLoading(false);
@@ -157,65 +163,116 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInWithCode = async (accessCode: string, userType: string) => {
     try {
       setLoading(true);
+      setError(null);
+      console.log('Starting signInWithCode process...');
+      console.log(`Attempting to authenticate ${userType} with code: ${accessCode}`);
       
-      // Consultar la base de datos para verificar el access_code
-      let queryUrl = 'http://localhost:3100/query';
-      let queryBody = {};
+      // Initialize Supabase client directly
+      const supabaseUrl = 'https://ydnygntfkrleiseuciwq.supabase.co';
+      const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbnlnbnRma3JsZWlzZXVjaXdxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczOTk5MjQwNiwiZXhwIjoyMDU1NTY4NDA2fQ.TwhEGW9DK4DTQQRquT6Z9UW8T8UjLX-hp9uKdRjWAhs';
+      console.log('Creating Supabase client with URL:', supabaseUrl);
+      const supabase = createClient(supabaseUrl, supabaseKey);
       
+      // Query the appropriate table based on user type
+      let userData = null;
+      let error = null;
+      
+      try {
       if (userType === USER_ROLES.ADVISOR) {
-        queryBody = {
-          query: `SELECT * FROM advisors WHERE access_code = '${accessCode}' LIMIT 1`
-        };
+        console.log('Querying advisors table...');
+        const { data, error: queryError } = await supabase
+          .from('advisors')
+          .select('*')
+          .eq('access_code', accessCode)
+          .limit(1);
+        
+        userData = data && data.length > 0 ? data[0] : null;
+        error = queryError;
+        console.log('Advisors query result:', { dataFound: !!userData, error: error ? error.message : null });
       } else if (userType === USER_ROLES.COMPANY_ADMIN) {
-        queryBody = {
-          query: `SELECT * FROM company_admins WHERE access_code = '${accessCode}' LIMIT 1`
-        };
+        console.log('Querying company_admins table...');
+          
+          // First check if the table exists by doing a simple select
+          const { error: tableCheckError } = await supabase
+            .from('company_admins')
+            .select('id')
+            .limit(1);
+            
+          if (tableCheckError && 
+             typeof tableCheckError === 'object' && 
+             'message' in tableCheckError && 
+             (tableCheckError as PostgrestError).message?.includes('relation "company_admins" does not exist')) {
+            console.error('The company_admins table does not exist in the database');
+            // Fall back to using the advisors table for company admins
+            const { data, error: queryError } = await supabase
+              .from('advisors')
+              .select('*')
+              .eq('access_code', accessCode)
+              .limit(1);
+            
+            userData = data && data.length > 0 ? data[0] : null;
+            error = queryError;
+            console.log('Fallback to advisors table result:', { dataFound: !!userData, error: error ? error.message : null });
+          } else {
+        const { data, error: queryError } = await supabase
+          .from('company_admins')
+          .select('*')
+          .eq('access_code', accessCode)
+          .limit(1);
+        
+        userData = data && data.length > 0 ? data[0] : null;
+        error = queryError;
+        console.log('Company admins query result:', { dataFound: !!userData, error: error ? error.message : null });
+          }
       } else {
+        console.error('Invalid user type:', userType);
         return { data: null, error: 'Tipo de usuario no válido' };
+        }
+      } catch (queryError) {
+        console.error('Error during database query:', queryError);
+        error = queryError;
       }
       
-      const response = await fetch(queryUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(queryBody),
-      });
-      
-      const result = await response.json();
-      
-      if (result.error) {
-        console.error('Database error:', result.error);
-        return { data: null, error: 'Error de base de datos' };
+      if (error) {
+        console.error('Database error:', error);
+        const errorMessage = error instanceof Error || (error as PostgrestError).message 
+          ? (error as PostgrestError).message || error.toString() 
+          : 'Error desconocido';
+        return { data: null, error: 'Error de base de datos: ' + errorMessage };
       }
       
-      if (result.data && result.data.length > 0) {
-        const userData = result.data[0];
-        const userInfo: User = {
-          id: userData.id,
-          email: userData.email,
-          name: userData.name,
-          role: userType,
-          entityId: userType === USER_ROLES.COMPANY_ADMIN ? userData.company_id : userData.id,
-        };
-        
-        // Generar y guardar token de sesión
-        const token = generateToken();
-        setSessionToken(token);
-        
-        // Guardar datos del usuario
-        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(userInfo));
-        setUser(userInfo);
-        
-        return { data: { user: userInfo }, error: null };
+      if (!userData) {
+        console.log('No user found with provided access code');
+        return { data: null, error: 'Código de acceso inválido' };
       }
       
-      return { data: null, error: 'Código de acceso inválido' };
+      console.log('User data found:', { id: userData.id, email: userData.email, role: userType });
+      
+      const userInfo: User = {
+        id: userData.id,
+        email: userData.email,
+        name: userData.name,
+        role: userType,
+        entityId: userType === USER_ROLES.COMPANY_ADMIN ? userData.company_id : userData.id,
+      };
+      
+      // Generar y guardar token de sesión
+      const token = generateToken();
+      setSessionToken(token);
+      
+      // Guardar datos del usuario
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(userInfo));
+      setUser(userInfo);
+      
+      console.log('Login successful, user info stored in localStorage');
+      return { data: { user: userInfo }, error: null };
     } catch (error) {
       console.error('Error signing in with code:', error);
       // Ensure returned error is always a string
+      const errorObj = error instanceof Error ? error : new Error('Error al iniciar sesión');
+      setError(errorObj);
       return { 
-        error: error instanceof Error ? error.message : 'Error al iniciar sesión', 
+        error: errorObj.message, 
         data: null 
       };
     } finally {
@@ -240,6 +297,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user,
     session,
     loading,
+    error,
     signIn,
     signInWithCode,
     signOut,

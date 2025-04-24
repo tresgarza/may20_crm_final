@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import { Link } from 'react-router-dom';
 import { Application } from '../utils/types';
 import { formatCurrency, formatDate } from '../utils/formatters';

@@ -1,5 +1,5 @@
 // Navigation configuration for the sidebar
-import React from 'react';
+import * as React from 'react';
 
 // Define types for our navigation items
 export interface NavItem {

@@ -63,3 +63,4 @@ async function addColumns() {
 addColumns().catch(err => {
   console.error('Error en la operación:', err);
 }); 
+ 

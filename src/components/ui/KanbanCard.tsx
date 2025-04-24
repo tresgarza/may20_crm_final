@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import { Application } from '../../utils/types';
 // Conditionally use the UserAvatar component if it exists, or just return a simple avatar
 // import UserAvatar from './UserAvatar';

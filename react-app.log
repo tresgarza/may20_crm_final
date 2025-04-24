@@ -1,0 +1,563 @@
+
+> fincentiva-crm@0.1.0 start
+> react-scripts start
+
+(node:57291) [DEP_WEBPACK_DEV_SERVER_ON_AFTER_SETUP_MIDDLEWARE] DeprecationWarning: 'onAfterSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:57291) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: 'onBeforeSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+Starting the development server...
+
+Compiled successfully!
+
+You can now view fincentiva-crm in the browser.
+
+  Local:            http://localhost:3001
+  On Your Network:  http://192.168.1.30:3001
+
+Note that the development build is not optimized.
+To create a production build, use npm run build.
+
+webpack compiled successfully
+Files successfully emitted, waiting for typecheck results...
+Issues checking in progress...
+ERROR in src/utils/documentUpload.ts:174:63
+TS2339: Property 'listBuckets' does not exist on type 'StorageFileApi'.
+    172 |     
+    173 |     // Intentar listar buckets para verificar si existe
+  > 174 |     const { data: buckets, error: listError } = await storage.listBuckets();
+        |                                                               ^^^^^^^^^^^
+    175 |     
+    176 |     if (listError) {
+    177 |       console.error(`Error al listar buckets:`, listError);
+
+ERROR in src/utils/documentUpload.ts:180:55
+TS2339: Property 'from' does not exist on type 'StorageFileApi'.
+    178 |       // Si hay un error al listar buckets, podría ser un problema de permisos
+    179 |       // Intentaremos verificar directamente intentando listar archivos del bucket
+  > 180 |       const { error: listFilesError } = await storage.from(bucketName).list();
+        |                                                       ^^^^
+    181 |       
+    182 |       if (!listFilesError) {
+    183 |         // Si no hay error al listar archivos, significa que el bucket existe
+
+ERROR in src/utils/documentUpload.ts:196:40
+TS7006: Parameter 'bucket' implicitly has an 'any' type.
+    194 |     
+    195 |     // Verificar si el bucket ya existe
+  > 196 |     const bucketExists = buckets?.some(bucket => bucket.name === bucketName);
+        |                                        ^^^^^^
+    197 |     
+    198 |     if (bucketExists) {
+    199 |       console.log(`El bucket ${bucketName} ya existe.`);
+
+ERROR in src/utils/documentUpload.ts:212:60
+TS2339: Property 'createBucket' does not exist on type 'StorageFileApi'.
+    210 |     while (attempt < MAX_RETRIES) {
+    211 |       try {
+  > 212 |         const { data, error: createError } = await storage.createBucket(bucketName, {
+        |                                                            ^^^^^^^^^^^^
+    213 |           public: false
+    214 |         });
+    215 |         
+
+ERROR in src/utils/documentUpload.ts:234:54
+TS2339: Property 'from' does not exist on type 'StorageFileApi'.
+    232 |         try {
+    233 |           // Verificar que podemos acceder al bucket recién creado
+  > 234 |           const { error: testError } = await storage.from(bucketName).list('', {
+        |                                                      ^^^^
+    235 |             limit: 1
+    236 |           });
+    237 |           
+
+ERROR in src/utils/documentUpload.ts:272:52
+TS2339: Property 'from' does not exist on type 'StorageFileApi'.
+    270 |       
+    271 |       console.log(`Intentando escribir archivo de prueba en ${bucketName}/${testFilePath} como último recurso...`);
+  > 272 |       const { error: uploadError } = await storage.from(bucketName).upload(testFilePath, testContent);
+        |                                                    ^^^^
+    273 |       
+    274 |       if (!uploadError) {
+    275 |         console.log(`¡Éxito! El bucket ${bucketName} existe y permite escritura.`);
+
+ERROR in src/utils/documentUpload.ts:277:23
+TS2339: Property 'from' does not exist on type 'StorageFileApi'.
+    275 |         console.log(`¡Éxito! El bucket ${bucketName} existe y permite escritura.`);
+    276 |         // Limpieza del archivo de prueba
+  > 277 |         await storage.from(bucketName).remove([testFilePath]);
+        |                       ^^^^
+    278 |         return true;
+    279 |       }
+    280 |     } catch (testError) {
+
+ERROR in src/utils/documentUpload.ts:386:14
+TS2339: Property 'from' does not exist on type 'StorageFileApi'.
+    384 |           // Upload the file
+    385 |           const { data, error } = await storage
+  > 386 |             .from(bucketName)
+        |              ^^^^
+    387 |             .upload(filePath, doc.file, {
+    388 |               cacheControl: '3600',
+    389 |               upsert: true, // Cambiar a true para sobrescribir si existe
+
+ERROR in src/utils/documentUpload.ts:400:14
+TS2339: Property 'from' does not exist on type 'StorageFileApi'.
+    398 |           // Get the public URL
+    399 |           const { data: urlData } = storage
+  > 400 |             .from(bucketName)
+        |              ^^^^
+    401 |             .getPublicUrl(filePath);
+    402 |
+    403 |           fileUrl = urlData.publicUrl;
+
+Compiling...
+
+╭── 🌼[35m daisyUI 3.9.4 [0mhttps://daisyui.com
+│
+├── [2m2[0m themes are enabled. How to add more themes:
+│   https://daisyui.com/docs/themes
+│
+╰── [32m⭐️ Star daisyUI project on GitHub[0m: https://github.com/saadeghi/daisyui
+
+Compiled with warnings.
+
+[eslint] 
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+webpack compiled with 1 warning
+ERROR in src/utils/documentUpload.ts:251:63
+TS2339: Property 'docType' does not exist on type 'ClientDocument'.
+    249 |         
+    250 |         if (!doc.file) {
+  > 251 |           console.warn(`Skipping document without file: ${doc.docType}`);
+        |                                                               ^^^^^^^
+    252 |           continue;
+    253 |         }
+    254 |         
+
+ERROR in src/utils/documentUpload.ts:261:38
+TS2339: Property 'docType' does not exist on type 'ClientDocument'.
+    259 |         const filePath = `${folder}/${fileName}`;
+    260 |         
+  > 261 |         console.log(`Uploading ${doc.docType} document: ${filePath} (attempt ${attempt}/${maxRetries})`);
+        |                                      ^^^^^^^
+    262 |         
+    263 |         // Upload the file
+    264 |         const { error } = await supabase.storage
+
+ERROR in src/utils/documentUpload.ts:297:9
+TS2345: Argument of type '{ url: string; file: any; id?: string | undefined; category: string; name: string; description?: string | undefined; }' is not assignable to parameter of type 'Omit<ClientDocument & { url: string; }, "file">'.
+  Object literal may only specify known properties, and 'file' does not exist in type 'Omit<ClientDocument & { url: string; }, "file">'.
+    295 |         ...doc,
+    296 |         url: fileUrl,
+  > 297 |         file: undefined as any // TypeScript hack to omit 'file' from the result
+        |         ^^^^^^^^^^^^^^^^^^^^^^
+    298 |       });
+    299 |     } else {
+    300 |       // Log failure for this document
+
+ERROR in src/utils/documentUpload.ts:303:22
+TS2339: Property 'docType' does not exist on type 'ClientDocument'.
+    301 |       logError(lastError, 'uploadClientDocuments', {
+    302 |         clientId,
+  > 303 |         docType: doc.docType,
+        |                      ^^^^^^^
+    304 |         attempts: maxRetries
+    305 |       });
+    306 |     }
+
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+webpack compiled with 1 warning
+ERROR in src/utils/documentUpload.ts:251:63
+TS2339: Property 'type' does not exist on type 'ClientDocument'.
+    249 |         
+    250 |         if (!doc.file) {
+  > 251 |           console.warn(`Skipping document without file: ${doc.type || 'unknown type'}`);
+        |                                                               ^^^^
+    252 |           continue;
+    253 |         }
+    254 |         
+
+ERROR in src/utils/documentUpload.ts:261:38
+TS2339: Property 'type' does not exist on type 'ClientDocument'.
+    259 |         const filePath = `${folder}/${fileName}`;
+    260 |         
+  > 261 |         console.log(`Uploading ${doc.type || 'document'}: ${filePath} (attempt ${attempt}/${maxRetries})`);
+        |                                      ^^^^
+    262 |         
+    263 |         // Upload the file
+    264 |         const { error } = await supabase.storage
+
+ERROR in src/utils/documentUpload.ts:303:22
+TS2339: Property 'type' does not exist on type 'ClientDocument'.
+    301 |       logError(lastError, 'uploadClientDocuments', {
+    302 |         clientId,
+  > 303 |         docType: doc.type || 'unknown',
+        |                      ^^^^
+    304 |         attempts: maxRetries
+    305 |       });
+    306 |     }
+
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+webpack compiled with 1 warning
+No issues found.
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/pages/ApplicationDetail.tsx
+  Line 40:11:   'addNotification' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  Line 104:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 153:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 354:9:   'getProductTypeLabel' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/pages/ApplicationDetail.tsx
+  Line 40:11:   'addNotification' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  Line 104:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 153:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 354:9:   'getProductTypeLabel' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+webpack compiled with 1 warning
+Compiling...
+No issues found.
+Compiled with warnings.
+
+[eslint] 
+src/pages/ApplicationDetail.tsx
+  Line 40:11:   'addNotification' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  Line 104:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 153:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 354:9:   'getProductTypeLabel' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/pages/ApplicationDetail.tsx
+  Line 40:11:   'addNotification' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  Line 104:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 153:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 354:9:   'getProductTypeLabel' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+webpack compiled with 1 warning
+No issues found.
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/components/ui/KanbanBoard.tsx
+  Line 4:10:   'APPLICATION_TYPE' is defined but never used                    @typescript-eslint/no-unused-vars
+  Line 7:10:   'formatDate' is defined but never used                          @typescript-eslint/no-unused-vars
+  Line 8:10:   'Application' is defined but never used                         @typescript-eslint/no-unused-vars
+  Line 9:10:   'ApplicationStatus' is defined but never used                   @typescript-eslint/no-unused-vars
+  Line 37:7:   'escapeSQLString' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 42:7:   'cast' is assigned a value but never used                       @typescript-eslint/no-unused-vars
+  Line 53:17:  'setError' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+  Line 56:38:  'getEntityFilter' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 60:9:   'pendingRefreshRef' is assigned a value but never used          @typescript-eslint/no-unused-vars
+  Line 114:9:  'updateLocalApprovalStatus' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  Line 140:9:  'statuses' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+
+src/pages/ApplicationDetail.tsx
+  Line 40:11:   'addNotification' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  Line 104:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 153:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 354:9:   'getProductTypeLabel' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/components/ui/KanbanBoard.tsx
+  Line 4:10:   'APPLICATION_TYPE' is defined but never used                    @typescript-eslint/no-unused-vars
+  Line 7:10:   'formatDate' is defined but never used                          @typescript-eslint/no-unused-vars
+  Line 8:10:   'Application' is defined but never used                         @typescript-eslint/no-unused-vars
+  Line 9:10:   'ApplicationStatus' is defined but never used                   @typescript-eslint/no-unused-vars
+  Line 37:7:   'escapeSQLString' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 42:7:   'cast' is assigned a value but never used                       @typescript-eslint/no-unused-vars
+  Line 53:17:  'setError' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+  Line 56:38:  'getEntityFilter' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 60:9:   'pendingRefreshRef' is assigned a value but never used          @typescript-eslint/no-unused-vars
+  Line 114:9:  'updateLocalApprovalStatus' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  Line 140:9:  'statuses' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+
+src/pages/ApplicationDetail.tsx
+  Line 40:11:   'addNotification' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  Line 104:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 153:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 354:9:   'getProductTypeLabel' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+webpack compiled with 1 warning
+No issues found.
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/components/ui/KanbanBoard.tsx
+  Line 4:10:   'APPLICATION_TYPE' is defined but never used                    @typescript-eslint/no-unused-vars
+  Line 7:10:   'formatDate' is defined but never used                          @typescript-eslint/no-unused-vars
+  Line 8:10:   'Application' is defined but never used                         @typescript-eslint/no-unused-vars
+  Line 9:10:   'ApplicationStatus' is defined but never used                   @typescript-eslint/no-unused-vars
+  Line 40:7:   'escapeSQLString' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 45:7:   'cast' is assigned a value but never used                       @typescript-eslint/no-unused-vars
+  Line 56:17:  'setError' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+  Line 59:38:  'getEntityFilter' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 63:9:   'pendingRefreshRef' is assigned a value but never used          @typescript-eslint/no-unused-vars
+  Line 161:9:  'updateLocalApprovalStatus' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  Line 187:9:  'statuses' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+
+src/pages/ApplicationDetail.tsx
+  Line 40:11:   'addNotification' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  Line 104:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 153:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 354:9:   'getProductTypeLabel' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/components/ui/KanbanBoard.tsx
+  Line 4:10:   'APPLICATION_TYPE' is defined but never used                    @typescript-eslint/no-unused-vars
+  Line 7:10:   'formatDate' is defined but never used                          @typescript-eslint/no-unused-vars
+  Line 8:10:   'Application' is defined but never used                         @typescript-eslint/no-unused-vars
+  Line 9:10:   'ApplicationStatus' is defined but never used                   @typescript-eslint/no-unused-vars
+  Line 40:7:   'escapeSQLString' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 45:7:   'cast' is assigned a value but never used                       @typescript-eslint/no-unused-vars
+  Line 56:17:  'setError' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+  Line 59:38:  'getEntityFilter' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 63:9:   'pendingRefreshRef' is assigned a value but never used          @typescript-eslint/no-unused-vars
+  Line 161:9:  'updateLocalApprovalStatus' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  Line 187:9:  'statuses' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+
+src/pages/ApplicationDetail.tsx
+  Line 40:11:   'addNotification' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  Line 104:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 153:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 354:9:   'getProductTypeLabel' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+webpack compiled with 1 warning
+No issues found.
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/components/ui/KanbanBoard.tsx
+  Line 4:10:   'APPLICATION_TYPE' is defined but never used                    @typescript-eslint/no-unused-vars
+  Line 7:10:   'formatDate' is defined but never used                          @typescript-eslint/no-unused-vars
+  Line 8:10:   'Application' is defined but never used                         @typescript-eslint/no-unused-vars
+  Line 9:10:   'ApplicationStatus' is defined but never used                   @typescript-eslint/no-unused-vars
+  Line 40:7:   'escapeSQLString' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 45:7:   'cast' is assigned a value but never used                       @typescript-eslint/no-unused-vars
+  Line 56:17:  'setError' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+  Line 59:38:  'getEntityFilter' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 63:9:   'pendingRefreshRef' is assigned a value but never used          @typescript-eslint/no-unused-vars
+  Line 161:9:  'updateLocalApprovalStatus' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  Line 187:9:  'statuses' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+
+src/pages/ApplicationDetail.tsx
+  Line 40:11:   'addNotification' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  Line 104:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 153:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 354:9:   'getProductTypeLabel' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/components/ui/KanbanBoard.tsx
+  Line 4:10:   'APPLICATION_TYPE' is defined but never used                    @typescript-eslint/no-unused-vars
+  Line 7:10:   'formatDate' is defined but never used                          @typescript-eslint/no-unused-vars
+  Line 8:10:   'Application' is defined but never used                         @typescript-eslint/no-unused-vars
+  Line 9:10:   'ApplicationStatus' is defined but never used                   @typescript-eslint/no-unused-vars
+  Line 40:7:   'escapeSQLString' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 45:7:   'cast' is assigned a value but never used                       @typescript-eslint/no-unused-vars
+  Line 56:17:  'setError' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+  Line 59:38:  'getEntityFilter' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 63:9:   'pendingRefreshRef' is assigned a value but never used          @typescript-eslint/no-unused-vars
+  Line 161:9:  'updateLocalApprovalStatus' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  Line 187:9:  'statuses' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+
+src/pages/ApplicationDetail.tsx
+  Line 40:11:   'addNotification' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  Line 104:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 153:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 354:9:   'getProductTypeLabel' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+webpack compiled with 1 warning
+No issues found.
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/components/ui/KanbanBoard.tsx
+  Line 4:10:   'APPLICATION_TYPE' is defined but never used                    @typescript-eslint/no-unused-vars
+  Line 7:10:   'formatDate' is defined but never used                          @typescript-eslint/no-unused-vars
+  Line 8:10:   'Application' is defined but never used                         @typescript-eslint/no-unused-vars
+  Line 9:10:   'ApplicationStatus' is defined but never used                   @typescript-eslint/no-unused-vars
+  Line 40:7:   'escapeSQLString' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 45:7:   'cast' is assigned a value but never used                       @typescript-eslint/no-unused-vars
+  Line 56:17:  'setError' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+  Line 59:38:  'getEntityFilter' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 63:9:   'pendingRefreshRef' is assigned a value but never used          @typescript-eslint/no-unused-vars
+  Line 161:9:  'updateLocalApprovalStatus' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  Line 187:9:  'statuses' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+
+src/pages/ApplicationDetail.tsx
+  Line 40:11:   'addNotification' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  Line 104:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 153:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 354:9:   'getProductTypeLabel' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/components/ui/KanbanBoard.tsx
+  Line 4:10:   'APPLICATION_TYPE' is defined but never used                    @typescript-eslint/no-unused-vars
+  Line 7:10:   'formatDate' is defined but never used                          @typescript-eslint/no-unused-vars
+  Line 8:10:   'Application' is defined but never used                         @typescript-eslint/no-unused-vars
+  Line 9:10:   'ApplicationStatus' is defined but never used                   @typescript-eslint/no-unused-vars
+  Line 40:7:   'escapeSQLString' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 45:7:   'cast' is assigned a value but never used                       @typescript-eslint/no-unused-vars
+  Line 56:17:  'setError' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+  Line 59:38:  'getEntityFilter' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 63:9:   'pendingRefreshRef' is assigned a value but never used          @typescript-eslint/no-unused-vars
+  Line 161:9:  'updateLocalApprovalStatus' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  Line 187:9:  'statuses' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+
+src/pages/ApplicationDetail.tsx
+  Line 40:11:   'addNotification' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  Line 104:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 153:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 354:9:   'getProductTypeLabel' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+webpack compiled with 1 warning
+No issues found.
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/components/ui/KanbanBoard.tsx
+  Line 4:10:   'APPLICATION_TYPE' is defined but never used                    @typescript-eslint/no-unused-vars
+  Line 7:10:   'formatDate' is defined but never used                          @typescript-eslint/no-unused-vars
+  Line 8:10:   'Application' is defined but never used                         @typescript-eslint/no-unused-vars
+  Line 9:10:   'ApplicationStatus' is defined but never used                   @typescript-eslint/no-unused-vars
+  Line 40:7:   'escapeSQLString' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 45:7:   'cast' is assigned a value but never used                       @typescript-eslint/no-unused-vars
+  Line 56:17:  'setError' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+  Line 59:38:  'getEntityFilter' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 63:9:   'pendingRefreshRef' is assigned a value but never used          @typescript-eslint/no-unused-vars
+  Line 161:9:  'updateLocalApprovalStatus' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  Line 187:9:  'statuses' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+
+src/pages/ApplicationDetail.tsx
+  Line 40:11:   'addNotification' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  Line 104:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 153:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 354:9:   'getProductTypeLabel' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/components/ui/KanbanBoard.tsx
+  Line 4:10:   'APPLICATION_TYPE' is defined but never used                    @typescript-eslint/no-unused-vars
+  Line 7:10:   'formatDate' is defined but never used                          @typescript-eslint/no-unused-vars
+  Line 8:10:   'Application' is defined but never used                         @typescript-eslint/no-unused-vars
+  Line 9:10:   'ApplicationStatus' is defined but never used                   @typescript-eslint/no-unused-vars
+  Line 40:7:   'escapeSQLString' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 45:7:   'cast' is assigned a value but never used                       @typescript-eslint/no-unused-vars
+  Line 56:17:  'setError' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+  Line 59:38:  'getEntityFilter' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  Line 63:9:   'pendingRefreshRef' is assigned a value but never used          @typescript-eslint/no-unused-vars
+  Line 161:9:  'updateLocalApprovalStatus' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  Line 187:9:  'statuses' is assigned a value but never used                   @typescript-eslint/no-unused-vars
+
+src/pages/ApplicationDetail.tsx
+  Line 40:11:   'addNotification' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  Line 104:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 153:13:  'result' is assigned a value but never used               @typescript-eslint/no-unused-vars
+  Line 354:9:   'getProductTypeLabel' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+src/utils/documentUpload.ts
+  Line 176:13:  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+webpack compiled with 1 warning
+No issues found.

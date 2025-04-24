@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import { ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/24/solid';
 
 interface MetricCardProps {

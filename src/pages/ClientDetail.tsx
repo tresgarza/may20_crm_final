@@ -158,11 +158,24 @@ const ClientDetail: React.FC = () => {
   // Helper function to get a downloadable URL for a document
   const getDocumentDownloadUrl = async (filePath: string) => {
     try {
-      const { data: url } = await supabase.storage
-        .from('documents')
+      if (!filePath) {
+        console.warn('No file path provided for document download');
+        return '#';
+      }
+      
+      // Try first with client-documents bucket
+      let { data } = await supabase.storage
+        .from('client-documents')
         .getPublicUrl(filePath);
       
-      return url.publicUrl;
+      if (!data?.publicUrl) {
+        // If not found, try the documents bucket
+        ({ data } = await supabase.storage
+          .from('documents')
+          .getPublicUrl(filePath));
+      }
+      
+      return data?.publicUrl || '#';
     } catch (error) {
       console.error('Error getting document URL:', error);
       return '#';
@@ -544,7 +557,7 @@ const ClientDetail: React.FC = () => {
                         </thead>
                         <tbody>
                           {documents.map((doc) => (
-                            <tr key={doc.id}>
+                            <tr key={doc.id || `doc-${Math.random()}`}>
                               <td className="flex items-center gap-2">
                                 <FiFile className="text-primary" />
                                 {doc.file_name || 'Documento sin nombre'}
@@ -553,16 +566,22 @@ const ClientDetail: React.FC = () => {
                               <td>{formatDate(doc.created_at)}</td>
                               <td>{formatFileSize(doc.file_size || 0)}</td>
                               <td>
-                                <button 
-                                  onClick={async () => {
-                                    const url = await getDocumentDownloadUrl(doc.file_path);
-                                    window.open(url, '_blank');
-                                  }}
-                                  className="btn btn-sm btn-ghost"
-                                  title="Descargar documento"
-                                >
-                                  <FiDownload />
-                                </button>
+                                {doc.file_path ? (
+                                  <button 
+                                    onClick={async () => {
+                                      const url = await getDocumentDownloadUrl(doc.file_path);
+                                      window.open(url, '_blank');
+                                    }}
+                                    className="btn btn-sm btn-ghost"
+                                    title="Descargar documento"
+                                  >
+                                    <FiDownload />
+                                  </button>
+                                ) : (
+                                  <span className="text-gray-400" title="Documento sin ruta de archivo">
+                                    <FiDownload />
+                                  </span>
+                                )}
                               </td>
                             </tr>
                           ))}

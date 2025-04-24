@@ -4,8 +4,17 @@ import { useAuth } from '../contexts/AuthContext';
 import MainLayout from '../components/layout/MainLayout';
 import ClientForm from '../components/clients/ClientForm';
 import { Client, ClientDocument, getClientById, updateClient, uploadClientDocuments } from '../services/clientService';
-import { getClientDocuments } from '../services/documentService';
+import { getClientDocuments, Document } from '../services/documentService';
 import Alert from '../components/ui/Alert';
+
+// Interface for documents that have been stored (don't have file object)
+interface StoredDocument {
+  id: string;
+  name: string;
+  category: string;
+  url?: string;
+  // No file property since these are already stored
+}
 
 // Default company ID (Herramental)
 const DEFAULT_COMPANY_ID = "70b2aa97-a5b6-4b5e-91db-be8acbd3701a";
@@ -16,7 +25,9 @@ const EditClient: React.FC = () => {
   const { user } = useAuth();
   
   const [client, setClient] = useState<Client | null>(null);
+  const [existingDocuments, setExistingDocuments] = useState<StoredDocument[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingDocuments, setLoadingDocuments] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -24,6 +35,7 @@ const EditClient: React.FC = () => {
   useEffect(() => {
     if (id) {
       fetchClientData(id);
+      fetchClientDocuments(id);
     }
   }, [id]);
 
@@ -47,7 +59,31 @@ const EditClient: React.FC = () => {
     }
   };
 
-  const handleSubmit = async (data: Partial<Client>, documents: ClientDocument[]) => {
+  const fetchClientDocuments = async (clientId: string) => {
+    try {
+      setLoadingDocuments(true);
+      console.log(`Fetching documents for client ${clientId}`);
+      const documentsData = await getClientDocuments(clientId);
+      console.log('Documents retrieved:', documentsData);
+      
+      // Convert server documents to StoredDocument format
+      const storedDocuments: StoredDocument[] = documentsData.map(doc => ({
+        id: doc.id,
+        name: doc.file_name || '',
+        category: doc.category || '',
+        url: doc.file_path
+      }));
+      
+      setExistingDocuments(storedDocuments);
+    } catch (err) {
+      console.error('Error fetching client documents:', err);
+      // Don't show error to user - just log it
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
+  const handleSubmit = async (data: Partial<Client>, uploadDocuments: ClientDocument[]) => {
     if (!id) return;
     
     try {
@@ -55,9 +91,10 @@ const EditClient: React.FC = () => {
       setError(null); // Clear any previous errors
       setSuccessMessage(null); // Clear any previous success message
       
-      // First save the client data without documents
-      console.log('Updating client data first...', data);
-      const updatedClient = await updateClient(id, data, documents, user?.id);
+      // First save the client data with documents
+      console.log('Updating client data with documents...', data);
+      console.log('Documents to upload:', uploadDocuments.length);
+      const updatedClient = await updateClient(id, data, uploadDocuments, user?.id);
       console.log('Client data successfully updated', updatedClient);
       
       // Check if there's a warning message (e.g., some documents failed to upload)
@@ -371,12 +408,26 @@ const EditClient: React.FC = () => {
           </div>
         )}
         
-        <ClientForm 
-          initialData={client}
-          onSubmit={handleSubmit}
-          onSavePartial={handleSavePartial}
-          isSubmitting={isSubmitting}
-        />
+        {loading ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="loading loading-spinner loading-lg"></div>
+          </div>
+        ) : client ? (
+          <ClientForm 
+            initialData={client}
+            onSubmit={handleSubmit}
+            onSavePartial={handleSavePartial}
+            existingDocuments={existingDocuments}
+            isSubmitting={isSubmitting}
+          />
+        ) : (
+          <div className="alert alert-error">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Cliente no encontrado</span>
+          </div>
+        )}
       </div>
     </MainLayout>
   );

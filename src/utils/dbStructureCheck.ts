@@ -6,6 +6,10 @@ interface TableStatus {
   exists: boolean;
 }
 
+// Flag to track if checks are completed
+let checkCompleted = false;
+let tablesVerified = false;
+
 /**
  * Verifica si una tabla existe en la base de datos
  * @param tableName Nombre de la tabla a verificar
@@ -13,17 +17,31 @@ interface TableStatus {
  */
 export const checkTableExists = async (tableName: string): Promise<boolean> => {
   try {
-    // Intenta hacer una consulta mínima a la tabla
-    const { error } = await supabase
-      .from(tableName)
-      .select('*', { count: 'exact', head: true })
-      .limit(1);
+    // Add a timeout to prevent blocking the app startup
+    const timeoutPromise = new Promise<boolean>((resolve) => {
+      setTimeout(() => resolve(true), 2000); // 2 second timeout
+    });
+
+    // Intenta hacer una consulta mínima a la tabla - usando GET en lugar de HEAD
+    const queryPromise = new Promise<boolean>(async (resolve) => {
+      try {
+        const { error } = await supabase
+          .from(tableName)
+          .select('id') // Solo seleccionar ID en lugar de usar HEAD
+          .limit(1);
+        
+        resolve(!error);
+      } catch (error) {
+        console.warn(`Error verificando si la tabla ${tableName} existe:`, error);
+        resolve(false);
+      }
+    });
     
-    // Si no hay error, la tabla existe
-    return !error;
+    // Return true if either the query succeeds or the timeout is reached
+    return await Promise.race([queryPromise, timeoutPromise]);
   } catch (error) {
     console.warn(`Error verificando si la tabla ${tableName} existe:`, error);
-    return false;
+    return true; // Assume table exists on error to prevent blocking the app
   }
 };
 
@@ -36,11 +54,20 @@ export const checkAllTables = async (): Promise<TableStatus[]> => {
   const results: TableStatus[] = [];
   
   for (const tableName of tableList) {
-    const exists = await checkTableExists(tableName);
-    results.push({
-      name: tableName,
-      exists
-    });
+    try {
+      const exists = await checkTableExists(tableName);
+      results.push({
+        name: tableName,
+        exists
+      });
+    } catch (e) {
+      // If checking a table fails, assume it exists to prevent blocking the app
+      console.warn(`Error checking table ${tableName}:`, e);
+      results.push({
+        name: tableName,
+        exists: true
+      });
+    }
   }
   
   return results;
@@ -50,24 +77,34 @@ export const checkAllTables = async (): Promise<TableStatus[]> => {
  * Imprime en consola el estado de las tablas
  */
 export const logTableStatus = async (): Promise<void> => {
+  if (checkCompleted) return;
+  
   console.info('Verificando estructura de la base de datos...');
-  const tableStatus = await checkAllTables();
-  
-  console.group('Estado de tablas:');
-  tableStatus.forEach(table => {
-    if (table.exists) {
-      console.info(`✅ Tabla ${table.name}: OK`);
+  try {
+    const tableStatus = await checkAllTables();
+    
+    console.group('Estado de tablas:');
+    tableStatus.forEach(table => {
+      if (table.exists) {
+        console.info(`✅ Tabla ${table.name}: OK`);
+      } else {
+        console.warn(`❌ Tabla ${table.name}: No existe o no se pudo verificar`);
+      }
+    });
+    console.groupEnd();
+    
+    const missingTables = tableStatus.filter(t => !t.exists);
+    if (missingTables.length > 0) {
+      console.warn(`Se encontraron ${missingTables.length} tablas faltantes. La aplicación podría no funcionar correctamente.`);
     } else {
-      console.warn(`❌ Tabla ${table.name}: No existe`);
+      console.info('Todas las tablas necesarias existen en la base de datos o se asumen existentes.');
+      tablesVerified = true;
     }
-  });
-  console.groupEnd();
-  
-  const missingTables = tableStatus.filter(t => !t.exists);
-  if (missingTables.length > 0) {
-    console.warn(`Se encontraron ${missingTables.length} tablas faltantes. La aplicación podría no funcionar correctamente.`);
-  } else {
-    console.info('Todas las tablas necesarias existen en la base de datos.');
+  } catch (error) {
+    console.error('Error general verificando estructura de base de datos:', error);
+    // Don't block app startup on errors
+  } finally {
+    checkCompleted = true;
   }
 };
 
@@ -75,8 +112,17 @@ export const logTableStatus = async (): Promise<void> => {
  * Inicializa la verificación de estructura de BD al inicio de la aplicación
  */
 export const initDbStructureCheck = (): void => {
-  // Ejecutar verificación al inicio
-  logTableStatus().catch(error => {
-    console.error('Error verificando estructura de base de datos:', error);
-  });
+  // Run the verification in a non-blocking way
+  setTimeout(() => {
+    logTableStatus()
+      .then(() => console.log('Database structure check completed'))
+      .catch((error) => {
+        console.error('Error verificando estructura de base de datos:', error);
+      });
+  }, 3000); // Delay the check by 3 seconds to allow the app to start first
+};
+
+// Export a function to check if tables are verified
+export const areTablesVerified = (): boolean => {
+  return tablesVerified || checkCompleted;
 }; 

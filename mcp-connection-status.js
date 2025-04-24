@@ -106,3 +106,4 @@ ${sqlCommands.join(',\n')};
 }
 
 checkColumns(); 
+ 

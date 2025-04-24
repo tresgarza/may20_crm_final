@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import MainLayout from '../components/layout/MainLayout';
 import { useNotifications } from '../contexts/NotificationContext';
 

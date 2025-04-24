@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import { APPLICATION_STATUS, STATUS_LABELS, STATUS_COLORS } from '../../utils/constants/statuses';
 
 interface ApplicationStatusBadgeProps {

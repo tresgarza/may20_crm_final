@@ -1,0 +1,50 @@
+🚀 MCP Server running on port 3100
+🔗 Database connection: postgres.ydnygntfkrleiseuciwq@aws-0-us-west-1.pooler.supabase.com:6543/postgres
+ℹ️ Endpoints:
+   - POST /query: Execute SQL queries
+   - GET /ping: Check server status
+❌ PostgreSQL connection error: Error: SASL: SCRAM-SERVER-FINAL-MESSAGE: server signature is missing
+    at /Users/diegogg98/NEW CRM MAR18/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+📝 Query received: SELECT COUNT(*) as total 
+      FROM applications 
+      WHERE assigned_to = 'adv-1744737803373'
+   ...
+📝 Query received: SELECT COUNT(*) as total 
+      FROM applications 
+      WHERE assigned_to = 'adv-1744737803373'
+   ...
+❌ Query error: SASL: SCRAM-SERVER-FINAL-MESSAGE: server signature is missing
+❌ Query error: SASL: SCRAM-SERVER-FINAL-MESSAGE: server signature is missing
+📝 Query received: SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+        ...
+❌ Query error: SASL: SCRAM-SERVER-FINAL-MESSAGE: server signature is missing
+📝 Query received: SELECT id, client_name, application_type, company_name, created_at, status, 
+             amount, te...
+❌ Query error: SASL: SCRAM-SERVER-FINAL-MESSAGE: server signature is missing
+📝 Query received: SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+        ...
+❌ Query error: SASL: SCRAM-SERVER-FINAL-MESSAGE: server signature is missing
+📝 Query received: SELECT id, client_name, application_type, company_name, created_at, status, 
+             amount, te...
+❌ Query error: SASL: SCRAM-SERVER-FINAL-MESSAGE: server signature is missing
+📝 Query received: SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+        ...
+❌ Query error: SASL: SCRAM-SERVER-FINAL-MESSAGE: server signature is missing
+📝 Query received: SELECT id, client_name, application_type, company_name, created_at, status, 
+             amount, te...
+❌ Query error: SASL: SCRAM-SERVER-FINAL-MESSAGE: server signature is missing
+📝 Query received: SELECT application_type
+            FROM applications 
+            ORDER BY created_at DESC
+        ...
+❌ Query error: SASL: SCRAM-SERVER-FINAL-MESSAGE: server signature is missing
+📝 Query received: SELECT id, client_name, application_type, company_name, created_at, status, 
+             amount, te...
+❌ Query error: SASL: SCRAM-SERVER-FINAL-MESSAGE: server signature is missing

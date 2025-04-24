@@ -1,0 +1,23 @@
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { usePermissions } from '../../contexts/PermissionsContext';
+import { useNotifications } from '../../contexts/NotificationContext';
+import { 
+  getApprovalStatus, 
+  approveByAdvisor, 
+  approveByCompany, 
+  updateApplicationStatus,
+  getApplicationById,
+} from '../../services/applicationService';
+import { APPLICATION_STATUS, STATUS_LABELS, STATUS_THEME_COLORS } from '../../utils/constants/statuses';
+import { APPLICATION_TYPE, APPLICATION_TYPE_LABELS } from '../../utils/constants/applications';
+import { Application } from '../../utils/types';
+import { TABLES } from '../../utils/constants/tables';
+import { testSupabaseConnection, reinitializeSupabaseClient, fetchApprovalsBatch } from '../../utils/databaseUtils';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { toast } from 'react-hot-toast';
+import { formatDate } from '../../utils/dateUtils';
+import * as exportService from '../../services/exportService';
+import { statusEquals, asStatusKey, asStatusValue, withRequestedAmount } from '../../utils/types/adapter';
+import { supabase } from '../../services/supabaseService';

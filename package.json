@@ -10,20 +10,24 @@
     "@emotion/styled": "^11.14.0",
     "@heroicons/react": "^2.2.0",
     "@modelcontextprotocol/server-postgres": "^0.6.2",
-    "@supabase/supabase-js": "^2.39.0",
+    "@supabase/supabase-js": "^2.49.4",
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
+    "@types/file-saver": "^2.0.7",
     "@types/jest": "^27.5.2",
     "@types/node": "^16.18.38",
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
+    "@types/xlsx": "^0.0.35",
     "body-parser": "^1.20.3",
     "chart.js": "^4.4.8",
     "cors": "^2.8.5",
     "daisyui": "^3.5.0",
     "date-fns": "^4.1.0",
+    "dotenv": "^16.4.5",
     "express": "^4.21.2",
+    "file-saver": "^2.0.5",
     "framer-motion": "^12.5.0",
     "node-fetch": "^2.7.0",
     "pg": "^8.14.1",
@@ -35,13 +39,18 @@
     "react-router-dom": "^6.14.2",
     "react-scripts": "5.0.1",
     "typescript": "^4.9.5",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "xlsx": "^0.18.5"
   },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "mcp": "node supabase-mcp-server.js",
+    "mcp:official": "npx -y @supabase/mcp-server-supabase@latest --access-token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbnlnbnRma3JsZWlzZXVjaXdxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczOTk5MjQwNiwiZXhwIjoyMDU1NTY4NDA2fQ.TwhEGW9DK4DTQQRquT6Z9UW8T8UjLX-hp9uKdRjWAhs",
+    "dev": "concurrently \"npm run mcp\" \"PORT=3001 npm start\"",
+    "dev:official": "concurrently \"npm run mcp:official\" \"PORT=3001 npm start\""
   },
   "eslintConfig": {
     "extends": [
@@ -64,7 +73,9 @@
   "devDependencies": {
     "@types/uuid": "^10.0.0",
     "autoprefixer": "^10.4.14",
+    "concurrently": "^9.1.2",
     "postcss": "^8.4.27",
+    "prettier": "^3.5.3",
     "tailwindcss": "^3.3.3"
   }
 }

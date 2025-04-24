@@ -1,0 +1,2869 @@
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { usePermissions } from '../../contexts/PermissionsContext';
+import { useNotifications } from '../../contexts/NotificationContext';
+import { 
+  getApprovalStatus, 
+  approveByAdvisor, 
+  approveByCompany, 
+  updateApplicationStatus,
+  getApplicationById,
+} from '../../services/applicationService';
+import { APPLICATION_STATUS, STATUS_LABELS, STATUS_THEME_COLORS } from '../../utils/constants/statuses';
+import { APPLICATION_TYPE, APPLICATION_TYPE_LABELS } from '../../utils/constants/applications';
+import { Application } from '../../utils/types';
+import { TABLES } from '../../utils/constants/tables';
+import { testSupabaseConnection, reinitializeSupabaseClient, fetchApprovalsBatch } from '../../utils/databaseUtils';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { toast } from 'react-hot-toast';
+import { formatDate } from '../../utils/dateUtils';
+import * as exportService from '../../services/exportService';
+import { statusEquals, asStatusKey, asStatusValue, withRequestedAmount } from '../../utils/types/adapter';
+import { supabase } from '../../services/supabaseService';
+import debounce from '../../utils/debounce';
+import * as applicationService from '../../services/applicationService';
+
+// Export service functions
+const exportFilteredApplications = async (filters: any, columns: any, format: 'csv' | 'excel') => {
+  return exportService.exportFilteredApplications(filters, columns, format);
+};
+
+// Verificar si APPLICATION_HISTORY tabla está definida
+const APPLICATION_HISTORY_TABLE = TABLES.APPLICATION_HISTORY || 'application_history';
+
+// Función para escapar cadenas de texto para SQL
+const escapeSQLString = (str: string) => {
+  if (!str) return '';
+  return str.replace(/'/g, "''");
+};
+
+interface KanbanBoardProps {
+  applications: any[]; // Change from Application[]
+  onStatusChange?: (application: any, newStatus: string) => Promise<void>; // Change from Application
+}
+
+// Interfaz para el estado de aprobación
+interface ApprovalStatus {
+  approvedByAdvisor: boolean;
+  approvedByCompany: boolean;
+  approvalDateAdvisor?: string;
+  approvalDateCompany?: string;
+}
+
+// Add this type adapter near the top of the file, after the imports
+/**
+ * Type adapter to handle the mismatch between the enum keys and values
+ * This allows us to use APPLICATION_STATUS.X for comparisons
+ */
+type ApplicationStatusString = keyof typeof APPLICATION_STATUS;
+const asEnum = (status: ApplicationStatusString): APPLICATION_STATUS => {
+  return APPLICATION_STATUS[status as keyof typeof APPLICATION_STATUS];
+};
+
+// Add a utility to cast APPLICATION_STATUS back to ApplicationStatusString
+const toStatusString = (enumValue: APPLICATION_STATUS): ApplicationStatusString => {
+  for (const key in APPLICATION_STATUS) {
+    if (APPLICATION_STATUS[key as keyof typeof APPLICATION_STATUS] === enumValue) {
+      return key as ApplicationStatusString;
+    }
+  }
+  // Default fallback
+  return 'NEW';
+};
+
+// Crear un tipo para aplicaciones con su estado de aprobación
+interface ApplicationWithApproval extends Application {
+  id: string;
+  created_at: string;
+  updated_at: string; 
+  application_type: any; // Make this flexible
+  source_id?: string;
+  status: any; // Make this flexible
+  client_name: string;
+  client_email: string;
+  client_phone: string;
+  client_address?: string;
+  dni?: string;
+  amount: number;
+  term?: number;
+  interest_rate?: number;
+  monthly_payment?: number;
+  company_id?: string;
+  company_name?: string;
+  assigned_to?: string;
+  approvalStatus?: ApprovalStatus;
+  isMoving?: boolean;
+  isMovingTo?: string;
+  targetStatus?: string; // Add this back
+  company_review_status?: boolean;
+  requested_amount?: number;
+  approval_date_advisor?: string;
+  approval_date_company?: string;
+}
+
+// Type safety utility
+const cast = <T extends unknown>(value: any): T => {
+  return value as T;
+};
+
+// Update the ApplicationWithApproval interface to add requested_amount
+interface ApplicationWithApproval extends Application {
+  approvalStatus?: ApprovalStatus;
+  isMoving?: boolean;
+  isMovingTo?: string;
+  company_review_status?: boolean;
+  requested_amount?: number; // Add this property
+}
+
+// Then use the cast function for comparing status values
+// For example:
+// if (cast<APPLICATION_STATUS>(app.status) === APPLICATION_STATUS.APPROVED)
+
+// Use the cast function for setting status values
+// For example:
+// app.status = cast<ApplicationStatusString>(APPLICATION_STATUS.NEW)
+
+// For property access to requested_amount
+// For example:
+// const amount = app.amount || cast<ApplicationWithApproval>(app).requested_amount || 0;
+
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange }) => {
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [refreshingApprovalStatuses, setRefreshingApprovalStatuses] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [appsWithApproval, setAppsWithApproval] = useState<ApplicationWithApproval[]>([]);
+  const [processingAppId, setProcessingAppId] = useState<string | null>(null);
+  const [columnsState, setColumnsState] = useState<any[]>([]);
+  const [forceRefresh, setForceRefresh] = useState<boolean>(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState<number>(Date.now());
+  const { shouldFilterByEntity, getEntityFilter, isAdvisor, isCompanyAdmin } = usePermissions();
+  const { user } = useAuth();
+  const dragItemRef = useRef<HTMLDivElement | null>(null);
+  const dragImageRef = useRef<HTMLDivElement | null>(null);
+  const draggedItemIndexRef = useRef<number>(-1);
+  const draggedItemNewStatusRef = useRef<string>('');
+  const [autoTransitionMessage, setAutoTransitionMessage] = useState<string | null>(null);
+  
+  // Añadir estados para filtros
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [dateFromFilter, setDateFromFilter] = useState<string>('');
+  const [dateToFilter, setDateToFilter] = useState<string>('');
+  const [amountMinFilter, setAmountMinFilter] = useState<string>('');
+  const [amountMaxFilter, setAmountMaxFilter] = useState<string>('');
+  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  
+  // Variable para controlar el estado de actualización
+  const isRefreshingRef = useRef(false);
+  const lastRefreshTimeRef = useRef(Date.now());
+  const MINIMUM_REFRESH_INTERVAL = 10000; // 10 segundos mínimo entre actualizaciones
+  
+  // Add a media query to detect mobile devices
+  const isMobile = useMediaQuery("(max-width: 768px)");
+  
+  // Add refs to track initialization and interval
+  const initDone = useRef(false);
+  const refreshTimer = useRef<number>();
+  
+  // Get supabase client from context
+  // const { supabase } = useSupabase();
+  
+  // Función centralizada para configurar las aplicaciones iniciales
+  useEffect(() => {
+    const setupApplications = async () => {
+      console.log("Configurando aplicaciones iniciales...");
+      setIsLoading(true);
+      
+      if (!applications || applications.length === 0) {
+        console.log("No hay aplicaciones para configurar");
+        setIsLoading(false);
+        return;
+      }
+      
+      try {
+        // Mapear las aplicaciones para cargar sus estados de aprobación
+      const appsWithApprovalStatuses = await Promise.all(
+        applications.map(async (app) => {
+            try {
+              // Cargar estado de aprobación
+          const approvalStatus = await getApprovalStatus(app.id);
+              
+              // Normalizar estados "pending" y "solicitud" a "new"
+              let normalizedStatus = app.status;
+              if (!normalizedStatus || normalizedStatus.toUpperCase() === 'PENDING' || normalizedStatus.toUpperCase() === 'SOLICITUD') {
+                normalizedStatus = 'new' as keyof typeof APPLICATION_STATUS;
+                console.log(`Normalizando aplicación ${app.id} de "${app.status}" a "new"`);
+              }
+              
+              // Procesar configuración específica para administradores de empresa
+              const company_review_status = isCompanyAdmin() ? 
+                // Si la aplicación está en revisión o aprobada por empresa, marcarla
+                (normalizedStatus === 'in_review' || 
+                (approvalStatus && approvalStatus.approvedByCompany)) : false;
+              
+              // Verificar si necesita transición automática (doble aprobación -> por dispersar)
+              if (approvalStatus?.approvedByAdvisor && approvalStatus?.approvedByCompany &&
+                  normalizedStatus !== 'por_dispersar' &&
+                  normalizedStatus !== 'completed') {
+                console.log(`Aplicación ${app.id} con doble aprobación, debería estar en POR_DISPERSAR`);
+                
+                // En lugar de moverla aquí, la marcaremos para posible transición automática después
+                // Esta lógica se maneja en otro useEffect específico para transiciones
+              }
+          
+          return {
+            ...app,
+                status: normalizedStatus,
+                approvalStatus: approvalStatus || { approvedByAdvisor: false, approvedByCompany: false },
+                company_review_status,
+            isMoving: false,
+            requested_amount: app.requested_amount || 0
+          };
+            } catch (error) {
+              console.error(`Error procesando aplicación ${app.id}:`, error);
+              return {
+                ...app,
+                status: app.status || APPLICATION_STATUS.NEW,
+                approvalStatus: { approvedByAdvisor: false, approvedByCompany: false },
+                isMoving: false,
+                requested_amount: app.requested_amount || 0
+              };
+            }
+        })
+      );
+      
+      // Ordenar de más viejas a más recientes por fecha de creación
+      const sortedApps = [...appsWithApprovalStatuses].sort((a, b) => {
+        const dateA = new Date(a.created_at);
+        const dateB = new Date(b.created_at);
+        return dateA.getTime() - dateB.getTime(); // Orden ascendente (más viejas primero)
+      });
+      
+        // Actualizar estado una sola vez con todas las aplicaciones ya procesadas
+      setAppsWithApproval(sortedApps);
+        console.log(`Configuradas ${sortedApps.length} aplicaciones con aprobaciones`);
+      } catch (error) {
+        console.error("Error durante la configuración de aplicaciones:", error);
+        setErrorMessage("Error al cargar las aplicaciones. Por favor, intente nuevamente.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    // Ejecutar configuración inicial
+    setupApplications();
+  }, [applications, isCompanyAdmin, getApprovalStatus]);
+  
+  // Efecto para mover automáticamente tarjetas con ambas aprobaciones a "Por Dispersar"
+  useEffect(() => {
+    const moveFullyApprovedCards = async () => {
+      // Encontrar tarjetas que tienen ambas aprobaciones pero no están en Por Dispersar
+      const fullyApprovedCards = appsWithApproval.filter(app => 
+        app.approvalStatus?.approvedByAdvisor && 
+        app.approvalStatus?.approvedByCompany && 
+        app.status !== APPLICATION_STATUS.POR_DISPERSAR &&
+        app.status !== APPLICATION_STATUS.COMPLETED
+      );
+      
+      if (fullyApprovedCards.length > 0) {
+        console.log(`Encontradas ${fullyApprovedCards.length} tarjetas con aprobación total, moviendo a Por Dispersar...`);
+        
+        // Mover cada tarjeta a Por Dispersar
+        for (const app of fullyApprovedCards) {
+          if (onStatusChange) {
+            try {
+              console.log(`Moviendo tarjeta ${app.id} a Por Dispersar automáticamente...`);
+              await onStatusChange(app, APPLICATION_STATUS.POR_DISPERSAR);
+              
+              // Actualizar el estado local tras mover la tarjeta
+              setAppsWithApproval(currentApps => 
+                currentApps.map(currentApp => 
+                  currentApp.id === app.id 
+                    ? {...currentApp, status: APPLICATION_STATUS.POR_DISPERSAR} 
+                    : currentApp
+                )
+              );
+            } catch (error) {
+              console.error(`Error al mover tarjeta ${app.id} a Por Dispersar:`, error);
+            }
+          }
+        }
+      }
+    };
+    
+    // Ejecutar después de un breve retraso para permitir que los estados se inicialicen
+    const timer = setTimeout(() => {
+      moveFullyApprovedCards();
+    }, 2000);
+    
+    return () => clearTimeout(timer);
+  }, [appsWithApproval, onStatusChange]);
+  
+  // Create a debounced version of refreshApprovalStatuses
+  const debouncedRefreshStatuses = useMemo(() => debounce(
+    async () => {
+      if (refreshingApprovalStatuses) {
+        return;
+      }
+      
+      // On mobile, avoid excessive refresh operations to save bandwidth/battery
+      if (isMobile && !forceRefresh && Date.now() - lastRefreshTime < 30000) {
+        return;
+      }
+      
+      setRefreshingApprovalStatuses(true);
+      
+      // Evitar múltiples actualizaciones simultáneas y limitar la frecuencia
+      if (
+        isRefreshingRef.current || 
+        !applications || 
+        applications.length === 0 || 
+        appsWithApproval.length === 0 ||
+        Date.now() - lastRefreshTimeRef.current < MINIMUM_REFRESH_INTERVAL
+      ) {
+        return;
+      }
+      
+      isRefreshingRef.current = true;
+      lastRefreshTimeRef.current = Date.now();
+      setLastRefreshTime(Date.now());
+      
+      console.log("Refrescando estados de aprobación...");
+      
+      try {
+        // Only refresh if we have applications to check
+        if (applications.length === 0 || appsWithApproval.length === 0) {
+          console.log("No hay aplicaciones para actualizar");
+          return;
+        }
+        
+        // Batch applications to avoid excessive API calls - get more applications at once
+        const BATCH_SIZE = isMobile ? 10 : 25;
+        const applicationsToUpdate = appsWithApproval.slice(0, BATCH_SIZE);
+        const applicationIds = applicationsToUpdate.map(app => app.id);
+        
+        // Fetch all approval statuses in a single batch operation
+        const approvalStatusesMap = await fetchApprovalsBatch(applicationIds);
+        
+        if (approvalStatusesMap.size === 0) {
+          console.log("No se encontraron estados de aprobación");
+          return;
+        }
+        
+        console.log(`Obtenidos ${approvalStatusesMap.size} estados de aprobación en batch`);
+        
+        // Process the results and update only changed applications
+        const updatedApps = applicationsToUpdate.map(app => {
+          const newStatus = approvalStatusesMap.get(app.id);
+          
+          if (!newStatus) return null;
+          
+          const hasChanged = !app.approvalStatus || 
+                            newStatus.approvedByAdvisor !== app.approvalStatus.approvedByAdvisor ||
+                            newStatus.approvedByCompany !== app.approvalStatus.approvedByCompany;
+          
+          if (hasChanged) {
+            console.log(`Estado de aprobación cambiado para ${app.id}:`, newStatus);
+            return {
+              ...app,
+              approvalStatus: newStatus
+            };
+          }
+          
+          return null;
+        }).filter(Boolean) as ApplicationWithApproval[];
+        
+        // Si hay cambios, actualizar el estado
+        if (updatedApps.length > 0) {
+          console.log(`Actualizando ${updatedApps.length} aplicaciones con estados de aprobación nuevos`);
+          
+          // Crear una copia del array actual y reemplazar las aplicaciones actualizadas
+          setAppsWithApproval(prevApps => {
+            const newApps = [...prevApps];
+            
+            updatedApps.forEach(updatedApp => {
+              const index = newApps.findIndex(app => app.id === updatedApp.id);
+              if (index !== -1) {
+                newApps[index] = updatedApp;
+              }
+            });
+            
+            return newApps;
+          });
+        }
+      } catch (error) {
+        console.error("Error al refrescar estados de aprobación en batch:", error);
+      } finally {
+        // Siempre actualizar el estado de refresco
+        isRefreshingRef.current = false;
+        setTimeout(() => setRefreshingApprovalStatuses(false), 300);
+      }
+    },
+    2000 // 2 seconds debounce time
+  ), [applications, appsWithApproval, refreshingApprovalStatuses, isRefreshingRef, lastRefreshTimeRef, 
+      lastRefreshTime, forceRefresh, isMobile, MINIMUM_REFRESH_INTERVAL]);
+  
+  // Función para refrescar los estados de aprobación desde la API
+  const refreshApprovalStatuses = useCallback(async () => {
+    debouncedRefreshStatuses();
+  }, [debouncedRefreshStatuses]);
+  
+  // Replace the existing interval setup effect
+  useEffect(() => {
+    if (initDone.current) return;        // Already initialized
+    initDone.current = true;
+    
+    console.log("Configurando intervalo para refrescar estados (una sola vez)...");
+    
+    // First load
+    loadApprovalStatuses();
+    
+    // Setup single interval
+    refreshTimer.current = window.setInterval(() => {
+      refreshApprovalStatuses();
+    }, isMobile ? 30000 : 10000); // 30s on mobile, 10s on desktop
+    
+    // Cleanup
+    return () => {
+      if (refreshTimer.current) {
+        clearInterval(refreshTimer.current);
+        refreshTimer.current = undefined;
+      }
+    };
+  }, []); // Empty deps array = only once
+  
+  // Actualizar la lógica para nuevas aplicaciones para incluir todas las nuevas notificaciones
+  useEffect(() => {
+    const checkForNewApplications = async () => {
+      // Verificar que tenemos usuario y permisos
+      if (!user?.id) return;
+      
+      try {
+        // Ejecutar esta comprobación solo si somos admin de empresa
+        if (isCompanyAdmin() && applications.length > 0) {
+          // Obtener la fecha de hace 24 horas
+          const oneDayAgo = new Date();
+          oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+          
+          // Buscar aplicaciones creadas en las últimas 24 horas
+          const recentApps = applications.filter(app => {
+            const createdAt = new Date(app.created_at);
+            return createdAt >= oneDayAgo;
+          });
+          
+          // Si hay aplicaciones recientes, asegurarnos de que aparezcan en el tablero
+          if (recentApps.length > 0) {
+            console.log(`Encontradas ${recentApps.length} aplicaciones recientes`);
+            
+            // En lugar de manipular directamente el estado, vamos a forzar una nueva
+            // carga de los datos cuando sea necesario
+            const currentAppIds = new Set(appsWithApproval.map(app => app.id));
+            
+            // Verificar si hay aplicaciones nuevas que no estén en el estado actual
+            const hasNewApps = recentApps.some(app => !currentAppIds.has(app.id));
+            
+            if (hasNewApps) {
+              console.log('Detectadas nuevas aplicaciones, recargando estado...');
+              // Forzar una nueva carga de estados de aprobación
+              loadApprovalStatuses();
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error verificando nuevas aplicaciones:', error);
+      }
+    };
+    
+    // Ejecutar la función de comprobación
+    checkForNewApplications();
+  }, [user, isCompanyAdmin, applications, appsWithApproval]);
+  
+  // Modificar la lógica para actualizar todas las aplicaciones con estado "pending" o "solicitud" a "new"
+  useEffect(() => {
+    // Si no hay aplicaciones, no hacer nada
+    if (!applications || applications.length === 0) return;
+    
+    console.log('Verificando estado de aplicaciones:', applications.map(a => ({ id: a.id, status: a.status })));
+    
+    // Crear una nueva referencia solo si no hay appsWithApproval inicializado todavía
+    const updatedApps = appsWithApproval.length === 0 
+      ? [] 
+      : [...appsWithApproval];
+    
+    let hasChanges = false;
+    
+    applications.forEach(app => {
+      const index = updatedApps.findIndex(a => a.id === app.id);
+      const needsUpdate = 
+        !app.status || 
+        asEnum(app.status) === APPLICATION_STATUS.PENDING || 
+        asEnum(app.status) === APPLICATION_STATUS.SOLICITUD;
+      
+      // Solo actualizar si el estado necesita cambiar a "new"
+      if (index !== -1 && needsUpdate) {
+        console.log(`Actualizando estado de aplicación ${app.id} de "${app.status}" a "new"`);
+        updatedApps[index] = {
+          ...updatedApps[index],
+          status: APPLICATION_STATUS.NEW
+        };
+        hasChanges = true;
+      } else if (index === -1) {
+        // Si la aplicación no está en el array, agregarla con su estado original
+        // o "new" si no tiene estado o es pending/solicitud
+        const newStatus = needsUpdate ? APPLICATION_STATUS.NEW : (app.status as Application['status']);
+        console.log(`Agregando aplicación ${app.id} con estado "${newStatus}"`);
+        updatedApps.push({
+          ...app,
+          status: newStatus,
+          approvalStatus: {
+            approvedByAdvisor: app.approved_by_advisor || false,
+            approvedByCompany: app.approved_by_company || false
+          }
+        });
+        hasChanges = true;
+      }
+      // Si existe y no necesita actualización, la dejamos como está
+    });
+    
+    if (hasChanges && updatedApps.length > 0) {
+      console.log('Actualizando aplicaciones:');
+      // Para prevenir actualizaciones excesivas, usar un timeout
+      setTimeout(() => {
+      setAppsWithApproval(updatedApps);
+      }, 0);
+    }
+  }, [applications]); // Eliminar appsWithApproval de las dependencias
+  
+  // Modificar la forma en que agrupamos las aplicaciones por estado para los administradores de empresa
+  // para crear un flujo de trabajo independiente
+  const groupedApplications = React.useMemo(() => {
+    // Crear un objeto con todos los estados posibles como claves y arrays vacíos como valores
+    const initialGroups = Object.values(APPLICATION_STATUS).reduce((acc, status) => {
+      acc[status] = [];
+      return acc as Record<string, ApplicationWithApproval[]>;
+    }, {} as Record<string, ApplicationWithApproval[]>);
+    
+    // Para los administradores de empresa, usaremos un agrupamiento virtual basado en las aprobaciones
+    if (isCompanyAdmin()) {
+    return appsWithApproval.reduce((acc, app) => {
+        // Si está en movimiento, respetar el estado de destino
+      if (app.isMoving && app.targetStatus) {
+          // Verificar que el estado existe antes de intentar agregar la aplicación
+          if (acc[app.targetStatus]) {
+        acc[app.targetStatus].push(app);
+      } else {
+            // Si el estado no existe, usar NEW como fallback
+            console.warn(`Estado inválido detectado: ${app.targetStatus}, usando NEW como fallback`);
+            acc[APPLICATION_STATUS.NEW].push(app);
+          }
+          return acc;
+        }
+        
+        // Normalizar estados "pending" y "solicitud" a "new"
+        if (!app.status || asEnum(app.status) === APPLICATION_STATUS.PENDING || asEnum(app.status) === APPLICATION_STATUS.SOLICITUD) {
+          acc[APPLICATION_STATUS.NEW].push(app);
+          return acc;
+        }
+        
+        // Estados compartidos que siempre se muestran igual para todos los usuarios
+        const sharedStatuses = [
+          APPLICATION_STATUS.POR_DISPERSAR,
+          APPLICATION_STATUS.COMPLETED,
+          APPLICATION_STATUS.EXPIRED,
+          APPLICATION_STATUS.CANCELLED,
+          APPLICATION_STATUS.REJECTED
+        ];
+        
+        if (sharedStatuses.includes(asEnum(app.status))) {
+          // Verificar que el estado existe
+          if (acc[app.status]) {
+            acc[app.status].push(app);
+          } else {
+            console.warn(`Estado compartido inválido detectado: ${app.status}, usando NEW como fallback`);
+            acc[APPLICATION_STATUS.NEW].push(app);
+          }
+          return acc;
+        }
+        
+        // Para los estados independientes, usar la lógica personalizada para admin de empresa
+        if (app.status === APPLICATION_STATUS.APPROVED) {
+          // Si está aprobada por la empresa pero no por el asesor, mostrarla en "aprobado por mi" 
+          if (app.approvalStatus?.approvedByCompany && !app.approvalStatus.approvedByAdvisor) {
+            acc[APPLICATION_STATUS.APPROVED].push(app);
+            return acc;
+          }
+          
+          // Si está aprobada por ambos, y el estado real es aprobado, mostrarla en aprobado
+          if (app.approvalStatus?.approvedByCompany && app.approvalStatus?.approvedByAdvisor) {
+            acc[APPLICATION_STATUS.APPROVED].push(app);
+            return acc;
+          }
+          
+          // En otros casos, mostrarla en el estado que tenga según otras reglas
+        }
+        
+        // Si está en revisión según la empresa
+        if (app.status === APPLICATION_STATUS.IN_REVIEW) {
+          // Si no está aprobada por la empresa, mostrarla en "en revisión"
+          if (!app.approvalStatus?.approvedByCompany) {
+            acc[APPLICATION_STATUS.IN_REVIEW].push(app);
+            return acc;
+          }
+          
+          // Si está aprobada por la empresa, mostrarla en "aprobado por mi"
+          acc[APPLICATION_STATUS.APPROVED].push(app);
+          return acc;
+        }
+        
+        // Para nuevas aplicaciones sin aprobación
+        if (app.status === APPLICATION_STATUS.NEW) {
+          // Si está aprobada por la empresa, mostrarla en "aprobado por mi"
+          if (app.approvalStatus?.approvedByCompany) {
+            acc[APPLICATION_STATUS.APPROVED].push(app);
+            return acc;
+          }
+          
+          // Si está en revisión por la empresa
+          if (app.company_review_status === true) {
+            acc[APPLICATION_STATUS.IN_REVIEW].push(app);
+            return acc;
+          }
+          
+          // Si no tiene marca especial, mostrarla como nueva
+          acc[APPLICATION_STATUS.NEW].push(app);
+          return acc;
+        }
+        
+        // Para cualquier otro caso, usar el estado real si existe, o NEW como fallback
+        if (acc[app.status]) {
+          acc[app.status].push(app);
+        } else {
+          console.warn(`Estado desconocido detectado: ${app.status}, usando NEW como fallback`);
+          acc[APPLICATION_STATUS.NEW].push(app);
+        }
+        return acc;
+      }, initialGroups);
+    }
+    
+    // Para asesores y otros roles, usamos el agrupamiento normal basado en estado
+    return appsWithApproval.reduce((acc, app) => {
+      if (app.isMoving && app.targetStatus) {
+        // Si está en movimiento, verificar que el estado de destino existe
+        if (acc[app.targetStatus]) {
+          acc[app.targetStatus].push(app);
+        } else {
+          console.warn(`Estado de destino inválido: ${app.targetStatus}, usando NEW como fallback`);
+          acc[APPLICATION_STATUS.NEW].push(app);
+        }
+      } else {
+        // Si no, usar el estado normal, normalizando "pending" y "solicitud" a "new"
+        let status = app.status || 'new';
+        
+        // Normalizar estados "pending" y "solicitud" a "new"
+        if (asEnum(status) === APPLICATION_STATUS.PENDING || asEnum(status) === APPLICATION_STATUS.SOLICITUD) {
+          status = APPLICATION_STATUS.NEW;
+        }
+        
+        // Verificar que el estado existe antes de agregar
+        if (acc[status]) {
+        acc[status].push(app);
+        } else {
+          console.warn(`Estado inválido detectado: ${status}, usando NEW como fallback`);
+          acc[APPLICATION_STATUS.NEW].push(app);
+        }
+      }
+      return acc;
+    }, initialGroups);
+  }, [appsWithApproval, isCompanyAdmin, isAdvisor]);
+  
+  // Modificar la lógica de agrupamiento de aplicaciones para separar flujos
+  // Esta es la parte clave que separa completamente los flujos
+  const columns = useMemo(() => {
+    // Estados estándar del Kanban
+    const statusGroups: Record<string, ApplicationWithApproval[]> = {
+      [APPLICATION_STATUS.NEW]: [],
+      [APPLICATION_STATUS.IN_REVIEW]: [],
+      [APPLICATION_STATUS.APPROVED]: [],
+      [APPLICATION_STATUS.POR_DISPERSAR]: [],
+      [APPLICATION_STATUS.COMPLETED]: [],
+      [APPLICATION_STATUS.EXPIRED]: [],
+      [APPLICATION_STATUS.REJECTED]: [],
+      [APPLICATION_STATUS.CANCELLED]: []
+    };
+    
+    // Agrupar aplicaciones por estado
+    appsWithApproval.forEach(app => {
+      // Asegurarnos de que el app.status no es undefined antes de usarlo
+      const currentStatus = app.status || APPLICATION_STATUS.NEW;
+      
+      // Lógica específica para administradores de empresa - flujo sincronizado
+      if (isCompanyAdmin()) {
+        // Los estados avanzados siempre deben mostrarse en su columna correspondiente
+        // independientemente del flujo (esto garantiza que se sincronicen con la vista del asesor)
+        const advancedStatuses = [
+          APPLICATION_STATUS.POR_DISPERSAR,
+          APPLICATION_STATUS.COMPLETED,
+          APPLICATION_STATUS.EXPIRED,
+          APPLICATION_STATUS.CANCELLED,
+          APPLICATION_STATUS.REJECTED
+        ];
+        
+        if (advancedStatuses.includes(currentStatus as APPLICATION_STATUS)) {
+          console.log(`Mostrando tarjeta ${app.id} en estado avanzado: ${currentStatus}`);
+          statusGroups[currentStatus].push(app);
+          return;
+        }
+        
+        // Para los estados básicos, aplicar la lógica personalizada del admin de empresa
+        
+        // 1. Si está aprobada por empresa -> va a "Aprobado por mi"
+        if (app.approvalStatus?.approvedByCompany) {
+          statusGroups[APPLICATION_STATUS.APPROVED].push(app);
+        }
+        // 2. Si está en revisión por empresa -> va a "En Revisión"
+        else if (app.company_review_status) {
+          statusGroups[APPLICATION_STATUS.IN_REVIEW].push(app);
+        }
+        // 3. Si no está ni en revisión ni aprobada por empresa -> va a "Nuevo"
+        else if (currentStatus === APPLICATION_STATUS.NEW || 
+                currentStatus === APPLICATION_STATUS.PENDING || 
+                (!app.company_review_status && !app.approvalStatus?.approvedByCompany)) {
+          statusGroups[APPLICATION_STATUS.NEW].push(app);
+        }
+      }
+      // Lógica para asesores - flujo normal basado en estado real
+      else if (isAdvisor()) {
+        // Normalizar estados especiales primero
+        let normalizedStatus = currentStatus;
+        if (normalizedStatus === 'pending' || normalizedStatus === 'solicitud') {
+          normalizedStatus = APPLICATION_STATUS.NEW;
+        }
+        
+        if (normalizedStatus) {
+          // Verificar que el estado existe en nuestros grupos antes de agregar
+          if (statusGroups[normalizedStatus]) {
+            statusGroups[normalizedStatus].push(app);
+          } else {
+            // Si no existe, log warning y usar NEW como fallback
+            console.warn(`Estado desconocido en columns para asesor: ${normalizedStatus}, usando NEW como fallback`);
+            statusGroups[APPLICATION_STATUS.NEW].push(app);
+          }
+        } else {
+          // Si no tiene estado, ponerla en "Nuevo"
+          statusGroups[APPLICATION_STATUS.NEW].push(app);
+        }
+      }
+      // Lógica para otros roles
+      else {
+        // Normalizar estados especiales primero
+        let normalizedStatus = currentStatus;
+        if (normalizedStatus === 'pending' || normalizedStatus === 'solicitud') {
+          normalizedStatus = APPLICATION_STATUS.NEW;
+        }
+        
+        if (normalizedStatus) {
+          // Verificar que el estado existe en nuestros grupos
+          if (statusGroups[normalizedStatus]) {
+            statusGroups[normalizedStatus].push(app);
+          } else {
+            // Si no existe, usar NEW como fallback
+            console.warn(`Estado desconocido en columns para otros roles: ${normalizedStatus}, usando NEW como fallback`);
+            statusGroups[APPLICATION_STATUS.NEW].push(app);
+          }
+        } else {
+          statusGroups[APPLICATION_STATUS.NEW].push(app);
+        }
+      }
+    });
+    
+    // Definición de colores para cada columna
+    const columnDefinitions = [
+      { id: APPLICATION_STATUS.NEW, title: 'Nuevo', color: 'warning', applications: statusGroups[APPLICATION_STATUS.NEW] },
+      { id: APPLICATION_STATUS.IN_REVIEW, title: 'En Revisión', color: 'info', applications: statusGroups[APPLICATION_STATUS.IN_REVIEW] },
+      { id: APPLICATION_STATUS.APPROVED, title: 'Aprobado por mi', color: 'success', applications: statusGroups[APPLICATION_STATUS.APPROVED] },
+      { id: APPLICATION_STATUS.POR_DISPERSAR, title: 'Por Dispersar', color: 'accent', applications: statusGroups[APPLICATION_STATUS.POR_DISPERSAR] },
+      { id: APPLICATION_STATUS.COMPLETED, title: 'Completado', color: 'primary', applications: statusGroups[APPLICATION_STATUS.COMPLETED] },
+      { id: APPLICATION_STATUS.EXPIRED, title: 'Expirado', color: 'error', applications: statusGroups[APPLICATION_STATUS.EXPIRED] },
+      { id: APPLICATION_STATUS.REJECTED, title: 'Rechazado', color: 'error', applications: statusGroups[APPLICATION_STATUS.REJECTED] },
+      { id: APPLICATION_STATUS.CANCELLED, title: 'Cancelado', color: 'neutral', applications: statusGroups[APPLICATION_STATUS.CANCELLED] }
+    ];
+    
+    return columnDefinitions;
+  }, [appsWithApproval, isAdvisor, isCompanyAdmin]);
+  
+  // Update columnsState whenever memoized columns change
+  useEffect(() => {
+    setColumnsState(columns);
+  }, [columns]);
+  
+  // Create a debounced version of loadApprovalStatuses
+  const debouncedLoadApprovalStatuses = useMemo(() => debounce(
+    async () => {
+      try {
+        console.log('Cargando estados de aprobación actualizados desde el servidor...');
+        
+        // Mostrar indicador de carga para la sincronización
+        setProcessingAppId('sync'); // Usamos 'sync' como identificador especial
+        
+        // Get current applications from board
+        const currentApps = appsWithApproval;
+        const appIds = currentApps.map(app => app.id);
+        
+        if (appIds.length === 0) {
+          setProcessingAppId(null);
+          return;
+        }
+        
+        console.log(`Solicitando estado actualizado para ${appIds.length} aplicaciones`);
+        
+        // Fetch latest approval statuses in batches to avoid overloading the server
+        const BATCH_SIZE = 5; // Procesar 5 aplicaciones a la vez
+        let updatedApplications: ApplicationWithApproval[] = [];
+        
+        for (let i = 0; i < appIds.length; i += BATCH_SIZE) {
+          const batchIds = appIds.slice(i, i + BATCH_SIZE);
+          console.log(`Procesando lote ${i/BATCH_SIZE + 1} de ${Math.ceil(appIds.length/BATCH_SIZE)} (${batchIds.length} aplicaciones)`);
+          
+          // Fetch each application in parallel within the batch
+          const batchResults = await Promise.all(
+            batchIds.map(async (id) => {
+              try {
+                // Get current app state as fallback in case of fetch errors
+                const currentApp = currentApps.find(app => app.id === id);
+                
+                // Obtener datos completos y actualizados de la aplicación
+                let app;
+                let approvalStatus;
+                
+                try {
+                  // Wrap each fetch in its own try-catch to handle individual errors
+                  app = await getApplicationById(id);
+                } catch (error) {
+                  console.error(`Error fetching application ${id}, using current data:`, error);
+                  app = currentApp || null;
+                }
+                
+                try {
+                  // Attempt to get approval status
+                  approvalStatus = await getApprovalStatus(id);
+                } catch (error) {
+                  console.error(`Error fetching approval status for ${id}, preserving current approval data:`, error);
+                  // Use current approval status as fallback
+                  approvalStatus = currentApp?.approvalStatus || {
+                    approvedByAdvisor: currentApp?.approved_by_advisor || false,
+                    approvedByCompany: currentApp?.approved_by_company || false
+                  };
+                }
+                
+                // If both fetches failed and we don't have current data, skip this app
+                if (!app && !currentApp) return null;
+                
+                // Merge with existing app data for completeness
+                const mergedApp = {
+                  ...(app || currentApp)
+                } as ApplicationWithApproval;
+
+                // Only set approval status properties if they are defined
+                if (approvalStatus) {
+                  mergedApp.approvalStatus = {
+                    // Ensure these values are always boolean, with fallbacks
+                    approvedByAdvisor: approvalStatus.approvedByAdvisor !== undefined ? approvalStatus.approvedByAdvisor : (currentApp?.approvalStatus?.approvedByAdvisor || false),
+                    approvedByCompany: approvalStatus.approvedByCompany !== undefined ? approvalStatus.approvedByCompany : (currentApp?.approvalStatus?.approvedByCompany || false),
+                    // Dates can be undefined
+                    approvalDateAdvisor: approvalStatus.approvalDateAdvisor,
+                    approvalDateCompany: approvalStatus.approvalDateCompany
+                  };
+
+                  // Only update direct properties if their corresponding values in approvalStatus are defined
+                  if (approvalStatus.approvedByAdvisor !== undefined) {
+                    mergedApp.approved_by_advisor = approvalStatus.approvedByAdvisor;
+                  }
+                  if (approvalStatus.approvedByCompany !== undefined) {
+                    mergedApp.approved_by_company = approvalStatus.approvedByCompany;
+                  }
+                  if (approvalStatus.approvalDateAdvisor !== undefined) {
+                    mergedApp.approval_date_advisor = approvalStatus.approvalDateAdvisor;
+                  } else if (currentApp?.approval_date_advisor) {
+                    mergedApp.approval_date_advisor = currentApp.approval_date_advisor;
+                  }
+                  if (approvalStatus.approvalDateCompany !== undefined) {
+                    mergedApp.approval_date_company = approvalStatus.approvalDateCompany;
+                  } else if (currentApp?.approval_date_company) {
+                    mergedApp.approval_date_company = currentApp.approval_date_company;
+                  }
+                }
+
+                return mergedApp;
+              } catch (error) {
+                console.error(`Error processing application ${id}:`, error);
+                return null;
+              }
+            })
+          );
+          
+          // Add valid results to our updated applications
+          const validResults = batchResults.filter(Boolean) as ApplicationWithApproval[];
+          updatedApplications = [...updatedApplications, ...validResults];
+          
+          // Pequeña pausa entre lotes para no sobrecargar el servidor
+          if (i + BATCH_SIZE < appIds.length) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+        }
+        
+        console.log(`Se obtuvo información actualizada para ${updatedApplications.length} de ${appIds.length} aplicaciones`);
+        
+        if (updatedApplications.length > 0) {
+          // Create a new array to track changes
+          const newAppsWithApproval = [...appsWithApproval];
+          let hasChanges = false;
+          
+          // Update only the applications that changed
+          updatedApplications.forEach((updatedApp) => {
+            if (!updatedApp) return;
+            
+            // Find the current app in our state
+            const index = newAppsWithApproval.findIndex(app => app.id === updatedApp.id);
+            if (index === -1) return;
+            
+            const currentApp = newAppsWithApproval[index];
+            
+            // Check if any relevant property changed to avoid unnecessary rerenders
+            const needsUpdate = 
+              currentApp.status !== updatedApp.status ||
+              currentApp.approved_by_advisor !== updatedApp.approved_by_advisor ||
+              currentApp.approved_by_company !== updatedApp.approved_by_company ||
+              currentApp.approval_date_advisor !== updatedApp.approval_date_advisor ||
+              currentApp.approval_date_company !== updatedApp.approval_date_company;
+            
+            if (needsUpdate) {
+              console.log(`Actualizando app ${updatedApp.id}: Estado ${currentApp.status} -> ${updatedApp.status}, ` +
+                        `Aprobación Asesor: ${currentApp.approvalStatus?.approvedByAdvisor} -> ${updatedApp.approvalStatus?.approvedByAdvisor}, ` +
+                        `Aprobación Empresa: ${currentApp.approvalStatus?.approvedByCompany} -> ${updatedApp.approvalStatus?.approvedByCompany}`);
+              
+              // Create an updated copy with merged data
+              const updatedCopy = {
+                ...currentApp,
+                status: updatedApp.status || currentApp.status
+              };
+
+              // Only update approval status if it's defined and properties are defined
+              if (updatedApp.approvalStatus) {
+                updatedCopy.approvalStatus = updatedCopy.approvalStatus || {
+                  approvedByAdvisor: false,
+                  approvedByCompany: false
+                };
+
+                if (updatedApp.approvalStatus.approvedByAdvisor !== undefined) {
+                  updatedCopy.approvalStatus.approvedByAdvisor = updatedApp.approvalStatus.approvedByAdvisor;
+                }
+                if (updatedApp.approvalStatus.approvedByCompany !== undefined) {
+                  updatedCopy.approvalStatus.approvedByCompany = updatedApp.approvalStatus.approvedByCompany;
+                }
+              }
+
+              // Only update direct properties if they are defined
+              if (updatedApp.approved_by_advisor !== undefined) {
+                updatedCopy.approved_by_advisor = updatedApp.approved_by_advisor;
+              }
+              if (updatedApp.approved_by_company !== undefined) {
+                updatedCopy.approved_by_company = updatedApp.approved_by_company;
+              }
+              if (updatedApp.approval_date_advisor !== undefined) {
+                updatedCopy.approval_date_advisor = updatedApp.approval_date_advisor;
+              }
+              if (updatedApp.approval_date_company !== undefined) {
+                updatedCopy.approval_date_company = updatedApp.approval_date_company;
+              }
+              
+              newAppsWithApproval[index] = updatedCopy;
+              
+              hasChanges = true;
+            }
+          });
+          
+          // Only update state if we have actual changes
+          if (hasChanges) {
+            console.log('Actualizando estado con la información más reciente del servidor');
+            setAppsWithApproval(newAppsWithApproval);
+          } else {
+            console.log('No se detectaron cambios que requieran actualización');
+          }
+        }
+      } catch (error) {
+        console.error('Error loading approval statuses:', error);
+        // Don't update state on error to preserve current approval status
+      } finally {
+        // Clear processing state
+        setProcessingAppId(null);
+      }
+    },
+    1000  // 1 second debounce
+  ), [appsWithApproval, getApplicationById, getApprovalStatus]);
+
+  // Function to load approval statuses for applications
+  const loadApprovalStatuses = useCallback(async () => {
+    if (!applications || applications.length === 0) return;
+    
+    setRefreshingApprovalStatuses(true);
+    setErrorMessage('');
+
+    try {
+      // Process in batches to avoid overloading
+      const BATCH_SIZE = 5;
+      const batches = [];
+      
+      for (let i = 0; i < applications.length; i += BATCH_SIZE) {
+        batches.push(applications.slice(i, i + BATCH_SIZE));
+      }
+
+      for (const batch of batches) {
+        await Promise.all(
+          batch.map(async (app) => {
+            try {
+              // Only fetch approval status for real applications (with ID)
+              if (!app.id) return;
+              
+              const appStatus = await applicationService.getApprovalStatus(app.id);
+              
+              // Only update if we got a valid response
+              // Checking for appStatus explicitly, as undefined means an error occurred
+              if (appStatus) {
+                setAppsWithApproval((prev) => {
+                  return prev.map((a) => {
+                    if (a.id === app.id) {
+                      return {
+                        ...a,
+                        // Only update fields if they're defined in the appStatus
+                        ...(appStatus.approvedByAdvisor !== undefined && { approvedByAdvisor: appStatus.approvedByAdvisor }),
+                        ...(appStatus.approvedByCompany !== undefined && { approvedByCompany: appStatus.approvedByCompany }),
+                        ...(appStatus.approvalDateAdvisor !== undefined && { approvalDateAdvisor: appStatus.approvalDateAdvisor }),
+                        ...(appStatus.approvalDateCompany !== undefined && { approvalDateCompany: appStatus.approvalDateCompany }),
+                      };
+                    }
+                    return a;
+                  });
+                });
+              } else {
+                // If appStatus is undefined (error occurred), log it but don't update state
+                console.log(`Skipping update for application ${app.id} due to error fetching approval status`);
+              }
+            } catch (error) {
+              console.error(`Failed to get approval status for application ${app.id}:`, error);
+              // Do not update the state on error to prevent resetting values
+            }
+          })
+        );
+      }
+    } catch (error) {
+      console.error('Error loading approval statuses:', error);
+      setErrorMessage('Error loading approval statuses');
+    } finally {
+      setRefreshingApprovalStatuses(false);
+    }
+  }, [applications]);
+  
+  // Función para actualizar localmente el estado de aprobación de una aplicación
+  const updateLocalApprovalStatus = (applicationId: string, updates: Partial<{ approvedByAdvisor: boolean, approvedByCompany: boolean }>, newStatus?: string) => {
+    console.log(`Actualizando estado de aprobación para ${applicationId}:`, updates);
+    
+    // Crear una copia del estado actual
+    const currentApps = [...appsWithApproval];
+    const appIndex = currentApps.findIndex(app => app.id === applicationId);
+    
+    if (appIndex === -1) {
+      console.warn(`No se encontró la aplicación ${applicationId} para actualizar approval status`);
+      return;
+    }
+    
+    // Crear copia profunda de la aplicación para evitar mutaciones directas
+    const updatedApp = { ...currentApps[appIndex] };
+    
+    // Asegurar que el objeto approvalStatus exista
+    const currentApprovalStatus = updatedApp.approvalStatus || { approvedByAdvisor: false, approvedByCompany: false };
+    
+    // Crear el nuevo objeto de aprobación, asegurando que mantenemos los valores existentes
+    // a menos que se especifiquen explícitamente en el parámetro updates
+    const newApprovalStatus = {
+      approvedByAdvisor: updates.approvedByAdvisor !== undefined ? updates.approvedByAdvisor : currentApprovalStatus.approvedByAdvisor,
+      approvedByCompany: updates.approvedByCompany !== undefined ? updates.approvedByCompany : currentApprovalStatus.approvedByCompany
+    };
+    
+    console.log(`Approval Status anterior: ${JSON.stringify(currentApprovalStatus)}`);
+    console.log(`Nuevo Approval Status: ${JSON.stringify(newApprovalStatus)}`);
+    
+    // Actualizar la aplicación con el nuevo estado de aprobación
+    updatedApp.approvalStatus = newApprovalStatus;
+    
+    // Para mantener sincronizados los estados, cuando quitamos la aprobación de empresa,
+    // también actualizamos el company_review_status
+    if (updates.approvedByCompany === false && isCompanyAdmin()) {
+      console.log(`Actualizando company_review_status a true porque estamos quitando aprobación`);
+      updatedApp.company_review_status = true;
+    }
+
+    // Si ambos están aprobados, asegurarnos de moverla a por_dispersar
+    if (newApprovalStatus.approvedByAdvisor && newApprovalStatus.approvedByCompany) {
+      console.log(`Ambas aprobaciones están presentes, verificando si necesita moverse a Por Dispersar`);
+      if (updatedApp.status !== APPLICATION_STATUS.POR_DISPERSAR && 
+          updatedApp.status !== APPLICATION_STATUS.COMPLETED) {
+        console.log(`Actualizando estado a Por Dispersar debido a doble aprobación`);
+        updatedApp.status = APPLICATION_STATUS.POR_DISPERSAR;
+      }
+    }
+    
+    // Actualizar el array de aplicaciones
+    currentApps[appIndex] = updatedApp;
+    
+    // Establecer el nuevo estado
+    setAppsWithApproval(currentApps);
+  };
+  
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, application: ApplicationWithApproval, idx: number) => {
+    // Guardar la aplicación que estamos arrastrando
+    draggedItemIndexRef.current = idx;
+    
+    // Almacenar el elemento que estamos arrastrando para gestionar mejor el evento
+    dragItemRef.current = e.currentTarget;
+    
+    // Establecer los datos que queremos transferir
+    e.dataTransfer.setData('text/plain', application.id);
+    e.dataTransfer.effectAllowed = 'move';
+    
+    // Crear una copia visual para el arrastre
+    if (!dragImageRef.current) {
+      dragImageRef.current = e.currentTarget.cloneNode(true) as HTMLDivElement;
+      dragImageRef.current.style.position = 'absolute';
+      dragImageRef.current.style.top = '-1000px';
+      dragImageRef.current.style.opacity = '0.8';
+      dragImageRef.current.style.transform = 'scale(0.9)';
+      dragImageRef.current.style.width = `${e.currentTarget.offsetWidth}px`;
+      document.body.appendChild(dragImageRef.current);
+    }
+    
+    // Establecer la imagen de arrastre
+    if (dragImageRef.current) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      e.dataTransfer.setDragImage(dragImageRef.current, rect.width / 2, 20);
+    }
+    
+    // Añadir clase CSS para mostrar visualmente que el elemento está siendo arrastrado
+    if (e.currentTarget) {
+      e.currentTarget.classList.add('dragging');
+    }
+  };
+  
+  const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+    // Eliminar clase CSS de arrastre
+    if (dragItemRef.current) {
+      dragItemRef.current.classList.remove('dragging');
+      dragItemRef.current = null;
+    }
+    
+    if (e.currentTarget) {
+      e.currentTarget.classList.remove('dragging');
+    }
+    
+    // Eliminar el elemento clonado para el arrastre
+    if (dragImageRef.current) {
+      document.body.removeChild(dragImageRef.current);
+      dragImageRef.current = null;
+    }
+    
+    draggedItemIndexRef.current = -1;
+    draggedItemNewStatusRef.current = '';
+  };
+  
+  const handleDragOver = (e: React.DragEvent, columnStatus: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    
+    // Guardar el nuevo estado para la actualización optimista
+    if (draggedItemNewStatusRef.current !== columnStatus) {
+      draggedItemNewStatusRef.current = columnStatus;
+    }
+    
+    // Añadir clase visual para indicar la columna destino
+    if (e.currentTarget.classList.contains('kanban-column')) {
+      document.querySelectorAll('.kanban-column').forEach(col => {
+        col.classList.remove('drag-over');
+      });
+      e.currentTarget.classList.add('drag-over');
+    }
+  };
+  
+  // Verificar si el usuario puede arrastrar una tarjeta
+  const canDragCard = (app: ApplicationWithApproval): boolean => {
+    // No permitir arrastrar si la aplicación no tiene status o id
+    if (!app.status || !app.id) {
+      return false;
+    }
+    
+    // No permitir arrastrar tarjetas que están en proceso de cambio de estado
+    if (app.isMoving) {
+      return false;
+    }
+    
+    // No permitir arrastrar tarjetas que están siendo procesadas
+    if (processingAppId === app.id) {
+      return false;
+    }
+    
+    // Restricciones específicas basadas en el rol del usuario
+    
+    // Para asesores
+    if (isAdvisor()) {
+      // Estados que nunca pueden ser movidos por ningún usuario
+      const restrictedStatuses = [
+        APPLICATION_STATUS.EXPIRED,
+        APPLICATION_STATUS.CANCELLED,
+        APPLICATION_STATUS.POR_DISPERSAR,
+        APPLICATION_STATUS.COMPLETED
+      ];
+      
+      // No permitir arrastrar si está en un estado restringido
+      if (restrictedStatuses.includes(asEnum(app.status))) {
+        return false;
+      }
+      
+      // Verificar que la aplicación está asignada al asesor actual
+      if (app.assigned_to !== user?.entityId) {
+        return false;
+      }
+      
+      // Si tiene aprobaciones de ambos (asesor y empresa), no permitir mover
+      if (app.approvalStatus?.approvedByAdvisor && app.approvalStatus?.approvedByCompany) {
+        return false;
+      }
+      
+      // Si la tarjeta ya está en estado APPROVED y ya tiene aprobación del asesor, no permitir moverla
+      if (app.status === APPLICATION_STATUS.APPROVED && app.approvalStatus?.approvedByAdvisor) {
+        return false;
+      }
+      
+      // Específicamente permitir mover tarjetas de NEW o IN_REVIEW a APPROVED
+      return true;
+    }
+    
+    // Para administradores de empresa
+    if (isCompanyAdmin()) {
+      // Estados que nunca pueden ser movidos por un admin de empresa
+      const restrictedStatuses = [
+        APPLICATION_STATUS.POR_DISPERSAR,
+        APPLICATION_STATUS.COMPLETED,
+        APPLICATION_STATUS.EXPIRED,
+        APPLICATION_STATUS.CANCELLED,
+        APPLICATION_STATUS.REJECTED
+      ];
+      
+      // No permitir arrastrar si está en un estado restringido
+      if (restrictedStatuses.includes(asEnum(app.status))) {
+        return false;
+      }
+      
+      // Si tiene aprobaciones de ambos (asesor y empresa), no permitir mover
+      if (app.approvalStatus?.approvedByAdvisor && app.approvalStatus?.approvedByCompany) {
+        return false;
+      }
+      
+      // MODIFICACIÓN: Aunque el asesor haya aprobado, el admin de empresa debe poder aprobar también
+      // Aquí no se impide mover la tarjeta si solo está aprobada por el asesor
+      
+      return true;
+    }
+    
+    // Para otros roles, no permitir arrastrar
+    return false;
+  };
+  
+  // Modify handleDrop to have better error handling
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>, newStatus: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Eliminar todas las clases de arrastre
+    document.querySelectorAll('.kanban-column').forEach(col => {
+      col.classList.remove('drag-over');
+    });
+    
+    // Verificar que el newStatus es válido
+    const validStatuses = Object.values(APPLICATION_STATUS);
+    if (!validStatuses.includes(newStatus as APPLICATION_STATUS)) {
+      console.error(`Estado inválido para drop: ${newStatus}`);
+      setErrorMessage(`Error: estado "${newStatus}" no es válido.`);
+      return;
+    }
+    
+    // Recuperar el ID de la aplicación
+    const applicationId = e.dataTransfer.getData('text/plain');
+    if (!applicationId || !user?.id) {
+      console.error('Missing applicationId or user.id');
+      setErrorMessage('Error: No se pudo identificar la solicitud o el usuario');
+      return;
+    }
+    
+    const application = appsWithApproval.find(app => app.id === applicationId);
+    if (!application) {
+      console.error(`Application with ID ${applicationId} not found in state`);
+      setErrorMessage('Error: No se pudo encontrar la solicitud en el estado actual');
+      return;
+    }
+    
+    const oldStatus = application.status || APPLICATION_STATUS.NEW;
+    
+    // No hacer nada si el estatus es el mismo
+    if (oldStatus === newStatus) return;
+    
+    console.log(`[handleDrop] Intentando mover tarjeta ${applicationId} de ${oldStatus} a ${newStatus}`, {
+      user: user?.id,
+      isAdvisor: isAdvisor(),
+      isCompanyAdmin: isCompanyAdmin()
+    });
+    
+      // Establecer el ID de la aplicación que se está procesando
+      setProcessingAppId(applicationId);
+    
+    try {
+      // Verificar permisos generales para actualizar aplicaciones
+      if (!canDragCard(application)) {
+        console.error(`User ${user.id} doesn't have permission to move this card`);
+        setErrorMessage('No tienes permisos para mover esta tarjeta.');
+        setProcessingAppId(null);
+        return;
+      }
+      
+      // Verificar transiciones válidas de estado
+      if (!isValidStatusTransition(oldStatus, newStatus)) {
+        console.error(`Invalid status transition from ${oldStatus} to ${newStatus}`);
+        setErrorMessage(`No se permite cambiar el estado de "${STATUS_LABELS[oldStatus as keyof typeof STATUS_LABELS]}" a "${STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS]}".`);
+        setProcessingAppId(null);
+        return;
+      }
+      
+      // === ACTUALIZACIÓN OPTIMISTA MÁS ROBUSTA ===
+      // Primero actualizamos el estado localmente para que la UI se actualice inmediatamente
+      // Esto evita la sensación de latencia para el usuario
+      const updatedApps = [...appsWithApproval];
+      const appIndex = updatedApps.findIndex(app => app.id === applicationId);
+      
+      if (appIndex !== -1) {
+        // Preservar el estado de aprobación actual
+        const currentApprovalStatus = updatedApps[appIndex].approvalStatus || {
+          approvedByAdvisor: false,
+          approvedByCompany: false
+        };
+        
+        // Guardar estado original para posible reversión
+        const originalAppState = { ...updatedApps[appIndex] };
+        
+        // Marcar claramente que está en proceso de actualización
+        updatedApps[appIndex] = {
+          ...updatedApps[appIndex],
+          status: (newStatus as unknown) as Application['status'],
+          isMoving: true,
+          targetStatus: newStatus,
+          // Asegurar que mantenemos el estado de aprobación
+          approvalStatus: currentApprovalStatus
+        };
+        
+        setAppsWithApproval(updatedApps);
+      
+    try {
+      // Para administradores de empresa (FLUJO INDEPENDIENTE)
+      if (isCompanyAdmin()) {
+        // El admin de empresa solo puede mover tarjetas entre estos estados
+        const allowedTargetStates = [
+          APPLICATION_STATUS.NEW,
+          APPLICATION_STATUS.IN_REVIEW,
+          APPLICATION_STATUS.APPROVED
+        ];
+        
+        // Si intenta mover a un estado que no está permitido
+            if (!allowedTargetStates.includes((newStatus as unknown) as any)) {
+          setErrorMessage(`No puedes mover solicitudes al estado "${STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS] || newStatus}". Solo puedes mover entre Nuevo, En Revisión y Aprobado por mí.`);
+              
+              // Revertir cambio optimista
+              if (appIndex !== -1) {
+                updatedApps[appIndex] = originalAppState;
+                setAppsWithApproval(updatedApps);
+              }
+              
+          setProcessingAppId(null);
+          return;
+        }
+        
+        // Estados que nunca pueden ser movidos por un admin de empresa
+        const restrictedStatuses = [
+          APPLICATION_STATUS.POR_DISPERSAR,
+          APPLICATION_STATUS.COMPLETED,
+          APPLICATION_STATUS.EXPIRED,
+          APPLICATION_STATUS.CANCELLED,
+          APPLICATION_STATUS.REJECTED
+        ];
+        
+        // Si la tarjeta está en un estado restringido, no permitir moverla
+            if (restrictedStatuses.includes(asEnum(oldStatus))) {
+          setErrorMessage(`No puedes mover solicitudes que están en estado "${STATUS_LABELS[oldStatus as keyof typeof STATUS_LABELS] || oldStatus}".`);
+              
+              // Revertir cambio optimista
+              if (appIndex !== -1) {
+                updatedApps[appIndex] = originalAppState;
+                setAppsWithApproval(updatedApps);
+              }
+              
+          setProcessingAppId(null);
+          return;
+        }
+        
+            try {
+              if (newStatus === APPLICATION_STATUS.APPROVED) {
+                // Si movemos a Aprobado, registrar aprobación de empresa
+                try {
+                  // Definir el filtro de entidad para la empresa
+                  const companyEntityFilter = { company_id: user.entityId };
+                  
+                  // Actualización del status con la API
+                  await onStatusChange?.(application, newStatus as any);
+                  
+                  // Actualización específica de la aprobación de empresa
+                  await approveByCompany(
+                    applicationId,
+                    'Aprobado por empresa a través del tablero Kanban',
+                    user.id,
+                    user.entityId || '',
+                    companyEntityFilter
+                  ).catch(error => {
+                    console.error('Error en approveByCompany:', error);
+                    throw new Error('No se pudo registrar la aprobación de empresa');
+                  });
+                  
+                  console.log('✅ Aprobación de empresa registrada correctamente');
+                  
+                  // Actualización de estado en frontend después de éxito
+                  if (appIndex !== -1) {
+                    // Refrescar explícitamente el estado de aprobación actual
+                    const currentApprovalStatus = await getApprovalStatus(applicationId);
+                    
+                    updatedApps[appIndex] = {
+                      ...updatedApps[appIndex],
+                      status: newStatus as any,
+                      isMoving: false,
+                      approvalStatus: currentApprovalStatus || {
+                        approvedByAdvisor: updatedApps[appIndex].approvalStatus?.approvedByAdvisor || false,
+                        approvedByCompany: true
+                      }
+                    };
+                    setAppsWithApproval(updatedApps);
+                  }
+                  
+                } catch (approvalError) {
+                  console.error('❌ Error en aprobación de empresa:', approvalError);
+                  
+                  // Mostrar mensaje de error específico
+                  setErrorMessage(`Error al aprobar: ${(approvalError as Error).message || 'Falló la aprobación de empresa'}`);
+                  
+                  // Intentar reconectar a Supabase si hay un error de conexión
+                  const isConnectionOk = await testSupabaseConnection();
+                  if (!isConnectionOk) {
+                    console.log('Reintentando conexión a Supabase...');
+                    reinitializeSupabaseClient();
+                    
+                    try {
+                      // Definir el filtro de entidad para el segundo intento
+                      const companyEntityFilter = { company_id: user.entityId };
+                      
+                      // Reintentar la aprobación después de reconectar
+                      await approveByCompany(
+                        applicationId,
+                        'Aprobado por empresa a través del tablero Kanban (reintento)',
+                        user.id,
+                        user.entityId || '',
+                        companyEntityFilter
+                      );
+                      
+                      console.log('✅ Aprobación de empresa registrada correctamente en el segundo intento');
+                      
+                      // Refrescar explícitamente el estado de aprobación actual
+                      const currentApprovalStatus = await getApprovalStatus(applicationId);
+                      
+                      // Actualización de estado en frontend después de éxito
+                      if (appIndex !== -1) {
+                        updatedApps[appIndex] = {
+                          ...updatedApps[appIndex],
+                          status: newStatus as any,
+                          isMoving: false,
+                          approvalStatus: currentApprovalStatus || {
+                            approvedByAdvisor: updatedApps[appIndex].approvalStatus?.approvedByAdvisor || false,
+                            approvedByCompany: true
+                          }
+                        };
+                        setAppsWithApproval(updatedApps);
+                      }
+                    } catch (retryError) {
+                      // Si el reintento también falla, revertir al estado original
+                      console.error('❌ Error en segundo intento de aprobación:', retryError);
+                      
+                      // Revertir al estado original
+                      if (appIndex !== -1) {
+                        updatedApps[appIndex] = originalAppState;
+                        setAppsWithApproval(updatedApps);
+                      }
+                      
+                      setErrorMessage(`Error de conexión: ${(retryError as Error).message || 'No se pudo conectar a la base de datos'}`);
+              }
+            } else {
+                    // Si la conexión está bien pero falló por otra razón, revertir al estado original
+                    if (appIndex !== -1) {
+                      updatedApps[appIndex] = originalAppState;
+                      setAppsWithApproval(updatedApps);
+                    }
+                    
+                    setErrorMessage(`Error al actualizar: ${(approvalError as Error).message || 'Falló la operación'}`);
+                  }
+                }
+              } else {
+                // Para otros estados, usar actualización normal
+                await onStatusChange?.(application, newStatus as any);
+                
+                // Actualizar estado local tras éxito
+                if (appIndex !== -1) {
+                  updatedApps[appIndex] = {
+                    ...updatedApps[appIndex],
+                    status: (newStatus as unknown) as Application['status'],
+                    isMoving: false
+                  };
+                  setAppsWithApproval(updatedApps);
+                }
+              }
+              
+              console.log(`✅ Tarjeta movida exitosamente de ${oldStatus} a ${newStatus}`);
+              
+            } catch (error) {
+              console.error('❌ Error al mover tarjeta:', error);
+              setErrorMessage(`Error al actualizar estado: ${(error as Error).message}`);
+              
+              // Revertir el cambio optimista en caso de error
+              if (appIndex !== -1) {
+                updatedApps[appIndex] = originalAppState;
+                setAppsWithApproval(updatedApps);
+              }
+            }
+          } else {
+            // Otros roles (como asesor) - implementar lógica similar con manejo de errores
+            try {
+              await onStatusChange?.(application, newStatus as any);
+              
+              // Si es exitoso, actualizar el estado local
+              if (appIndex !== -1) {
+                updatedApps[appIndex] = {
+                  ...updatedApps[appIndex],
+                  status: (newStatus as unknown) as Application['status'],
+                  isMoving: false
+                };
+                setAppsWithApproval(updatedApps);
+              }
+              
+              console.log(`✅ Tarjeta movida exitosamente de ${oldStatus} a ${newStatus}`);
+            } catch (error) {
+              console.error('❌ Error al mover tarjeta (rol no empresa):', error);
+              
+              // Revertir al estado original en caso de error
+              if (appIndex !== -1) {
+                updatedApps[appIndex] = originalAppState;
+                setAppsWithApproval(updatedApps);
+              }
+              
+              setErrorMessage(`Error al actualizar estado: ${(error as Error).message}`);
+            }
+          }
+        } catch (innerError) {
+          console.error('❌ Error en lógica de movimiento:', innerError);
+          
+          // Revertir al estado original
+          if (appIndex !== -1) {
+            updatedApps[appIndex] = originalAppState;
+        setAppsWithApproval(updatedApps);
+          }
+          
+          setErrorMessage(`Error: ${(innerError as Error).message}`);
+        } finally {
+          // Limpiar el estado de procesamiento y forzar una actualización final
+            setProcessingAppId(null);
+          setTimeout(() => {
+            loadApprovalStatuses();
+          }, 1000);
+        }
+      }
+    } catch (error) {
+      console.error('Error global en drop:', error);
+      setErrorMessage(`Error inesperado: ${(error as Error).message}`);
+      
+      // Revertir cambio optimista
+        const updatedApps = [...appsWithApproval];
+        const appIndex = updatedApps.findIndex(app => app.id === applicationId);
+        
+        if (appIndex !== -1) {
+        updatedApps[appIndex] = {
+            ...updatedApps[appIndex], 
+          status: oldStatus as Application['status'],
+          isMoving: false,
+          targetStatus: undefined
+        };
+        setAppsWithApproval(updatedApps);
+      }
+      
+      setProcessingAppId(null);
+    }
+  };
+  
+  // Helper function to update card status in the local state
+  const updateCardStatus = (applicationId: string, newStatus: string) => {
+        const updatedApps = [...appsWithApproval];
+        const appIndex = updatedApps.findIndex(app => app.id === applicationId);
+        
+        if (appIndex !== -1) {
+      // Marcar explícitamente que la aplicación está siendo movida
+      updatedApps[appIndex] = {
+            ...updatedApps[appIndex], 
+        status: newStatus as Application['status'],
+            isMoving: true, 
+        targetStatus: newStatus
+      };
+      
+      // Asegurar que la actualización del estado se realice
+      console.log(`Actualizando tarjeta ${applicationId} a estado ${newStatus}`);
+      setAppsWithApproval(updatedApps);
+      
+      // Añadir un timeout para quitar el estado de "moviendo" después de un tiempo
+                  setTimeout(() => {
+        const currentApps = [...appsWithApproval];
+        const currentAppIndex = currentApps.findIndex(app => app.id === applicationId);
+        
+        if (currentAppIndex !== -1) {
+          currentApps[currentAppIndex] = {
+            ...currentApps[currentAppIndex],
+            isMoving: false
+          };
+          console.log(`Completando movimiento de tarjeta ${applicationId}`);
+          setAppsWithApproval(currentApps);
+        }
+      }, 2000);
+    } else {
+      console.warn(`No se encontró la aplicación ${applicationId} para actualizar su estado`);
+    }
+  };
+  
+  // Verify if a status transition is valid
+  const isValidStatusTransition = (fromStatus: string, toStatus: string): boolean => {
+    // Define valid transitions
+    const validTransitions: Record<string, string[]> = {
+      [APPLICATION_STATUS.PENDING]: [
+        APPLICATION_STATUS.NEW,
+        APPLICATION_STATUS.IN_REVIEW,
+        APPLICATION_STATUS.APPROVED,
+        APPLICATION_STATUS.REJECTED,
+        APPLICATION_STATUS.CANCELLED
+      ],
+      [APPLICATION_STATUS.NEW]: [
+        APPLICATION_STATUS.IN_REVIEW,
+        APPLICATION_STATUS.APPROVED,
+        APPLICATION_STATUS.REJECTED,
+        APPLICATION_STATUS.CANCELLED
+      ],
+      [APPLICATION_STATUS.IN_REVIEW]: [
+        APPLICATION_STATUS.NEW,
+        APPLICATION_STATUS.APPROVED,
+        APPLICATION_STATUS.REJECTED,
+        APPLICATION_STATUS.CANCELLED
+      ],
+      [APPLICATION_STATUS.APPROVED]: [
+        APPLICATION_STATUS.IN_REVIEW,
+        APPLICATION_STATUS.POR_DISPERSAR,
+        APPLICATION_STATUS.REJECTED,
+        APPLICATION_STATUS.CANCELLED
+      ],
+      [APPLICATION_STATUS.POR_DISPERSAR]: [
+        APPLICATION_STATUS.COMPLETED,
+        APPLICATION_STATUS.APPROVED,
+        APPLICATION_STATUS.REJECTED,
+        APPLICATION_STATUS.CANCELLED
+      ],
+      [APPLICATION_STATUS.REJECTED]: [
+        APPLICATION_STATUS.NEW,
+        APPLICATION_STATUS.IN_REVIEW
+      ],
+      [APPLICATION_STATUS.COMPLETED]: [
+        // Generally no transitions allowed once completed
+      ],
+      [APPLICATION_STATUS.CANCELLED]: [
+        APPLICATION_STATUS.NEW
+      ],
+      [APPLICATION_STATUS.EXPIRED]: [
+        APPLICATION_STATUS.NEW
+      ],
+      [APPLICATION_STATUS.SOLICITUD]: [
+        APPLICATION_STATUS.NEW,
+        APPLICATION_STATUS.IN_REVIEW,
+        APPLICATION_STATUS.APPROVED
+      ]
+    };
+    
+    // SUPERADMIN can do any transition
+    if (user?.role === 'superadmin') {
+      return true;
+    }
+    
+    // Check if the transition is valid for this status
+    return validTransitions[fromStatus]?.includes(toStatus) || false;
+  };
+  
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('es-MX', {
+      style: 'currency',
+      currency: 'MXN',
+    }).format(amount);
+  };
+  
+  // Renderizar los indicadores de aprobación con mejor formato y legibilidad
+  const renderApprovalIndicators = (app: ApplicationWithApproval) => {
+    if (!app.approvalStatus) return null;
+    
+    const { approvedByAdvisor, approvedByCompany } = app.approvalStatus;
+    const hasFullApproval = approvedByAdvisor && approvedByCompany;
+    
+    return (
+      <div className="flex flex-col mt-1 space-y-1">
+        <div className="flex items-center justify-between">
+          <div className="tooltip tooltip-top flex items-center" data-tip={approvedByAdvisor ? "Aprobado por asesor" : "Pendiente de aprobación por asesor"}>
+            <span className="text-xs mr-1 whitespace-nowrap">Asesor:</span>
+            <div className={`w-3 h-3 rounded-full ${approvedByAdvisor ? 'bg-success' : 'bg-warning'}`}></div>
+            {approvedByAdvisor && (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+          </div>
+          
+          <div className="tooltip tooltip-top flex items-center ml-3" data-tip={approvedByCompany ? "Aprobado por empresa" : "Pendiente de aprobación por empresa"}>
+            <span className="text-xs mr-1 whitespace-nowrap">Empresa:</span>
+            <div className={`w-3 h-3 rounded-full ${approvedByCompany ? 'bg-success' : 'bg-warning'}`}></div>
+            {approvedByCompany && (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+          </div>
+        </div>
+        
+        {/* Indicador de doble aprobación */}
+        {hasFullApproval && (
+          <div className="w-full flex justify-center mt-1">
+            <div className="badge badge-success text-xs px-2 py-1 text-white font-medium">
+              Aprobado Total
+            </div>
+          </div>
+        )}
+        
+        {/* Botón para deshacer aprobación (solo para empresa y si está aprobado) */}
+        {isCompanyAdmin() && approvedByCompany && app.status === APPLICATION_STATUS.APPROVED && (
+          <div className="w-full flex justify-center mt-1">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation(); // Evitar que se propague al card
+                handleDrop(e as unknown as React.DragEvent<HTMLDivElement>, APPLICATION_STATUS.IN_REVIEW);
+              }}
+              className="btn btn-xs btn-error w-full"
+            >
+              Deshacer Aprobación
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+  
+  // Mejorar el formato de las etiquetas de producto para mayor legibilidad
+  const getProductLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'selected_plans': 'Crédito a Plazos',
+      'product_simulations': 'Simulación',
+      'auto_loan': 'Crédito Auto',
+      'car_backed_loan': 'Crédito con Garantía',
+      'personal_loan': 'Préstamo Personal',
+      'cash_advance': 'Adelanto de Efectivo'
+    };
+    
+    return labels[type] || type;
+  };
+  
+  // Función para renderizar el producto como una etiqueta bien formateada
+  const renderProductLabel = (type: string, color: string) => {
+    return (
+      <span className={`badge badge-${color} badge-md text-xs px-3 py-1 whitespace-nowrap inline-block`}>
+        {getProductLabel(type || '')}
+      </span>
+    );
+  };
+  
+  // Función para obtener el color apropiado para la tarjeta según estado y aprobaciones
+  const getCardColor = (app: ApplicationWithApproval) => {
+    const status = app.status || '';
+    
+    // Colores específicos según el estado
+    switch (status.toLowerCase()) {
+      case APPLICATION_STATUS.REJECTED:
+        return 'border-error bg-red-50';
+      case APPLICATION_STATUS.APPROVED:
+        // Si está aprobado, verificar el estado de las aprobaciones
+        if (app.approvalStatus) {
+          const { approvedByAdvisor, approvedByCompany } = app.approvalStatus;
+          if (approvedByAdvisor && approvedByCompany) {
+            return 'border-success bg-green-100'; // Aprobado por ambos - verde intenso
+          } else if (approvedByAdvisor) {
+            return 'border-success bg-green-50'; // Aprobado solo por asesor - verde claro
+          } else if (approvedByCompany) {
+            return 'border-info bg-blue-50'; // Aprobado solo por empresa - azul claro
+          }
+        }
+        // Si está en estado aprobado pero sin aprobaciones específicas
+        return 'border-warning bg-yellow-50';
+      case APPLICATION_STATUS.IN_REVIEW:
+        return 'border-info bg-blue-50';
+      case APPLICATION_STATUS.NEW:
+        return 'border-warning bg-yellow-50';
+      case APPLICATION_STATUS.PENDING:
+        return 'border-warning bg-amber-50';
+      case APPLICATION_STATUS.POR_DISPERSAR:
+        return 'border-accent bg-purple-50';
+      case APPLICATION_STATUS.COMPLETED:
+        return 'border-primary bg-indigo-50';
+      case APPLICATION_STATUS.EXPIRED:
+        return 'border-error bg-red-100';
+      case APPLICATION_STATUS.CANCELLED:
+        return 'border-neutral bg-gray-100';
+      default:
+        // Si el estado no coincide con ninguno de los anteriores, usar el color de la columna
+        return `border-${app.status || 'neutral'}`;
+    }
+  };
+  
+  // Estilos personalizados para mostrar claramente cuáles tarjetas se pueden arrastrar
+  const customStyles = `
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 10px;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #888;
+      border-radius: 10px;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+    
+    .kanban-card {
+      transition: transform 0.2s ease-in-out, opacity 0.2s ease-in-out, box-shadow 0.3s ease-in-out, border-color 0.3s ease;
+      touch-action: none;
+      user-select: none;
+      will-change: transform, opacity;
+    }
+    
+    .kanban-card-draggable {
+      cursor: grab !important;
+      position: relative;
+    }
+    
+    .kanban-card-draggable:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15);
+      border-color: #a855f7;
+      z-index: 10;
+    }
+    
+    .kanban-card-draggable:active {
+      cursor: grabbing !important;
+    }
+    
+    /* Indicator for draggable cards */
+    .kanban-card-draggable::after {
+      content: '';
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 20px;
+      height: 20px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23666'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 013 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11' /%3E%3C/svg%3E");
+      background-size: contain;
+      background-repeat: no-repeat;
+      opacity: 0.7;
+      transition: opacity 0.2s ease;
+    }
+    
+    .kanban-card-draggable:hover::after {
+      opacity: 1;
+    }
+    
+    .kanban-card-locked {
+      position: relative;
+      cursor: not-allowed !important;
+      opacity: 0.8;
+    }
+    
+    .kanban-card-locked::after {
+      content: '';
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 20px;
+      height: 20px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23999'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z' /%3E%3C/svg%3E");
+      background-size: contain;
+      background-repeat: no-repeat;
+      opacity: 0.7;
+    }
+    
+    .kanban-card.dragging {
+      opacity: 0.8;
+      transform: scale(1.03);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      z-index: 50;
+    }
+    
+    .kanban-column {
+      transition: all 0.2s ease;
+      border-radius: 0.75rem;
+      will-change: transform, background-color;
+    }
+    
+    .kanban-column.drag-over {
+      background-color: rgba(var(--b2, 217 217 217) / 0.5);
+      transform: scale(1.01);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+      border: 2px dashed #a855f7 !important;
+    }
+
+    .kanban-container {
+      scroll-behavior: smooth;
+    }
+
+    @media (min-width: 768px) {
+      .kanban-card-draggable:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15);
+      }
+    }
+    
+    /* Animaciones para cambios de estado */
+    @keyframes fadeIn {
+      0% { opacity: 0; }
+      100% { opacity: 1; }
+    }
+    
+    @keyframes slideIn {
+      0% { transform: translateY(10px); opacity: 0; }
+      100% { transform: translateY(0); opacity: 1; }
+    }
+    
+    @keyframes processingPulse {
+      0% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.4); }
+      70% { box-shadow: 0 0 0 6px rgba(124, 58, 237, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0); }
+    }
+    
+    .kanban-card {
+      animation: fadeIn 0.3s ease-out;
+    }
+    
+    .processing-toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 20px;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      animation: slideIn 0.3s ease-out;
+    }
+    
+    .auto-transition-toast {
+      position: fixed;
+      bottom: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 20px;
+      background-color: #dcfce7;
+      border: 1px solid #86efac;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      animation: slideIn 0.3s ease-out;
+    }
+    
+    /* Pop-up tooltip con instrucciones para arrastrar */
+    .drag-instructions {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      padding: 12px 16px;
+      z-index: 1000;
+      max-width: 300px;
+      animation: fadeIn 0.3s ease-out;
+    }
+    
+    /* Mejoras para vista mobile */
+    @media (max-width: 640px) {
+      .kanban-column {
+        min-height: 300px;
+      }
+    }
+  `;
+  
+  // Función para obtener clases draggable
+  const getDraggableClasses = (app: ApplicationWithApproval): string => {
+    // Usar la función canDragCard que está definida en el ámbito superior
+    const isDraggable = canDragCard(app) && app.id !== processingAppId;
+    return isDraggable 
+      ? 'cursor-grab kanban-card-draggable' 
+      : 'cursor-not-allowed opacity-80 kanban-card-locked';
+  };
+
+  // Función para definir los tooltips con información clara y precisa
+  const getDragTooltip = (app: ApplicationWithApproval): string => {
+    if (app.id === processingAppId) {
+      return "Esta tarjeta está siendo procesada";
+    }
+    
+    // Si la tarjeta se puede arrastrar, mostrar mensaje informativo
+    if (canDragCard(app)) {
+      if (isAdvisor()) {
+        // Mensajes específicos para asesores según el estado de la tarjeta
+        if (app.status === APPLICATION_STATUS.NEW || app.status === APPLICATION_STATUS.IN_REVIEW) {
+          return "Arrastra esta tarjeta a APROBADO para registrar tu aprobación";
+        } else if (app.status === APPLICATION_STATUS.APPROVED && !app.approvalStatus?.approvedByAdvisor) {
+          return "Arrastra esta tarjeta para cambiar su estado o aprobarla";
+        }
+      }
+      return "Arrastra para cambiar el estado";
+    }
+    
+    // Mensajes específicos para casos donde no se puede arrastrar
+    if (app.approvalStatus?.approvedByAdvisor && app.approvalStatus?.approvedByCompany) {
+      return "Esta solicitud ya está completamente aprobada y no puede ser movida";
+    }
+    
+    // Asegurarse de que app.status no es undefined
+    const status = app.status || APPLICATION_STATUS.NEW;
+    
+    // Mensajes específicos según el rol y estado
+    if (isAdvisor()) {
+      if (app.assigned_to !== user?.entityId) {
+        return "Solo puedes mover solicitudes que te han sido asignadas";
+      }
+      
+      if (app.status === APPLICATION_STATUS.APPROVED && app.approvalStatus?.approvedByAdvisor) {
+        return "Ya has aprobado esta solicitud";
+      }
+      
+      if (status === APPLICATION_STATUS.POR_DISPERSAR) {
+        return "Esta solicitud ya está lista para dispersión y no puede regresar a estados anteriores";
+      } else if (status === APPLICATION_STATUS.COMPLETED) {
+        return "Esta solicitud ya está completada y no puede cambiar de estado";
+      } else if (status === APPLICATION_STATUS.EXPIRED) {
+        return "Esta solicitud ha expirado y no puede cambiar de estado";
+      } else if (status === APPLICATION_STATUS.CANCELLED) {
+        return "Esta solicitud fue cancelada y no puede cambiar de estado";
+      }
+    } else if (isCompanyAdmin()) {
+      if (status === APPLICATION_STATUS.REJECTED) {
+        return "Las solicitudes rechazadas solo pueden ser movidas por asesores";
+      } else if (status === APPLICATION_STATUS.POR_DISPERSAR) {
+        return "Esta solicitud ya está lista para dispersión y no puede regresar a estados anteriores";
+      } else if (status === APPLICATION_STATUS.COMPLETED) {
+        return "Esta solicitud ya está completada y no puede cambiar de estado";
+      } else if (status === APPLICATION_STATUS.EXPIRED) {
+        return "Esta solicitud ha expirado y no puede cambiar de estado";
+      } else if (status === APPLICATION_STATUS.CANCELLED) {
+        return "Esta solicitud fue cancelada y no puede cambiar de estado";
+      }
+    }
+    
+    return "No puedes mover esta tarjeta en este momento";
+  };
+
+  // Efecto para mover automáticamente tarjetas con ambas aprobaciones a "Por Dispersar"
+  useEffect(() => {
+    const moveFullyApprovedCards = async () => {
+      // Encontrar tarjetas que tienen ambas aprobaciones pero no están en Por Dispersar
+      const fullyApprovedCards = appsWithApproval.filter(app => 
+        app.approvalStatus?.approvedByAdvisor && 
+        app.approvalStatus?.approvedByCompany && 
+        app.status !== APPLICATION_STATUS.POR_DISPERSAR &&
+        app.status !== APPLICATION_STATUS.COMPLETED
+      );
+      
+      if (fullyApprovedCards.length > 0) {
+        console.log(`Encontradas ${fullyApprovedCards.length} tarjetas con aprobación total, moviendo a Por Dispersar...`);
+        
+        // Mover cada tarjeta a Por Dispersar
+        for (const app of fullyApprovedCards) {
+          if (onStatusChange) {
+            try {
+              console.log(`Moviendo tarjeta ${app.id} a Por Dispersar automáticamente...`);
+              await onStatusChange(app, APPLICATION_STATUS.POR_DISPERSAR);
+            } catch (error) {
+              console.error(`Error al mover tarjeta ${app.id} a Por Dispersar:`, error);
+            }
+          }
+        }
+      }
+    };
+    
+    // Ejecutar después de un breve retraso para permitir que los estados se inicialicen
+    const timer = setTimeout(() => {
+      moveFullyApprovedCards();
+    }, 2000);
+    
+    return () => clearTimeout(timer);
+  }, [appsWithApproval, onStatusChange]);
+
+  // Agregar una sincronización de estados avanzados para las aplicaciones existentes
+  useEffect(() => {
+    const syncAdvancedStatusCards = async () => {
+      if (!isCompanyAdmin() || applications.length === 0) return;
+      
+      console.log("Sincronizando tarjetas en estados avanzados para el administrador de empresa...");
+      
+      // Estados avanzados que siempre deben sincronizarse entre ambas vistas
+      const advancedStatuses = [
+        APPLICATION_STATUS.POR_DISPERSAR,
+        APPLICATION_STATUS.COMPLETED,
+        APPLICATION_STATUS.EXPIRED,
+        APPLICATION_STATUS.CANCELLED,
+        APPLICATION_STATUS.REJECTED
+      ];
+      
+      // Buscar aplicaciones con ambas aprobaciones que deberían estar en Por Dispersar
+      const needsStatusUpdate = applications.filter(app => {
+        // Si la aplicación ya está en un estado avanzado, respetar ese estado
+        if (advancedStatuses.includes(asEnum(app.status))) {
+          return false;
+        }
+        
+        // Verificar si tiene ambas aprobaciones
+        return app.approved_by_advisor && app.approved_by_company;
+      });
+      
+      if (needsStatusUpdate.length > 0) {
+        console.log(`Encontradas ${needsStatusUpdate.length} aplicaciones que necesitan actualización de estado:`);
+        
+        const updatedApps = [...appsWithApproval];
+        let hasChanges = false;
+        
+        for (const app of needsStatusUpdate) {
+          console.log(`- Aplicación ${app.id} con ambas aprobaciones, actualizando a Por Dispersar`);
+          
+          const index = updatedApps.findIndex(a => a.id === app.id);
+          if (index !== -1) {
+            updatedApps[index] = {
+              ...updatedApps[index],
+              status: APPLICATION_STATUS.POR_DISPERSAR
+            };
+            hasChanges = true;
+            
+            // Actualizar en la base de datos si es necesario
+            if (onStatusChange) {
+              try {
+                await onStatusChange(app, APPLICATION_STATUS.POR_DISPERSAR);
+                console.log(`✅ Estado de aplicación ${app.id} actualizado a Por Dispersar`);
+              } catch (error) {
+                console.error(`Error al actualizar estado de ${app.id}:`, error);
+              }
+            }
+          }
+        }
+        
+        if (hasChanges) {
+          console.log("Actualizando estado local con aplicaciones sincronizadas");
+          setAppsWithApproval(updatedApps);
+        }
+      }
+    };
+    
+    // Ejecutar la sincronización después de cargar las aplicaciones
+    syncAdvancedStatusCards();
+  }, [applications, isCompanyAdmin, onStatusChange]);
+
+  // Mejora para sincronizar estados entre vistas del asesor y administrador de empresa
+  useEffect(() => {
+    // Evitar ejecuciones innecesarias
+    if (!isCompanyAdmin() || applications.length === 0 || appsWithApproval.length === 0) return;
+      
+    const syncCardStatusesWithAdvisorView = () => {
+      // Obtener todas las aplicaciones que no están en los estados básicos de flujo de empresa
+      const applicationsWithAdvancedStatus = applications.filter(app => {
+        const isBasicStatus = [
+          APPLICATION_STATUS.NEW,
+          APPLICATION_STATUS.IN_REVIEW,
+          APPLICATION_STATUS.APPROVED
+        ].includes(asEnum(app.status));
+        
+        return !isBasicStatus;
+      });
+      
+      if (applicationsWithAdvancedStatus.length > 0) {
+        console.log(`Sincronizando ${applicationsWithAdvancedStatus.length} tarjetas con estados avanzados:`);
+        
+        // Crear una nueva referencia solo si es necesario hacer cambios
+        const updatedApps = [...appsWithApproval];
+        let hasChanges = false;
+        
+        // Actualizar cada aplicación para que refleje el estado real
+        applicationsWithAdvancedStatus.forEach(app => {
+          const index = updatedApps.findIndex(a => a.id === app.id);
+          
+          if (index !== -1 && updatedApps[index].status !== app.status) {
+            console.log(`- Sincronizando aplicación ${app.id} de estado '${updatedApps[index].status}' a '${app.status}'`);
+            
+            // Actualizar el estado para que coincida con el estado real
+            updatedApps[index] = {
+              ...updatedApps[index],
+              status: app.status
+            };
+            
+            hasChanges = true;
+          }
+        });
+        
+        // Actualizar el estado solo si hubo cambios, usando un timeout para evitar ciclos
+        if (hasChanges) {
+          console.log("Actualizando estado local con aplicaciones sincronizadas");
+          // Usar setTimeout para evitar ciclos de renderizado
+          setTimeout(() => {
+          setAppsWithApproval(updatedApps);
+          }, 0);
+        }
+      }
+    };
+    
+    // Ejecutar la sincronización
+    syncCardStatusesWithAdvisorView();
+  }, [applications, appsWithApproval, isCompanyAdmin]); // Añadir appsWithApproval como dependencia
+
+  // Mejora para funcionamiento con tarjetas existentes
+  useEffect(() => {
+    // Solo ejecutar para admin de empresa
+    if (!isCompanyAdmin() || applications.length === 0 || appsWithApproval.length === 0) return;
+    
+    console.log("Verificando y sincronizando estados de tarjetas existentes...");
+    
+    // Encontrar tarjetas que deben mostrar el mismo estado que en la vista del asesor
+    const appsNeedingSync = applications.filter(app => {
+      // Si no está en uno de los estados básicos del flujo de admin de empresa,
+      // debe sincronizarse exactamente con la vista del asesor
+      const isBasicStatus = [
+        APPLICATION_STATUS.NEW,
+        APPLICATION_STATUS.IN_REVIEW,
+        APPLICATION_STATUS.APPROVED
+      ].includes(asEnum(app.status));
+      
+      return !isBasicStatus;
+    });
+    
+    if (appsNeedingSync.length > 0) {
+      console.log(`Encontradas ${appsNeedingSync.length} tarjetas que necesitan sincronización con vista del asesor`);
+      
+      // Crear copia del estado actual
+      const updatedApps = [...appsWithApproval];
+      let hasChanges = false;
+      
+      // Para cada aplicación que necesita sincronización
+      appsNeedingSync.forEach(app => {
+        const index = updatedApps.findIndex(a => a.id === app.id);
+        
+        // Si encontramos la aplicación y su estado es diferente al que debería tener
+        if (index !== -1 && updatedApps[index].status !== app.status) {
+          console.log(`- Actualizando tarjeta ${app.id}: de '${updatedApps[index].status}' a '${app.status}'`);
+          
+          // Actualizar el estado para que coincida con el de la vista del asesor
+          updatedApps[index] = {
+            ...updatedApps[index],
+            status: app.status
+          };
+          
+          hasChanges = true;
+        }
+      });
+      
+      // Si hubo cambios, actualizar el estado
+      if (hasChanges) {
+        console.log("Actualizando estados para sincronizar con vista del asesor");
+        // Usar setTimeout para evitar ciclos de renderizado
+        setTimeout(() => {
+        setAppsWithApproval(updatedApps);
+        }, 0);
+      }
+    }
+  }, [applications, appsWithApproval, isCompanyAdmin]); // Añadir appsWithApproval como dependencia
+
+  // Añadir función para manejar la limpieza de filtros
+  const handleClearFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setTypeFilter('all');
+    setDateFromFilter('');
+    setDateToFilter('');
+    setAmountMinFilter('');
+    setAmountMaxFilter('');
+  };
+
+  // Modificar función para filtrar las aplicaciones según los criterios
+  const getFilteredApplications = (apps: ApplicationWithApproval[]): ApplicationWithApproval[] => {
+    return apps.filter(app => {
+      // Filtro por búsqueda de texto
+      if (searchQuery && !(
+        (app.client_name?.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (app.client_email?.toLowerCase().includes(searchQuery.toLowerCase()))
+      )) {
+        return false;
+      }
+      
+      // Filtro por estado
+      if (statusFilter !== 'all' && app.status !== statusFilter) {
+        return false;
+      }
+      
+      // Filtro por tipo de aplicación
+      if (typeFilter !== 'all' && app.application_type !== typeFilter) {
+        return false;
+      }
+      
+      // Filtro por fecha desde
+      if (dateFromFilter) {
+        const appDate = new Date(app.created_at);
+        const fromDate = new Date(dateFromFilter);
+        if (appDate < fromDate) {
+          return false;
+        }
+      }
+      
+      // Filtro por fecha hasta
+      if (dateToFilter) {
+        const appDate = new Date(app.created_at);
+        const toDate = new Date(dateToFilter);
+        // Ajustar para incluir todo el día
+        toDate.setHours(23, 59, 59, 999);
+        if (appDate > toDate) {
+          return false;
+        }
+      }
+      
+      // Filtro por monto mínimo
+      if (amountMinFilter && parseFloat(amountMinFilter) > 0) {
+        const amount = app.amount || app.requested_amount || 0;
+        if (amount < parseFloat(amountMinFilter)) {
+          return false;
+        }
+      }
+      
+      // Filtro por monto máximo
+      if (amountMaxFilter && parseFloat(amountMaxFilter) > 0) {
+        const amount = app.amount || app.requested_amount || 0;
+        if (amount > parseFloat(amountMaxFilter)) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+  };
+
+  // Agregar esta función antes del return final
+  const handleExport = async (format: 'csv' | 'excel') => {
+    try {
+      // Create a filter object from the current filter state
+      const filters = {
+        searchQuery,
+        status: statusFilter !== 'all' ? [statusFilter] : undefined,
+        applicationType: typeFilter !== 'all' ? [typeFilter] : undefined,
+        dateRange: {
+          start: dateFromFilter ? new Date(dateFromFilter) : undefined,
+          end: dateToFilter ? new Date(dateToFilter) : undefined
+        },
+        amountRange: {
+          min: amountMinFilter ? parseFloat(amountMinFilter) : undefined,
+          max: amountMaxFilter ? parseFloat(amountMaxFilter) : undefined
+        }
+      };
+      
+      // Define columns for export
+      const columns = [
+        { field: 'id', headerName: 'ID' },
+        { field: 'client_name', headerName: 'Cliente' },
+        { field: 'client_email', headerName: 'Email' },
+        { field: 'application_type', headerName: 'Tipo' },
+        { field: 'status', headerName: 'Estado' },
+        { field: 'amount', headerName: 'Monto' },
+        { field: 'created_at', headerName: 'Fecha de Creación' },
+        { field: 'approved_by_advisor', headerName: 'Aprobado por Asesor' },
+        { field: 'approved_by_company', headerName: 'Aprobado por Empresa' }
+      ];
+      
+      // Call the export service
+      await exportFilteredApplications(filters, columns, format);
+      toast.success(`Datos exportados correctamente en formato ${format.toUpperCase()}`);
+    } catch (error) {
+      console.error('Error al exportar datos:', error);
+      toast.error('Error al exportar datos. Inténtelo de nuevo más tarde.');
+    }
+  };
+
+  // Add realtime subscription to applications table
+  useEffect(() => {
+    if (!supabase) {
+      console.error("No Supabase client available for realtime subscription");
+      return;
+    }
+    
+    console.log("Configurando suscripción realtime para aplicaciones...");
+    
+    // Create a channel for the applications table
+    const channel = supabase
+      .channel('public:applications')
+      .on('postgres_changes', 
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: TABLES.APPLICATIONS 
+        }, 
+        async (payload) => {
+          try {
+            console.log('Cambio en tiempo real detectado:', payload);
+            
+            // Find the application in our current state
+            const appIndex = appsWithApproval.findIndex(app => app.id === payload.new.id);
+            
+            if (appIndex === -1) {
+              console.log(`Aplicación ${payload.new.id} no encontrada en el estado actual, ignorando actualización`);
+              return;
+            }
+            
+            // Get the latest approval status for this application
+            let approvalStatus;
+            try {
+              approvalStatus = await getApprovalStatus(payload.new.id);
+              console.log(`Obtenido estado de aprobación para ${payload.new.id}:`, approvalStatus);
+            } catch (error) {
+              console.error(`Error al obtener estado de aprobación para ${payload.new.id}:`, error);
+              // Keep the existing approval status
+              approvalStatus = appsWithApproval[appIndex].approvalStatus;
+            }
+            
+            // Update the application with the new data and approval status
+            setAppsWithApproval(prevApps => {
+              const updatedApps = [...prevApps];
+              updatedApps[appIndex] = {
+                ...updatedApps[appIndex],
+                ...payload.new,
+                approvalStatus: approvalStatus || updatedApps[appIndex].approvalStatus,
+                isMoving: false
+              };
+              return updatedApps;
+            });
+            
+            console.log(`Aplicación ${payload.new.id} actualizada en tiempo real`);
+          } catch (error) {
+            console.error('Error al procesar actualización en tiempo real:', error);
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('Supabase realtime subscription status:', status);
+      });
+    
+    // Cleanup function to remove the channel when the component unmounts
+    return () => {
+      console.log("Cerrando suscripción realtime...");
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, appsWithApproval]); // Dependencies: supabase client and applications list
+
+  if (applications.length === 0) {
+    return (
+      <div className="bg-base-200 p-6 rounded-lg">
+        <h3 className="text-xl font-medium text-center">No hay solicitudes para mostrar</h3>
+        <p className="text-center text-gray-500 mt-2">No se encontraron solicitudes en el sistema</p>
+      </div>
+    );
+  }
+  
+  return (
+    <div className={`kanban-board ${isMobile ? 'mobile-view' : ''}`}>
+      <style>{customStyles}</style>
+      
+      {/* Reemplazar el overlay de carga con una notificación flotante más sutil */}
+      {processingAppId && (
+        <div className="processing-toast">
+          <span className="loading loading-spinner loading-sm text-primary"></span>
+          <p className="font-medium">Actualizando estado...</p>
+        </div>
+      )}
+      
+      {/* Notificación para transiciones automáticas */}
+      {autoTransitionMessage && (
+        <div className="auto-transition-toast">
+          <span className="loading loading-spinner loading-sm text-success"></span>
+          <p className="font-medium">{autoTransitionMessage}</p>
+        </div>
+      )}
+      
+      {errorMessage && (
+        <div className="mb-4 alert alert-error shadow-lg">
+          <div>
+            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>{errorMessage}</span>
+          </div>
+          <div className="flex-none">
+            <button className="btn btn-sm" onClick={() => setErrorMessage(null)}>Cerrar</button>
+          </div>
+        </div>
+      )}
+      
+      {/* Panel de Filtros */}
+      <div className="mb-6">
+        <div className="bg-base-100 border border-base-300 rounded-lg shadow-sm">
+          <div className="flex justify-between items-center p-4 border-b border-base-300">
+            <div className="relative flex-grow mr-4">
+              <input
+                type="text"
+                placeholder="Buscar por nombre o email..."
+                className="input input-bordered w-full pr-10"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+            </div>
+            
+            <div className="flex space-x-2">
+              <div className="dropdown dropdown-end">
+                <label tabIndex={0} className="btn btn-primary btn-sm">
+                  Exportar
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                </label>
+                <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
+                  <li><a onClick={() => handleExport('csv')}>Exportar a CSV</a></li>
+                  <li><a onClick={() => handleExport('excel')}>Exportar a Excel</a></li>
+                </ul>
+            </div>
+            
+            <button 
+              className="btn btn-ghost btn-sm"
+              onClick={() => setIsFilterExpanded(!isFilterExpanded)}
+            >
+              {isFilterExpanded ? 'Ocultar Filtros' : 'Mostrar Filtros'}
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ml-2 transform ${isFilterExpanded ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+            </div>
+          </div>
+          
+          {isFilterExpanded && (
+            <div className="bg-base-200 p-4 rounded-lg">
+              <h3 className="text-lg font-semibold mb-4">Filtros Avanzados</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Estado</span>
+                  </label>
+                  <select
+                    className="select select-bordered w-full"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <option value="all">Todos los estados</option>
+                    {Object.entries(APPLICATION_STATUS).map(([key, value]) => (
+                      <option key={key} value={value}>{STATUS_LABELS[value as keyof typeof STATUS_LABELS] || value}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Tipo de Aplicación</span>
+                  </label>
+                  <select
+                    className="select select-bordered w-full"
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                  >
+                    <option value="all">Todos los tipos</option>
+                    {Object.entries(APPLICATION_TYPE).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Fecha Desde</span>
+                  </label>
+                  <input
+                    type="date"
+                    className="input input-bordered w-full"
+                    value={dateFromFilter}
+                    onChange={(e) => setDateFromFilter(e.target.value)}
+                  />
+                </div>
+                
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Fecha Hasta</span>
+                  </label>
+                  <input
+                    type="date"
+                    className="input input-bordered w-full"
+                    value={dateToFilter}
+                    onChange={(e) => setDateToFilter(e.target.value)}
+                  />
+                </div>
+                
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Monto Mínimo</span>
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    className="input input-bordered w-full"
+                    value={amountMinFilter}
+                    onChange={(e) => setAmountMinFilter(e.target.value)}
+                  />
+                </div>
+                
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Monto Máximo</span>
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    className="input input-bordered w-full"
+                    value={amountMaxFilter}
+                    onChange={(e) => setAmountMaxFilter(e.target.value)}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex justify-end">
+                <button 
+                  className="btn btn-ghost"
+                  onClick={handleClearFilters}
+                >
+                  Limpiar Filtros
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-4 pb-4 kanban-container p-4" style={{ minWidth: '1000px' }}>
+        {/* Modificar bucle de columnas para usar aplicaciones filtradas */}
+        {columns.map(column => {
+          // Filtrar aplicaciones para esta columna
+          const filteredApps = getFilteredApplications(column.applications);
+          
+          return (
+            <div 
+              key={column.id}
+              className={`bg-base-100 rounded-xl shadow-md border-t-4 border-${column.color} border-l border-r border-b flex flex-col h-full kanban-column`}
+              onDragOver={(e) => {
+                handleDragOver(e, column.id);
+              }}
+              onDragLeave={(e) => {
+                e.currentTarget.classList.remove('drag-over');
+              }}
+              onDrop={(e) => {
+                handleDrop(e, column.id);
+              }}
+            >
+              {/* Cabecera de columna con indicador de color */}
+              <div className={`text-center py-3 px-4 font-bold rounded-t-lg flex items-center justify-between bg-${column.color} bg-opacity-10`}>
+                <span className={`text-${column.color} font-bold text-lg`}>{column.title}</span>
+                <span className={`badge badge-${column.color} badge-lg`}>{filteredApps.length}</span>
+              </div>
+              
+              <div className="p-3 space-y-3 min-h-[500px] max-h-[calc(100vh-220px)] overflow-y-auto custom-scrollbar flex-grow">
+                {filteredApps.length === 0 ? (
+                  <div className="flex items-center justify-center h-full opacity-50 border-2 border-dashed border-base-300 rounded-lg p-6">
+                    <div className="text-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <p className="text-sm mt-2">No hay solicitudes</p>
+                    </div>
+                  </div>
+                ) : (
+                  filteredApps.map((app, index) => {
+                    const isCardDraggable = canDragCard(app) && app.id !== processingAppId;
+                    return (
+                      <div
+                        key={app.id}
+                        data-tip={getDragTooltip(app)}
+                        className={`card shadow hover:shadow-lg transition-all ${getCardColor(app)} border-l-4 border-t border-r border-b hover:border-primary kanban-card relative ${app.id === processingAppId ? 'processing' : ''} ${app.isMoving ? 'opacity-90' : ''} ${getDraggableClasses(app)}`}
+                        draggable={isCardDraggable}
+                        onDragStart={isCardDraggable ? (e) => handleDragStart(e, app, index) : undefined}
+                        onDragEnd={isCardDraggable ? handleDragEnd : undefined}
+                        style={{
+                          animation: app.id === processingAppId ? 'processingPulse 1.5s infinite' : ''
+                        }}
+                      >
+                        <div className="card-body p-4">
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex flex-col">
+                              <div className="font-semibold mb-1">{app.client_name}</div>
+                              {renderProductLabel(app.application_type || '', column.color)}
+                            </div>
+                          </div>
+                          
+                          <div className="mt-1">
+                            {/* Info de la empresa */}
+                            <div className="text-sm text-gray-600 mb-2 flex items-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 inline flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                              </svg>
+                              <span className="truncate max-w-[180px] font-medium">
+                                {app.company_name || "Sin empresa"}
+                              </span>
+                            </div>
+                            
+                            {/* Fecha de creación */}
+                            <div className="text-xs text-gray-500 mb-2 flex items-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 inline flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              <span>
+                                {app.created_at ? formatDate(app.created_at, true) : 'N/A'}
+                              </span>
+                            </div>
+                            
+                            {/* Monto */}
+                            <div className="flex items-center mb-3">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className="text-base font-bold text-primary">
+                                {formatCurrency(app.requested_amount || 0)}
+                              </span>
+                            </div>
+                            
+                            {/* Indicadores de estado de aprobación */}
+                            {renderApprovalIndicators(app)}
+                            
+                            <div className="card-actions justify-end mt-3">
+                              {/* Botón para marcar como completado/dispersado (solo para asesores y tarjetas en Por Dispersar) */}
+                              {isAdvisor() && app.status === APPLICATION_STATUS.POR_DISPERSAR && (
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation(); // Evitar navegación al detalle
+                                    e.preventDefault();
+                                    if (onStatusChange) {
+                                      setProcessingAppId(app.id);
+                                      onStatusChange(app, APPLICATION_STATUS.COMPLETED)
+                                        .then(() => {
+                                          setAutoTransitionMessage(`Solicitud ${app.id} marcada como Completada correctamente`);
+                                          setTimeout(() => setAutoTransitionMessage(null), 3000);
+                                        })
+                                        .catch(error => {
+                                          setErrorMessage(`Error al marcar como completado: ${error.message}`);
+                                        })
+                                        .finally(() => {
+                                          setProcessingAppId(null);
+                                        });
+                                    }
+                                  }}
+                                  className="btn btn-sm btn-accent w-full mb-2"
+                                >
+                                  Marcar como Dispersado
+                                </button>
+                              )}
+                              {/* Botón para mover a Por Dispersar cuando hay ambas aprobaciones pero no está en ese estado */}
+                              {isAdvisor() && 
+                               app.approvalStatus?.approvedByAdvisor && 
+                               app.approvalStatus?.approvedByCompany && 
+                               app.status !== APPLICATION_STATUS.POR_DISPERSAR &&
+                               app.status !== APPLICATION_STATUS.COMPLETED && (
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    if (onStatusChange && !processingAppId) {
+                                      setProcessingAppId(app.id);
+                                      onStatusChange(app, APPLICATION_STATUS.POR_DISPERSAR)
+                                        .then(() => {
+                                          setAutoTransitionMessage(`Solicitud movida a Por Dispersar`);
+                                          setTimeout(() => setAutoTransitionMessage(null), 3000);
+                                        })
+                                        .catch(error => {
+                                          console.error("Error al mover a Por Dispersar:", error);
+                                        })
+                                        .finally(() => {
+                                          setTimeout(() => setProcessingAppId(null), 500);
+                                        });
+                                    }
+                                  }}
+                                  className="btn btn-xs btn-accent w-full mt-2 mb-2"
+                                >
+                                  Mover a Por Dispersar
+                                </button>
+                              )}
+                              <Link to={`/applications/${app.id}`} className="btn btn-sm btn-primary w-full">
+                                Ver Detalle
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+export default KanbanBoard; 

@@ -17,7 +17,8 @@ interface ClientDocument {
 interface ClientFormProps {
   initialData?: Partial<Client>;
   onSubmit: (data: Partial<Client>, documents: ClientDocument[]) => Promise<void>;
-  onSavePartial?: (data: Partial<Client>, step: number) => Promise<any>;
+  onSavePartial?: (data: Partial<Client>, step: number) => Promise<Partial<Client> | null>;
+  existingDocuments?: { id: string; name: string; category: string; url?: string }[];
   isSubmitting: boolean;
 }
 
@@ -102,7 +103,7 @@ const RELATIONSHIP_TYPES = [
   { value: 'otro', label: 'Otro' },
 ];
 
-const ClientForm: React.FC<ClientFormProps> = ({ initialData = {}, onSubmit, onSavePartial, isSubmitting }) => {
+const ClientForm: React.FC<ClientFormProps> = ({ initialData = {}, onSubmit, onSavePartial, existingDocuments = [], isSubmitting }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   
@@ -229,31 +230,73 @@ const ClientForm: React.FC<ClientFormProps> = ({ initialData = {}, onSubmit, onS
 
   // Helper function to collect fields for current step
   const collectFieldsForStep = (data: Partial<Client>, step: number): Partial<Client> => {
-    const partialData: Partial<Client> = {};
+    let partialData: Partial<Client> = {};
     
-    // This is a simplified version - your actual implementation may be more complex
     if (step === 1) {
-      // Personal info fields
-      Object.assign(partialData, {
+      // Datos Personales Básicos
+      partialData = {
         first_name: data.first_name,
         paternal_surname: data.paternal_surname,
         maternal_surname: data.maternal_surname,
-        // Add more fields as needed
-      });
+        email: data.email,
+        phone: data.phone,
+        birth_date: data.birth_date,
+        gender: data.gender,
+        marital_status: data.marital_status,
+        rfc: data.rfc,
+        curp: data.curp,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        postal_code: data.postal_code,
+        company_id: data.company_id,
+        home_phone: data.home_phone,
+        birth_state: data.birth_state,
+        nationality: data.nationality,
+        dependent_persons: data.dependent_persons,
+        street_number_ext: data.street_number_ext,
+        street_number_int: data.street_number_int,
+        neighborhood: data.neighborhood,
+        spouse_paternal_surname: data.spouse_paternal_surname,
+        spouse_maternal_surname: data.spouse_maternal_surname,
+      };
     } else if (step === 2) {
-      // Financial info fields
-      Object.assign(partialData, {
+      // Información Laboral y Financiera
+      partialData = {
         employment_type: data.employment_type,
         employment_years: data.employment_years,
-        // Add more fields as needed
-      });
+        job_position: data.job_position,
+        employer_name: data.employer_name,
+        employer_phone: data.employer_phone,
+        employer_address: data.employer_address,
+        employer_activity: data.employer_activity,
+        monthly_income: data.monthly_income,
+        additional_income: data.additional_income,
+        monthly_expenses: data.monthly_expenses,
+        mortgage_payment: data.mortgage_payment,
+        rent_payment: data.rent_payment,
+        other_loan_balances: data.other_loan_balances,
+        income_frequency: data.income_frequency,
+        payment_method: data.payment_method,
+        credit_purpose: data.credit_purpose,
+      };
     } else if (step === 3) {
-      // Bank and reference info
-      Object.assign(partialData, {
+      // Datos Bancarios y Referencias
+      partialData = {
         bank_name: data.bank_name,
         bank_clabe: data.bank_clabe,
-        // Add more fields as needed
-      });
+        bank_account_number: data.bank_account_number,
+        bank_account_type: data.bank_account_type,
+        bank_account_origin: data.bank_account_origin,
+        reference1_name: data.reference1_name,
+        reference1_relationship: data.reference1_relationship,
+        reference1_address: data.reference1_address,
+        reference1_phone: data.reference1_phone,
+        reference2_name: data.reference2_name,
+        reference2_relationship: data.reference2_relationship,
+        reference2_address: data.reference2_address,
+        reference2_phone: data.reference2_phone,
+      };
     }
     
     return partialData;
@@ -1292,6 +1335,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ initialData = {}, onSubmit, onS
               onDocumentRemoved={handleDocumentRemoved}
               existingDocuments={documents}
               categories={DOCUMENT_CATEGORIES}
+              existingServerDocuments={existingDocuments}
             />
           </div>
         );

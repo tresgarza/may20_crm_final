@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { usePermissions } from '../../contexts/PermissionsContext';
 import { useAuth } from '../../contexts/AuthContext';
