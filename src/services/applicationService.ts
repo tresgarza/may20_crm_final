@@ -2,6 +2,7 @@ import { TABLES } from '../utils/constants/tables';
 import { APPLICATION_STATUS } from '../utils/constants/statuses';
 import { supabase, getServiceClient } from '../services/supabaseService';
 import { executeQuery, escapeSqlString } from '../utils/databaseUtils';
+import { v4 as uuidv4 } from 'uuid';
 
 // Verify if APPLICATION_HISTORY table is defined in TABLES
 let APPLICATION_HISTORY_TABLE = TABLES.APPLICATION_HISTORY;
@@ -46,6 +47,8 @@ export interface Application {
   advisor_name?: string;
   approved_by_advisor: boolean;
   approved_by_company: boolean;
+  rejected_by_advisor?: boolean;  // New field to track advisor rejections
+  rejected_by_company?: boolean;  // New field to track company rejections  
   approval_date_advisor?: string;
   approval_date_company?: string;
   dispersal_date?: string;
@@ -445,22 +448,26 @@ export const updateApplicationStatus = async (
       : comment;
       
     try {
+      const historyEntry = {
+        application_id: id,
+        status: status,
+        comment: historyComment,
+        created_by: user_id ? user_id : null
+      };
+
       const { error: historyError } = await supabase
         .from(APPLICATION_HISTORY_TABLE)
-        .insert({
-          application_id: id,
-          status: status,
-          comment: historyComment,
-          created_by: user_id
-        });
-      
+        .insert([historyEntry]);
+
       if (historyError) {
-        console.error(`[updateApplicationStatus] Error adding to history for application ${id}:`, historyError);
-        // We don't throw here to avoid disrupting the status update
+        console.error(`Error recording status history for application ${id}:`, historyError);
+        // Don't throw, as the primary operation succeeded
+      } else {
+        console.log(`Successfully recorded status history for application ${id}`);
       }
-    } catch (historyErr) {
-      console.error(`[updateApplicationStatus] Error adding to history:`, historyErr);
-      // We don't throw here to avoid disrupting the status update
+    } catch (historyError) {
+      console.error(`Error recording status history for application ${id}:`, historyError);
+      // Don't throw this error as it's not critical
     }
     
     console.log(`[updateApplicationStatus] Successfully updated status: ${currentStatus} → ${status}`);
@@ -539,17 +546,14 @@ export const approveByAdvisor = async (
     
     console.log(`Solicitud ${id} aprobada exitosamente por asesor ${advisor_id}`);
     
-    // Añadir al historial usando Supabase client
+    // Guardar en el historial
     const { error: historyError } = await supabase
       .from(APPLICATION_HISTORY_TABLE)
       .insert({
         application_id: id,
-        previous_status: application.advisor_status || application.status,
-        new_status: APPLICATION_STATUS.APPROVED,
-        status_field: 'advisor_status',
-        changed_by: advisor_id,
-        comments: comment || 'Solicitud aprobada por asesor',
-        changed_at: new Date().toISOString()
+        status: APPLICATION_STATUS.APPROVED,
+        comment: comment || 'Solicitud aprobada por asesor',
+        created_by: advisor_id ? advisor_id : null
       });
     
     if (historyError) {
@@ -631,17 +635,14 @@ export const approveByCompany = async (
       throw new Error('Solicitud no encontrada o no tienes permisos para aprobarla');
     }
     
-    // Añadir al historial usando Supabase client
+    // Guardar en el historial
     const { error: historyError } = await supabase
       .from(APPLICATION_HISTORY_TABLE)
       .insert({
         application_id: id,
-        previous_status: application.company_status || application.status,
-        new_status: APPLICATION_STATUS.APPROVED,
-        status_field: 'company_status',
-        changed_by: company_admin_id,
-        comments: comment || 'Solicitud aprobada por empresa',
-        changed_at: new Date().toISOString()
+        status: APPLICATION_STATUS.APPROVED,
+        comment: comment || 'Solicitud aprobada por empresa',
+        created_by: company_admin_id ? company_admin_id : null
       });
     
     if (historyError) {
@@ -721,17 +722,14 @@ export const cancelCompanyApproval = async (
       throw new Error('Solicitud no encontrada o no tienes permisos para cancelar la aprobación');
     }
     
-    // Añadir al historial usando Supabase client
+    // Guardar en el historial
     const { error: historyError } = await supabase
       .from(APPLICATION_HISTORY_TABLE)
       .insert({
         application_id: id,
-        previous_status: application.company_status || application.status,
-        new_status: APPLICATION_STATUS.IN_REVIEW,
-        status_field: 'company_status',
-        changed_by: company_admin_id,
-        comments: comment || 'Aprobación de empresa cancelada',
-        changed_at: new Date().toISOString()
+        status: APPLICATION_STATUS.IN_REVIEW,
+        comment: comment || 'Aprobación de empresa cancelada',
+        created_by: company_admin_id ? company_admin_id : null
       });
     
     if (historyError) {
@@ -1060,7 +1058,7 @@ export const updateApplicationStatusField = async (
       
       // CRITICAL: Do NOT update the main status field when making advisor-specific changes
       // Remove any code that would update 'status' here
-    } 
+    }
     else if (statusField === 'company_status') {
       // Update the approved_by_company flag if status is changing to APPROVED
       if (status === APPLICATION_STATUS.APPROVED) {
@@ -1082,6 +1080,18 @@ export const updateApplicationStatusField = async (
       updateData.status = status;
     }
     
+    // Handle clearing of rejection flags when status changes from REJECTED to something else
+    if (status !== APPLICATION_STATUS.REJECTED) {
+      // Check if the current status is rejected using string comparison
+      // to avoid TypeScript type errors
+      if (String(application.status).toLowerCase() === 'rejected') {
+        // If moving from REJECTED to another status, clear rejection flags
+        updateData.rejected_by_advisor = false;
+        updateData.rejected_by_company = false;
+        console.log(`Clearing rejection flags as application ${id} is changing from REJECTED to ${status}`);
+      }
+    }
+    
     // Special logic for when both parties have approved
     if (
       status === APPLICATION_STATUS.APPROVED &&
@@ -1099,12 +1109,38 @@ export const updateApplicationStatusField = async (
     // Special logic for when any party rejects the application
     if (status === APPLICATION_STATUS.REJECTED && 
         (statusField === 'advisor_status' || statusField === 'company_status')) {
-      // When any party rejects, update all statuses to REJECTED
-      console.log('Application rejected, updating all statuses to REJECTED');
+      // When any party rejects, update the global status to move the card to Rejected column for both users
+      console.log('Application rejected, updating statuses selectively');
+      
+      // Always update the global statuses so the card moves to Rejected in both Kanbans
       updateData.global_status = APPLICATION_STATUS.REJECTED;
       updateData.status = APPLICATION_STATUS.REJECTED;
-      updateData.advisor_status = APPLICATION_STATUS.REJECTED;
-      updateData.company_status = APPLICATION_STATUS.REJECTED;
+      
+      const isAdvisorReject = (statusField === 'advisor_status');
+      
+      // IMPORTANT: Only update the status field of the role that rejected
+      // Keep the other role's status field unchanged
+      if (isAdvisorReject) {
+        // If the advisor rejects, update advisor_status but DO NOT touch company_status
+        updateData.advisor_status = APPLICATION_STATUS.REJECTED;
+        // DO NOT include company_status in updateData to maintain its current state
+        
+        // Set rejection flags
+        updateData.rejected_by_advisor = true;
+        updateData.rejected_by_company = false;
+        console.log('Setting rejected_by_advisor=true, rejected_by_company=false');
+      } else {
+        // If the company rejects, update company_status but DO NOT touch advisor_status
+        updateData.company_status = APPLICATION_STATUS.REJECTED;
+        // DO NOT include advisor_status in updateData to maintain its current state
+        
+        // Set rejection flags
+        updateData.rejected_by_advisor = false;
+        updateData.rejected_by_company = true;
+        console.log('Setting rejected_by_advisor=false, rejected_by_company=true');
+      }
+      
+      console.log(`Rejection update data:`, updateData);
     }
     
     // When using the global_status field, also update the main status to match
@@ -1126,23 +1162,26 @@ export const updateApplicationStatusField = async (
     }
 
     // Record the status change in the history
-    const historyEntry = {
-      application_id: id,
-      previous_status: previousStatus,
-      new_status: status,
-      status_field: statusField,
-      changed_by: user_id,
-      comments: comment || `Status changed from ${previousStatus} to ${status}`,
-      changed_at: new Date().toISOString()
-    };
+    try {
+      const historyEntry = {
+        application_id: id,
+        status: status,
+        comment: comment || `Status changed from ${previousStatus} to ${status}`,
+        created_by: user_id ? user_id : null
+      };
 
-    const { error: historyError } = await supabase
-      .from(APPLICATION_HISTORY_TABLE)
-      .insert([historyEntry]);
+      const { error: historyError } = await supabase
+        .from(APPLICATION_HISTORY_TABLE)
+        .insert([historyEntry]);
 
-    if (historyError) {
+      if (historyError) {
+        console.error(`Error recording status history for application ${id}:`, historyError);
+        // Don't throw, as the primary operation succeeded
+      } else {
+        console.log(`Successfully recorded status history for application ${id}`);
+      }
+    } catch (historyError) {
       console.error(`Error recording status history for application ${id}:`, historyError);
-      // Don't throw, as the primary operation succeeded
     }
 
     return { 
@@ -1236,12 +1275,9 @@ export const markAsDispersed = async (
       .from(APPLICATION_HISTORY_TABLE)
       .insert({
         application_id: id,
-        previous_status: APPLICATION_STATUS.POR_DISPERSAR,
-        new_status: APPLICATION_STATUS.COMPLETED,
-        status_field: 'global_status',
-        changed_by: advisor_id,
-        comments: comment || 'Solicitud marcada como dispersada',
-        changed_at: new Date().toISOString()
+        status: APPLICATION_STATUS.COMPLETED,
+        comment: comment || 'Solicitud marcada como dispersada',
+        created_by: advisor_id ? advisor_id : null
       });
     
     if (historyError) {
@@ -1256,4 +1292,13 @@ export const markAsDispersed = async (
     console.error(`Error marcando solicitud ${id} como dispersada:`, error);
     throw error;
   }
+};
+
+const recordHistory = (tx: any, applicationId: string, previousStatus: string, newStatus: string) => {
+  return tx.application_history.insert({
+    application_id: applicationId,
+    status: newStatus,
+    comment: `Status changed from ${previousStatus} to ${newStatus}`,
+    created_by: null
+  });
 }; 
