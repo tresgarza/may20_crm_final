@@ -197,6 +197,27 @@ const ApplicationsKanban: React.FC = () => {
     // Caso especial - si se mueve a Rechazado, guardar los estados actuales y actualizar todos los estados a RECHAZADO
     if (newStatus === APPLICATION_STATUS.REJECTED) {
       try {
+        console.log(`Rejecting application as ${getStatusField()}`);
+        
+        // Determine who is rejecting based on user role directly
+        let isAdvisorRejecting = false;
+        let isCompanyRejecting = false;
+        
+        // Asignar correctamente basado en el rol y no solo en el statusField
+        if (isAdvisor()) {
+          isAdvisorRejecting = true;
+          isCompanyRejecting = false;
+        } else if (isCompanyAdmin()) {
+          isAdvisorRejecting = false;
+          isCompanyRejecting = true;
+        } else if (isAdmin()) {
+          // Si es un admin global, usar el statusField para determinar
+          isAdvisorRejecting = getStatusField() === 'advisor_status';
+          isCompanyRejecting = getStatusField() === 'company_status';
+        }
+        
+        console.log(`Rejecting with flags - advisor: ${isAdvisorRejecting}, company: ${isCompanyRejecting}`);
+        
         // Actualizar el estado en la base de datos
         const updateQuery = `
           UPDATE applications 
@@ -205,14 +226,16 @@ const ApplicationsKanban: React.FC = () => {
             advisor_status = '${APPLICATION_STATUS.REJECTED}', 
             company_status = '${APPLICATION_STATUS.REJECTED}', 
             global_status = '${APPLICATION_STATUS.REJECTED}',
-            rejected_by_advisor = ${getStatusField() === 'advisor_status' ? 'TRUE' : 'FALSE'},
-            rejected_by_company = ${getStatusField() === 'company_status' ? 'TRUE' : 'FALSE'},
+            rejected_by_advisor = ${isAdvisorRejecting ? 'TRUE' : 'FALSE'},
+            rejected_by_company = ${isCompanyRejecting ? 'TRUE' : 'FALSE'},
             previous_status = '${currentStatus}',
             previous_advisor_status = '${getStatusField() === 'advisor_status' ? currentStatus : ''}',
             previous_company_status = '${getStatusField() === 'company_status' ? currentStatus : ''}',
             previous_global_status = '${getStatusField() === 'global_status' ? currentStatus : ''}'
           WHERE id = '${applicationId}'
         `;
+        
+        console.log(`Executing update query with rejection flags - advisor: ${isAdvisorRejecting}, company: ${isCompanyRejecting}`);
         
         await supabase.rpc('execute_sql', { query_text: updateQuery });
       
@@ -223,9 +246,8 @@ const ApplicationsKanban: React.FC = () => {
         toast.success(`La solicitud ha sido rechazada correctamente.`);
         
         // Forzar una actualización completa
-        if (pendingRefreshRef.current) {
-          fetchApplications();
-        }
+        pendingRefreshRef.current = true;
+        fetchApplications();
         
         return;
       } catch (error: any) {
@@ -266,9 +288,8 @@ const ApplicationsKanban: React.FC = () => {
         toast.success(`La solicitud ha sido reactivada correctamente.`);
         
         // Forzar una actualización completa
-        if (pendingRefreshRef.current) {
-          fetchApplications();
-        }
+        pendingRefreshRef.current = true;
+        fetchApplications();
         
         return;
       } catch (error: any) {
@@ -278,7 +299,34 @@ const ApplicationsKanban: React.FC = () => {
       }
     }
 
-    // ... resto del código existente ...
+    // Para otros estados, usar updateApplicationStatusField del servicio
+    try {
+      console.log(`Actualizando estado de aplicación ${applicationId} a ${newStatus} usando campo ${statusField}`);
+      
+      // Usar el campo de estado correspondiente al rol actual
+      await updateApplicationStatusField(
+        applicationId,
+        newStatus as any,
+        statusField,
+        `Estado cambiado a ${newStatus}`,
+        user?.id || 'system',
+        getEntityFilter()
+      );
+      
+      // Actualizar la UI local
+      updateLocalApplication(application, statusField, newStatus);
+      
+      // Mostrar notificación
+      toast.success(`Estado actualizado correctamente a ${STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS] || newStatus}`);
+      
+      // Forzar una actualización completa
+      pendingRefreshRef.current = true;
+      fetchApplications();
+      
+    } catch (error: any) {
+      console.error('Error al actualizar el estado:', error);
+      toast.error(`Error al actualizar el estado: ${error.message}`);
+    }
   };
   
   if (!userCan(PERMISSIONS.VIEW_APPLICATIONS)) {
