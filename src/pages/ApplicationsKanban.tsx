@@ -165,14 +165,21 @@ const ApplicationsKanban: React.FC = () => {
           // Actualizamos solo el campo específico que se cambió
           if (updatedStatusField === 'advisor_status') {
             updatedApplication.advisor_status = updatedStatus as ApplicationType['status'];
+            // Importante: también actualizamos el campo status para que el cambio visual ocurra
+            updatedApplication.status = updatedStatus as ApplicationType['status'];
           } else if (updatedStatusField === 'company_status') {
             updatedApplication.company_status = updatedStatus as ApplicationType['status'];
+            // Importante: también actualizamos el campo status para que el cambio visual ocurra
+            updatedApplication.status = updatedStatus as ApplicationType['status'];
           } else if (updatedStatusField === 'global_status') {
             updatedApplication.global_status = updatedStatus as ApplicationType['status'];
+            // Importante: también actualizamos el campo status para que el cambio visual ocurra
+            updatedApplication.status = updatedStatus as ApplicationType['status'];
           } else {
             updatedApplication.status = updatedStatus as ApplicationType['status'];
           }
           
+          console.log('Aplicación actualizada localmente:', updatedApplication);
           return updatedApplication;
         }
         return app;

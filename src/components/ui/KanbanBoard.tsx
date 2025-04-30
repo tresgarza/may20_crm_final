@@ -450,11 +450,20 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange,
     // Mark that we're processing this application
     setProcessingAppId(applicationId);
     
-    // Mark this application as moving in the UI
+    // Realizar cambio visual inmediato: mover la tarjeta a la nueva columna mientras se procesa el cambio
     setAppsWithApproval(prev => 
       prev.map(app => 
         app.id === applicationId
-          ? { ...app, isMoving: true } 
+          ? { 
+              ...app, 
+              isMoving: true,
+              // Actualizar inmediatamente el status para mover la tarjeta visualmente
+              status: newStatus,
+              // También actualizar el campo específico según el rol
+              ...(statusField === 'advisor_status' ? { advisor_status: newStatus } : {}),
+              ...(statusField === 'company_status' ? { company_status: newStatus } : {}),
+              ...(statusField === 'global_status' ? { global_status: newStatus } : {})
+            } 
           : app
       )
     );
@@ -481,238 +490,49 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange,
       console.log(`Actualizando ${statusField} a ${newStatus} para aplicación ${application.id}. Payload:`, payload);
       
       // Call the parent component to update the status
-      await onStatusChange(
+      const result = await onStatusChange(
         application,
         newStatus,
         statusField
       );
       
-      // Update local state after successful change
+      console.log('Resultado de actualización de estado:', result);
+      
+      // Update local state after successful change, eliminar isMoving
       setAppsWithApproval(prev => 
         prev.map(app => {
           if (app.id === applicationId) {
-            // Create a new object with updated status
-            const updatedApp = { ...app, isMoving: false };
-            
-            // IMPORTANT: Update ONLY the specific status field and the local "status" property
-            // This ensures that only the current view sees the card in the new position
-            if (statusField === 'advisor_status') {
-              updatedApp.advisor_status = newStatus;
-              updatedApp.status = newStatus; // This is the view-specific status
-              
-              // Si estamos moviendo directo de NEW a APPROVED, actualizar el indicador de aprobación del asesor
-              if (app.status === APPLICATION_STATUS.NEW && newStatus === APPLICATION_STATUS.APPROVED) {
-                updatedApp.approvalStatus = {
-                  ...app.approvalStatus,
-                  approvedByAdvisor: true,
-                  isFullyApproved: app.approvalStatus?.approvedByCompany === true
-                };
-              }
-            } else if (statusField === 'company_status') {
-              updatedApp.company_status = newStatus;
-              updatedApp.status = newStatus; // This is the view-specific status
-              
-              // Si estamos moviendo directo de NEW a APPROVED, actualizar el indicador de aprobación de la empresa
-              if (app.status === APPLICATION_STATUS.NEW && newStatus === APPLICATION_STATUS.APPROVED) {
-                updatedApp.approvalStatus = {
-                  ...app.approvalStatus,
-                  approvedByCompany: true,
-                  isFullyApproved: app.approvalStatus?.approvedByAdvisor === true
-                };
-              }
-            } else if (statusField === 'global_status') {
-              updatedApp.global_status = newStatus;
-              updatedApp.status = newStatus; // This is the view-specific status
-              
-              // Si estamos moviendo directo de NEW a APPROVED en global_status, establecer ambos como aprobados
-              if (app.status === APPLICATION_STATUS.NEW && newStatus === APPLICATION_STATUS.APPROVED) {
-                updatedApp.approvalStatus = {
-                  ...app.approvalStatus,
-                  approvedByAdvisor: true,
-                  approvedByCompany: true,
-                  isFullyApproved: true
-                };
-              }
-            } else {
-              updatedApp.status = newStatus;
-              
-              // Si estamos moviendo directo de NEW a APPROVED en el status principal
-              if (app.status === APPLICATION_STATUS.NEW && newStatus === APPLICATION_STATUS.APPROVED) {
-                if (isAdvisor()) {
-              updatedApp.approvalStatus = {
-                ...app.approvalStatus,
-                    approvedByAdvisor: true,
-                    isFullyApproved: app.approvalStatus?.approvedByCompany === true
-                  };
-                } else if (isCompanyAdmin()) {
-                  updatedApp.approvalStatus = {
-                    ...app.approvalStatus,
-                    approvedByCompany: true,
-                    isFullyApproved: app.approvalStatus?.approvedByAdvisor === true
-                  };
-                } else {
-                  // Para rol de admin, establecer ambos como aprobados
-                  updatedApp.approvalStatus = {
-                    ...app.approvalStatus,
-                    approvedByAdvisor: true,
-                    approvedByCompany: true,
-                isFullyApproved: true
-              };
-                }
-              }
-            }
-            
-            // Handle specific status change actions
-            if (newStatus === APPLICATION_STATUS.REJECTED) {
-              // Rechazar la aplicación
-              if (statusField === 'advisor_status') {
-                // Un asesor está rechazando
-                updatedApp.advisor_status = APPLICATION_STATUS.REJECTED;
-                // NO modificar company_status
-                updatedApp.approvalStatus = {
-                  ...app.approvalStatus,
-                  approvedByAdvisor: false // Asegurarse de quitar cualquier aprobación
-                };
-                console.log('Advisor rejection - setting advisor_status to rejected');
-              } 
-              else if (statusField === 'company_status') {
-                // Una empresa está rechazando
-                updatedApp.company_status = APPLICATION_STATUS.REJECTED;
-                // NO modificar advisor_status
-                updatedApp.approvalStatus = {
-                  ...app.approvalStatus,
-                  approvedByCompany: false // Asegurarse de quitar cualquier aprobación
-                };
-                console.log('Company rejection - setting company_status to rejected');
-              } 
-              else if (statusField === 'status' || statusField === 'global_status') {
-                // Vista global/normal - establecer según el rol
-                if (isAdvisor()) {
-                  updatedApp.advisor_status = APPLICATION_STATUS.REJECTED;
-                  // Mantener company_status como está
-                  updatedApp.approvalStatus = {
-                    ...app.approvalStatus,
-                    approvedByAdvisor: false
-                  };
-                  console.log('Global view: Setting advisor_status to rejected (company_status unchanged)');
-                } 
-                else if (isCompanyAdmin()) {
-                  updatedApp.company_status = APPLICATION_STATUS.REJECTED;
-                  // Mantener advisor_status como está
-                  updatedApp.approvalStatus = {
-                    ...app.approvalStatus,
-                    approvedByCompany: false
-                  };
-                  console.log('Global view: Setting company_status to rejected (advisor_status unchanged)');
-                }
-                else {
-                  // Para administradores globales, marcar según la lógica de negocio
-                  console.log('Global admin determining rejection logic');
-                  // Si el asesor ya había aprobado, entonces la empresa rechazó
-                  if (app.approvalStatus?.approvedByAdvisor === true || 
-                      app.advisor_status === APPLICATION_STATUS.APPROVED) {
-                    updatedApp.company_status = APPLICATION_STATUS.REJECTED;
-                    // Mantener advisor_status como está
-                    updatedApp.approvalStatus = {
-                      ...app.approvalStatus,
-                      approvedByCompany: false
-                    };
-                    console.log('Global admin: Setting company_status to rejected (advisor pre-approved)');
-                  }
-                  // Si la empresa ya había aprobado, entonces el asesor rechazó
-                  else if (app.approvalStatus?.approvedByCompany === true || 
-                           app.company_status === APPLICATION_STATUS.APPROVED) {
-                    updatedApp.advisor_status = APPLICATION_STATUS.REJECTED;
-                    // Mantener company_status como está
-                    updatedApp.approvalStatus = {
-                      ...app.approvalStatus,
-                      approvedByAdvisor: false
-                    };
-                    console.log('Global admin: Setting advisor_status to rejected (company pre-approved)');
-                  }
-                  // Si no hay información clara, asumir que la empresa rechazó (caso más común)
-                  else {
-                    updatedApp.company_status = APPLICATION_STATUS.REJECTED;
-                    // Mantener advisor_status como está
-                    updatedApp.approvalStatus = {
-                      ...app.approvalStatus,
-                      approvedByCompany: false
-                    };
-                    console.log('Global admin: Default to company_status rejected');
-                  }
-                }
-              }
-            }
-            
-            // Si movemos desde REJECTED a otro estado, quitar los indicadores de rechazo
-            if (app.status === APPLICATION_STATUS.REJECTED && newStatus !== APPLICATION_STATUS.REJECTED) {
-              // Restaurar estados a un estado no rechazado
-              if (statusField === 'advisor_status') {
-                updatedApp.advisor_status = newStatus;
-              } else if (statusField === 'company_status') {
-                updatedApp.company_status = newStatus;
-              } else {
-                // En vista global, restaurar ambos estados
-                updatedApp.advisor_status = newStatus;
-                updatedApp.company_status = newStatus;
-              }
-            }
-            
-            // If moving from APPROVED to another status, update approvalStatus
-            if (app.status === APPLICATION_STATUS.APPROVED && newStatus !== APPLICATION_STATUS.APPROVED) {
-              if (statusField === 'advisor_status') {
-                updatedApp.approvalStatus = {
-                  ...app.approvalStatus,
-                  approvedByAdvisor: false,
-                  isFullyApproved: false
-                };
-              } else if (statusField === 'company_status') {
-                updatedApp.approvalStatus = {
-                  ...app.approvalStatus,
-                  approvedByCompany: false,
-                  isFullyApproved: false
-                };
-              }
-            }
-            
-            // Existing code for when both parties have approved
-            if (
-              (statusField === 'advisor_status' && newStatus === APPLICATION_STATUS.APPROVED && app.approvalStatus?.approvedByCompany) ||
-              (statusField === 'company_status' && newStatus === APPLICATION_STATUS.APPROVED && app.approvalStatus?.approvedByAdvisor)
-            ) {
-              updatedApp.approvalStatus = {
-                ...app.approvalStatus,
-                isFullyApproved: true
-              };
-            }
-            
-            return updatedApp;
+            return { ...app, isMoving: false };
           }
           return app;
         })
       );
       
-      // Show success message
-      setSuccessMessage(`Se ha movido "${application.client_name}" a "${STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS]}"`);
+      // Mostrar mensaje de éxito y quitar el indicador de procesamiento
+      setSuccessMessage(`Solicitud actualizada a ${STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS] || newStatus}`);
       setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (error) {
-      console.error('Error updating status:', error);
       
-      // Reset the card to its original state
+    } catch (error) {
+      console.error('Error updating application status:', error);
+      
+      // Revertir el cambio visual si la actualización falló
       setAppsWithApproval(prev => 
         prev.map(app => 
           app.id === applicationId
-            ? { ...app, isMoving: false } 
+            ? { 
+                ...app, 
+                isMoving: false,
+                // Revertir al status original
+                status: application.status,
+                advisor_status: application.advisor_status,
+                company_status: application.company_status,
+                global_status: application.global_status
+              } 
             : app
         )
       );
       
-      // Show error message
-      if (error instanceof Error) {
-        setErrorMessage(`Error: ${error.message}`);
-      } else {
-        setErrorMessage('Error desconocido al actualizar el estado');
-      }
+      setErrorMessage('Error al actualizar el estado. Por favor, intenta de nuevo.');
       setTimeout(() => setErrorMessage(null), 5000);
     } finally {
       // Clear processing state
