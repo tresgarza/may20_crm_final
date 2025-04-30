@@ -31,6 +31,8 @@ const Applications: React.FC = () => {
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('list');
+  const [sortField, setSortField] = useState<string>('created_at');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   
   const fetchApplications = useCallback(async () => {
     setIsLoading(true);
@@ -90,6 +92,46 @@ const Applications: React.FC = () => {
     setDateToFilter('');
     setAmountMinFilter('');
     setAmountMaxFilter('');
+  };
+  
+  // Función para ordenar las aplicaciones
+  const handleSort = (field: string) => {
+    // Si se hace clic en el mismo campo, invertir la dirección del ordenamiento
+    if (field === sortField) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Si se hace clic en un campo diferente, establecerlo como el nuevo campo de ordenamiento
+      // y establecer la dirección a ascendente por defecto
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+  
+  // Función para obtener las aplicaciones ordenadas
+  const getSortedApplications = () => {
+    // Clonar el array para no modificar el original
+    const sortedApps = [...applications];
+    
+    // Ordenar según el campo y dirección actual
+    return sortedApps.sort((a, b) => {
+      let aValue = a[sortField as keyof ApplicationType];
+      let bValue = b[sortField as keyof ApplicationType];
+      
+      // Manejar valores nulos o undefined
+      if (aValue === null || aValue === undefined) aValue = '';
+      if (bValue === null || bValue === undefined) bValue = '';
+      
+      // Convertir a string para comparación (excepto números)
+      if (typeof aValue !== 'number') aValue = String(aValue).toLowerCase();
+      if (typeof bValue !== 'number') bValue = String(bValue).toLowerCase();
+      
+      // Ordenar según la dirección
+      if (sortDirection === 'asc') {
+        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+      } else {
+        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+      }
+    });
   };
   
   const getStatusClass = (status: string) => {
@@ -211,17 +253,71 @@ const Applications: React.FC = () => {
         <table className="table table-zebra w-full">
           <thead>
             <tr>
-              <th>Cliente</th>
-              <th>Empresa</th>
-              <th>Tipo</th>
-              <th>Monto</th>
-              <th>Estado</th>
-              <th>Fecha y Hora</th>
+              <th onClick={() => handleSort('client_name')} className="cursor-pointer">
+                <div className="flex items-center">
+                  Cliente
+                  {sortField === 'client_name' && (
+                    <span className="ml-2 text-primary">
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </span>
+                  )}
+                </div>
+              </th>
+              <th onClick={() => handleSort('company_name')} className="cursor-pointer">
+                <div className="flex items-center">
+                  Empresa
+                  {sortField === 'company_name' && (
+                    <span className="ml-2 text-primary">
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </span>
+                  )}
+                </div>
+              </th>
+              <th onClick={() => handleSort('application_type')} className="cursor-pointer">
+                <div className="flex items-center">
+                  Tipo
+                  {sortField === 'application_type' && (
+                    <span className="ml-2 text-primary">
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </span>
+                  )}
+                </div>
+              </th>
+              <th onClick={() => handleSort('amount')} className="cursor-pointer">
+                <div className="flex items-center">
+                  Monto
+                  {sortField === 'amount' && (
+                    <span className="ml-2 text-primary">
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </span>
+                  )}
+                </div>
+              </th>
+              <th onClick={() => handleSort('status')} className="cursor-pointer">
+                <div className="flex items-center">
+                  Estado
+                  {sortField === 'status' && (
+                    <span className="ml-2 text-primary">
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </span>
+                  )}
+                </div>
+              </th>
+              <th onClick={() => handleSort('created_at')} className="cursor-pointer">
+                <div className="flex items-center">
+                  Fecha y Hora
+                  {sortField === 'created_at' && (
+                    <span className="ml-2 text-primary">
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </span>
+                  )}
+                </div>
+              </th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {applications.map((application) => (
+            {getSortedApplications().map((application) => (
               <tr key={application.id} className="hover cursor-pointer" onClick={() => navigate(`/applications/${application.id}`)}>
                 <td>{application.client_name || 'N/A'}</td>
                 <td>{application.company_name || 'N/A'}</td>
