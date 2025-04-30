@@ -313,7 +313,7 @@ const Applications: React.FC = () => {
                   )}
                 </div>
               </th>
-              <th>Acciones</th>
+              <th className="text-center">Detalle</th>
             </tr>
           </thead>
           <tbody>
@@ -351,22 +351,17 @@ const Applications: React.FC = () => {
                   </span>
                 </td>
                 <td>{application.created_at ? formatDate(application.created_at, 'datetime') : 'N/A'}</td>
-                <td>
-                  <div className="dropdown dropdown-end">
-                    <label tabIndex={0} className="btn btn-ghost btn-circle">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
-                      </svg>
-                    </label>
-                    <ul tabIndex={0} className="dropdown-content menu menu-compact mt-3 p-2 shadow bg-base-100 rounded-box w-52">
-                      <li>
-                        <Link to={`/applications/${application.id}`} className="justify-between">
-                          Ver Detalle
-                          <span className="text-info">⌘T</span>
-                        </Link>
-                      </li>
-                    </ul>
-                  </div>
+                <td className="text-center">
+                  <button 
+                    className="btn btn-primary btn-sm"
+                    onClick={(e) => {
+                      e.stopPropagation(); // Evitar que el onClick del tr se active también
+                      navigate(`/applications/${application.id}`);
+                    }}
+                    title={`Ver detalles de la solicitud ${application.id}`}
+                  >
+                    {application.id.substring(0, 5)}...
+                  </button>
                 </td>
               </tr>
             ))}
