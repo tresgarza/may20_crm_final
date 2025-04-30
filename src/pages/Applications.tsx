@@ -23,14 +23,14 @@ const Applications: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('selected_plans');
   const [dateFromFilter, setDateFromFilter] = useState<string>('');
   const [dateToFilter, setDateToFilter] = useState<string>('');
   const [amountMinFilter, setAmountMinFilter] = useState<string>('');
   const [amountMaxFilter, setAmountMaxFilter] = useState<string>('');
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('list');
   
   const fetchApplications = useCallback(async () => {
     setIsLoading(true);
@@ -42,14 +42,29 @@ const Applications: React.FC = () => {
       const filters: ApplicationFilter = {
         status: statusFilter !== 'all' ? statusFilter : undefined,
         searchQuery: searchQuery || undefined,
-        application_type: typeFilter !== 'all' ? typeFilter : undefined,
+        application_type: 'selected_plans',
         dateFrom: dateFromFilter || undefined,
         dateTo: dateToFilter || undefined,
         amountMin: amountMinFilter ? parseFloat(amountMinFilter) : undefined,
         amountMax: amountMaxFilter ? parseFloat(amountMaxFilter) : undefined
       };
       
+      console.log('Aplicando filtros:', JSON.stringify(filters, null, 2));
+      
       const data = await getApplications(filters, entityFilter);
+      
+      console.log(`Solicitudes recuperadas: ${data.length}`);
+      if (data.length > 0) {
+        console.log('Tipos de solicitudes:', new Set(data.map(app => app.application_type)));
+        
+        // Verificar si hay alguna aplicación que no sea 'selected_plans'
+        const nonSelectedPlans = data.filter(app => app.application_type !== 'selected_plans');
+        if (nonSelectedPlans.length > 0) {
+          console.warn(`ADVERTENCIA: Se encontraron ${nonSelectedPlans.length} solicitudes que no son de tipo 'selected_plans':`);
+          console.warn(nonSelectedPlans.map(app => ({ id: app.id, type: app.application_type })));
+        }
+      }
+      
       setApplications(data);
     } catch (error: any) {
       console.error('Error fetching applications:', error);
@@ -70,7 +85,7 @@ const Applications: React.FC = () => {
   const handleClearFilters = () => {
     setSearchQuery('');
     setStatusFilter('all');
-    setTypeFilter('all');
+    setTypeFilter('selected_plans');
     setDateFromFilter('');
     setDateToFilter('');
     setAmountMinFilter('');
@@ -214,9 +229,11 @@ const Applications: React.FC = () => {
                 <td>{application.client_name || 'N/A'}</td>
                 <td>{application.company_name || 'N/A'}</td>
                 <td>
+                  <span className="badge badge-primary badge-outline">
                   {application.application_type === 'selected_plans' && application.product_type
                     ? getApplicationTypeLabel(application.product_type)
                     : getApplicationTypeLabel(application.application_type)}
+                  </span>
                 </td>
                 <td>{formatCurrency(Number(application.amount || 0))}</td>
                 <td>
@@ -279,7 +296,11 @@ const Applications: React.FC = () => {
     <MainLayout>
       <div className="p-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-          <h1 className="text-2xl font-bold mb-4 md:mb-0">Solicitudes de Crédito</h1>
+          <div>
+            <h1 className="text-2xl font-bold mb-1">Solicitudes de Crédito</h1>
+            <div className="badge badge-primary mb-3">Planes Seleccionados</div>
+            <p className="text-sm text-gray-600">Esta vista muestra exclusivamente solicitudes de tipo "Planes Seleccionados"</p>
+          </div>
           
           <div className="flex gap-2">
             {userCan(PERMISSIONS.CREATE_APPLICATION) && (
@@ -357,17 +378,15 @@ const Applications: React.FC = () => {
                   <div className="form-control">
                     <label className="label">
                       <span className="label-text">Tipo de Aplicación</span>
+                      <span className="label-text-alt text-primary">Enfocado en Planes Seleccionados</span>
                     </label>
-                    <select
-                      className="select select-bordered w-full"
-                      value={typeFilter}
-                      onChange={(e) => setTypeFilter(e.target.value)}
-                    >
-                      <option value="all">Todos los tipos</option>
-                      {Object.entries(APPLICATION_TYPE_LABELS).map(([value, label]) => (
-                        <option key={value} value={value}>{label}</option>
-                      ))}
-                    </select>
+                    <div className="border border-primary rounded-md p-2 bg-primary bg-opacity-10 flex items-center justify-between">
+                      <span className="font-medium text-primary">Planes Seleccionados</span>
+                      <span className="badge badge-primary">Predeterminado</span>
+                    </div>
+                    <label className="label">
+                      <span className="label-text-alt text-info">Esta vista solo muestra Planes Seleccionados</span>
+                    </label>
                   </div>
                   
                   <div className="form-control">
@@ -466,6 +485,16 @@ const Applications: React.FC = () => {
                 </button>
               </div>
             </div>
+          </div>
+          
+          {/* Información sobre el filtro de Planes Seleccionados */}
+          <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded-md">
+            <p className="text-blue-700 text-sm flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Esta vista muestra exclusivamente solicitudes de tipo "Planes Seleccionados". Para ver otros tipos de solicitudes, contacte al administrador del sistema.
+            </p>
           </div>
           
           {viewMode === 'kanban' ? renderKanbanBoard() : renderListView()}
