@@ -165,21 +165,19 @@ const ApplicationsKanban: React.FC = () => {
           // Actualizamos solo el campo específico que se cambió
           if (updatedStatusField === 'advisor_status') {
             updatedApplication.advisor_status = updatedStatus as ApplicationType['status'];
-            // Importante: también actualizamos el campo status para que el cambio visual ocurra
+            // También actualizamos el estado global para la visualización correcta
             updatedApplication.status = updatedStatus as ApplicationType['status'];
           } else if (updatedStatusField === 'company_status') {
             updatedApplication.company_status = updatedStatus as ApplicationType['status'];
-            // Importante: también actualizamos el campo status para que el cambio visual ocurra
+            // También actualizamos el estado global para la visualización correcta
             updatedApplication.status = updatedStatus as ApplicationType['status'];
           } else if (updatedStatusField === 'global_status') {
             updatedApplication.global_status = updatedStatus as ApplicationType['status'];
-            // Importante: también actualizamos el campo status para que el cambio visual ocurra
             updatedApplication.status = updatedStatus as ApplicationType['status'];
           } else {
             updatedApplication.status = updatedStatus as ApplicationType['status'];
           }
           
-          console.log('Aplicación actualizada localmente:', updatedApplication);
           return updatedApplication;
         }
         return app;
@@ -226,19 +224,21 @@ const ApplicationsKanban: React.FC = () => {
         console.log(`Rejecting with flags - advisor: ${isAdvisorRejecting}, company: ${isCompanyRejecting}`);
         
         // Actualizar el estado en la base de datos
+        // Siempre actualizar el estado global a REJECTED para que aparezca en la columna de rechazados
+        // para todos los usuarios, pero preservar los estados específicos de cada rol
         const updateQuery = `
           UPDATE applications 
           SET 
             status = '${APPLICATION_STATUS.REJECTED}', 
-            advisor_status = '${APPLICATION_STATUS.REJECTED}', 
-            company_status = '${APPLICATION_STATUS.REJECTED}', 
-            global_status = '${APPLICATION_STATUS.REJECTED}',
-            rejected_by_advisor = ${isAdvisorRejecting ? 'TRUE' : 'FALSE'},
-            rejected_by_company = ${isCompanyRejecting ? 'TRUE' : 'FALSE'},
+            ${isAdvisorRejecting ? `advisor_status = '${APPLICATION_STATUS.REJECTED}',` : ''}
+            ${isCompanyRejecting ? `company_status = '${APPLICATION_STATUS.REJECTED}',` : ''}
+            ${isAdmin() && getStatusField() === 'global_status' ? `global_status = '${APPLICATION_STATUS.REJECTED}',` : ''}
+            rejected_by_advisor = ${isAdvisorRejecting ? 'TRUE' : application.rejected_by_advisor ? 'TRUE' : 'FALSE'},
+            rejected_by_company = ${isCompanyRejecting ? 'TRUE' : application.rejected_by_company ? 'TRUE' : 'FALSE'},
             previous_status = '${currentStatus}',
-            previous_advisor_status = '${getStatusField() === 'advisor_status' ? currentStatus : ''}',
-            previous_company_status = '${getStatusField() === 'company_status' ? currentStatus : ''}',
-            previous_global_status = '${getStatusField() === 'global_status' ? currentStatus : ''}'
+            previous_advisor_status = '${isAdvisorRejecting ? currentStatus : application.previous_advisor_status || ''}',
+            previous_company_status = '${isCompanyRejecting ? currentStatus : application.previous_company_status || ''}',
+            previous_global_status = '${isAdmin() && getStatusField() === 'global_status' ? currentStatus : application.previous_global_status || ''}'
           WHERE id = '${applicationId}'
         `;
         
@@ -295,8 +295,9 @@ const ApplicationsKanban: React.FC = () => {
         toast.success(`La solicitud ha sido reactivada correctamente.`);
         
         // Forzar una actualización completa
-        pendingRefreshRef.current = true;
-        fetchApplications();
+        if (pendingRefreshRef.current) {
+          fetchApplications();
+        }
         
         return;
       } catch (error: any) {
@@ -306,33 +307,34 @@ const ApplicationsKanban: React.FC = () => {
       }
     }
 
-    // Para otros estados, usar updateApplicationStatusField del servicio
+    // Caso por defecto: Actualizar el estado específico y global
     try {
-      console.log(`Actualizando estado de aplicación ${applicationId} a ${newStatus} usando campo ${statusField}`);
+      console.log(`Actualizando estado de ${getStatusField()} a ${newStatus} para solicitud ${applicationId}`);
       
-      // Usar el campo de estado correspondiente al rol actual
-      await updateApplicationStatusField(
-        applicationId,
-        newStatus as any,
-        statusField,
-        `Estado cambiado a ${newStatus}`,
-        user?.id || 'system',
-        getEntityFilter()
-      );
+      // Crear la consulta que actualiza tanto el campo específico como el campo de estado global
+      const updateQuery = `
+        UPDATE applications 
+        SET 
+          ${getStatusField()} = '${newStatus}',
+          status = '${newStatus}'
+        WHERE id = '${applicationId}'
+      `;
       
-      // Actualizar la UI local
-      updateLocalApplication(application, statusField, newStatus);
+      await supabase.rpc('execute_sql', { query_text: updateQuery });
+      
+      // Actualizar el estado local
+      updateLocalApplication(application, getStatusField(), newStatus);
       
       // Mostrar notificación
-      toast.success(`Estado actualizado correctamente a ${STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS] || newStatus}`);
+      toast.success(`El estado de la solicitud ha sido actualizado correctamente.`);
       
-      // Forzar una actualización completa
+      // Forzar una actualización
       pendingRefreshRef.current = true;
       fetchApplications();
       
     } catch (error: any) {
-      console.error('Error al actualizar el estado:', error);
-      toast.error(`Error al actualizar el estado: ${error.message}`);
+      console.error('Error al actualizar el estado de la solicitud:', error.message);
+      toast.error('Error al actualizar el estado de la solicitud');
     }
   };
   
