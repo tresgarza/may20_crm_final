@@ -8,7 +8,7 @@ import { getApplications, Application as ApplicationType, ApplicationFilter } fr
 import Alert from '../components/ui/Alert';
 import { APPLICATION_TYPE, APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
 import { APPLICATION_STATUS, STATUS_LABELS } from '../utils/constants/statuses';
-import { formatCurrency, formatDate } from '../utils/formatters';
+import { formatCurrency as formatCurrencyUtil, formatDate } from '../utils/formatters';
 import KanbanBoardAdvisor from '../components/ui/KanbanBoardAdvisor';
 import KanbanBoardCompany from '../components/ui/KanbanBoardCompany';
 import KanbanBoard from '../components/ui/KanbanBoard';
@@ -126,10 +126,7 @@ const Applications: React.FC = () => {
   };
   
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CL', {
-      style: 'currency',
-      currency: 'CLP',
-    }).format(amount);
+    return formatCurrencyUtil(amount);
   };
   
   const getApplicationTypeLabel = (type: string): string => {
@@ -239,18 +236,22 @@ const Applications: React.FC = () => {
                 <td>
                   <span
                     className={`badge badge-${
-                      application.status === 'approved'
+                      application.status === APPLICATION_STATUS.APPROVED
                         ? 'success'
-                        : application.status === 'rejected'
+                        : application.status === APPLICATION_STATUS.REJECTED
                         ? 'error'
-                        : application.status === 'pending'
+                        : application.status === APPLICATION_STATUS.NEW
                         ? 'warning'
-                        : application.status === 'in_review'
+                        : application.status === APPLICATION_STATUS.IN_REVIEW
                         ? 'info'
+                        : application.status === APPLICATION_STATUS.COMPLETED
+                        ? 'success'
+                        : application.status === APPLICATION_STATUS.POR_DISPERSAR
+                        ? 'warning'
                         : 'ghost'
                     }`}
                   >
-                    {application.status}
+                    {STATUS_LABELS[application.status as keyof typeof STATUS_LABELS] || application.status}
                   </span>
                 </td>
                 <td>{application.created_at ? formatDate(application.created_at, 'datetime') : 'N/A'}</td>
