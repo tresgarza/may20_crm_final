@@ -1,283 +1,101 @@
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[]
-
+// Generated types for Supabase database
 export interface Database {
   public: {
     Tables: {
-      users: {
-        Row: {
-          id: string
-          created_at: string
-          email: string
-          role: 'admin' | 'advisor' | 'client'
-          first_name: string
-          last_name: string
-          phone: string | null
-          status: 'active' | 'inactive'
-        }
-        Insert: {
-          id?: string
-          created_at?: string
-          email: string
-          role: 'admin' | 'advisor' | 'client'
-          first_name: string
-          last_name: string
-          phone?: string | null
-          status?: 'active' | 'inactive'
-        }
-        Update: {
-          id?: string
-          created_at?: string
-          email?: string
-          role?: 'admin' | 'advisor' | 'client'
-          first_name?: string
-          last_name?: string
-          phone?: string | null
-          status?: 'active' | 'inactive'
-        }
-      }
-      company_admins: {
-        Row: {
-          id: string
-          created_at: string
-          updated_at: string
-          name: string
-          email: string
-          access_code: string
-          company_id: string
-        }
-        Insert: {
-          id?: string
-          created_at?: string
-          updated_at?: string
-          name: string
-          email: string
-          access_code: string
-          company_id: string
-        }
-        Update: {
-          id?: string
-          created_at?: string
-          updated_at?: string
-          name?: string
-          email?: string
-          access_code?: string
-          company_id?: string
-        }
-      }
       applications: {
         Row: {
-          id: string
-          created_at: string
-          company_id: string
-          advisor_id: string
-          client_name: string
-          amount: number
-          status: 'pending' | 'approved' | 'rejected'
-          application_type: 'product' | 'product_simulations'
-          approval_date_company: string | null
-        }
-        Insert: {
-          id?: string
-          created_at?: string
-          company_id: string
-          advisor_id: string
-          client_name: string
-          amount: number
-          status?: 'pending' | 'approved' | 'rejected'
-          application_type?: 'product' | 'product_simulations'
-          approval_date_company?: string | null
-        }
-        Update: {
-          id?: string
-          created_at?: string
-          company_id?: string
-          advisor_id?: string
-          client_name?: string
-          amount?: number
-          status?: 'pending' | 'approved' | 'rejected'
-          application_type?: 'product' | 'product_simulations'
-          approval_date_company?: string | null
-        }
-      }
-      clients: {
-        Row: {
-          id: string
-          created_at: string
-          user_id: string
-          advisor_id: string | null
-          company_name: string
-          industry: string
-          annual_revenue: number | null
-          employee_count: number | null
-          status: 'active' | 'inactive' | 'pending'
-        }
-        Insert: {
-          id?: string
-          created_at?: string
-          user_id: string
-          advisor_id?: string | null
-          company_name: string
-          industry: string
-          annual_revenue?: number | null
-          employee_count?: number | null
-          status?: 'active' | 'inactive' | 'pending'
-        }
-        Update: {
-          id?: string
-          created_at?: string
-          user_id?: string
-          advisor_id?: string | null
-          company_name?: string
-          industry?: string
-          annual_revenue?: number | null
-          employee_count?: number | null
-          status?: 'active' | 'inactive' | 'pending'
-        }
-      }
+          id: string;
+          client_id: string;
+          company_id: string;
+          assigned_to: string;
+          application_type: string;
+          product_type?: string;
+          requested_amount: number;
+          status: string;
+          status_previous?: string;
+          advisor_status?: string;
+          company_status?: string;
+          global_status?: string;
+          previous_status?: string;
+          previous_advisor_status?: string;
+          previous_company_status?: string;
+          previous_global_status?: string;
+          created_at: string;
+          updated_at: string;
+          client_name?: string;
+          client_email?: string;
+          client_phone?: string;
+          client_address?: string;
+          company_name?: string;
+          advisor_name?: string;
+          approved_by_advisor: boolean;
+          approved_by_company: boolean;
+          rejected_by_advisor?: boolean;
+          rejected_by_company?: boolean;
+          approval_date_advisor?: string;
+          approval_date_company?: string;
+          dispersal_date?: string;
+          dni?: string;
+          amount?: number;
+          term?: number;
+          interest_rate?: number;
+          monthly_payment?: number;
+          financing_type?: string;
+          product_url?: string;
+          product_title?: string;
+          product_image?: string;
+        };
+        Insert: any;
+        Update: any;
+      };
       advisors: {
         Row: {
-          id: string
-          created_at: string
-          user_id: string
-          specialization: string[]
-          years_experience: number
-          certification: string[]
-          status: 'active' | 'inactive'
-        }
-        Insert: {
-          id?: string
-          created_at?: string
-          user_id: string
-          specialization?: string[]
-          years_experience?: number
-          certification?: string[]
-          status?: 'active' | 'inactive'
-        }
-        Update: {
-          id?: string
-          created_at?: string
-          user_id?: string
-          specialization?: string[]
-          years_experience?: number
-          certification?: string[]
-          status?: 'active' | 'inactive'
-        }
-      }
-      meetings: {
-        Row: {
-          id: string
-          created_at: string
-          client_id: string
-          advisor_id: string
-          date: string
-          status: 'scheduled' | 'completed' | 'cancelled'
-          notes: string | null
-          meeting_type: 'initial' | 'followup' | 'review'
-          duration: number
-        }
-        Insert: {
-          id?: string
-          created_at?: string
-          client_id: string
-          advisor_id: string
-          date: string
-          status?: 'scheduled' | 'completed' | 'cancelled'
-          notes?: string | null
-          meeting_type: 'initial' | 'followup' | 'review'
-          duration: number
-        }
-        Update: {
-          id?: string
-          created_at?: string
-          client_id?: string
-          advisor_id?: string
-          date?: string
-          status?: 'scheduled' | 'completed' | 'cancelled'
-          notes?: string | null
-          meeting_type?: 'initial' | 'followup' | 'review'
-          duration?: number
-        }
-      }
-      documents: {
-        Row: {
-          id: string
-          created_at: string
-          client_id: string
-          advisor_id: string
-          title: string
-          type: 'contract' | 'report' | 'proposal' | 'other'
-          status: 'draft' | 'pending' | 'approved' | 'rejected'
-          file_url: string
-          approval_date_client: string | null
-          approval_date_advisor: string | null
-        }
-        Insert: {
-          id?: string
-          created_at?: string
-          client_id: string
-          advisor_id: string
-          title: string
-          type: 'contract' | 'report' | 'proposal' | 'other'
-          status?: 'draft' | 'pending' | 'approved' | 'rejected'
-          file_url: string
-          approval_date_client?: string | null
-          approval_date_advisor?: string | null
-        }
-        Update: {
-          id?: string
-          created_at?: string
-          client_id?: string
-          advisor_id?: string
-          title?: string
-          type?: 'contract' | 'report' | 'proposal' | 'other'
-          status?: 'draft' | 'pending' | 'approved' | 'rejected'
-          file_url?: string
-          approval_date_client?: string | null
-          approval_date_advisor?: string | null
-        }
-      }
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      [_ in never]: never
-    }
-    Enums: {
-      [_ in never]: never
-    }
-  }
+          id: string;
+          user_id: string;
+          first_name?: string;
+          last_name?: string;
+          email: string;
+          phone?: string;
+          specialization?: string;
+          company_id?: string;
+          created_at: string;
+          updated_at?: string;
+          status?: string;
+        };
+        Insert: any;
+        Update: any;
+      };
+      // Define other tables as needed
+    };
+    Functions: {};
+    Enums: {};
+  };
 }
 
-// Helper type to extract table types
-export type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]
+export interface User {
+  id: string;
+  email: string;
+  role: string;
+  first_name?: string;
+  last_name?: string;
+  company_id?: string;
+  created_at: string;
+  updated_at?: string;
+  status?: string;
+  phone?: string;
+}
 
-// Commonly used types
-export type User = Tables<'users'>['Row']
-export type Client = Tables<'clients'>['Row']
-export type Advisor = Tables<'advisors'>['Row']
-export type CompanyAdmin = Tables<'company_admins'>['Row']
-export type Meeting = Tables<'meetings'>['Row']
-export type Document = Tables<'documents'>['Row']
+export interface CompanyAdmin {
+  id: string;
+  email: string;
+  company_id: string;
+  created_at: string;
+  role: string;
+  first_name?: string;
+  last_name?: string;
+  status?: string;
+  phone?: string;
+}
 
-// Insert types
-export type UserInsert = Tables<'users'>['Insert']
-export type ClientInsert = Tables<'clients'>['Insert']
-export type AdvisorInsert = Tables<'advisors'>['Insert']
-export type CompanyAdminInsert = Tables<'company_admins'>['Insert']
-export type MeetingInsert = Tables<'meetings'>['Insert']
-export type DocumentInsert = Tables<'documents'>['Insert']
-
-// Update types
-export type UserUpdate = Tables<'users'>['Update']
-export type ClientUpdate = Tables<'clients'>['Update']
-export type AdvisorUpdate = Tables<'advisors'>['Update']
-export type CompanyAdminUpdate = Tables<'company_admins'>['Update']
-export type MeetingUpdate = Tables<'meetings'>['Update']
-export type DocumentUpdate = Tables<'documents'>['Update'] 
+// Ensure this is treated as a module
+export {}; 
