@@ -101,37 +101,32 @@ const Dashboard: React.FC = () => {
       approvedApplications: 0,
       rejectedApplications: 0,
       totalAmount: 0,
-      averageAmount: 0,
+      avgAmount: 0,
       recentApplications: [],
-      applicationsByStatus: {},
+      applicationsByStatus: [],
       applicationsByMonth: [],
-      advisorPerformance: []
+      applicationsByStatusChart: [],
+      totalClients: 0
     };
   };
 
   // Crear datos de respaldo para estadísticas de asesor
   const createFallbackAdvisorStats = (advisorId: string): ApplicationStats => {
     return {
+      applicationId: '',
+      advisorId: advisorId,
       totalApplications: 0,
       pendingApplications: 0,
       approvedApplications: 0,
       rejectedApplications: 0,
       totalAmount: 0,
-      averageAmount: 0,
+      avgAmount: 0,
       recentApplications: [],
-      advisorId: advisorId,
-      advisorName: user?.name || 'Asesor',
       applicationsByMonth: [],
-      applicationsByStatus: {},
-      totalApproved: 0,
-      totalRejected: 0,
-      totalPending: 0,
-      pendingApproval: 0,
+      applicationsByStatus: [],
+      applicationsByStatusChart: [],
       totalClients: 0,
-      totalCompanies: 0,
-      conversionRate: 0,
-      avgTimeToApproval: 0,
-      advisorPerformance: []
+      conversionRate: 0
     };
   };
 
@@ -150,7 +145,9 @@ const Dashboard: React.FC = () => {
       avgApprovalTime: 0,
       applicationsByStatus: [],
       applicationsByMonth: [],
-      advisorPerformance: []
+      advisorPerformance: [],
+      applicationsByStatusChart: [],
+      companyId: companyId
     };
   };
 
@@ -177,6 +174,23 @@ const Dashboard: React.FC = () => {
         companyId: filters.companyId || undefined,
       };
       
+      // Ensure entity filtering is always applied correctly based on user role
+      if (user.role === USER_ROLES.ADVISOR) {
+        // For advisors, always filter by their ID
+        queryFilters.advisorId = user.id;
+        console.log('Applied advisor filter for advisor role:', user.id);
+      } else if (user.role === USER_ROLES.COMPANY_ADMIN) {
+        // For company admins, always filter by their company ID
+        if (!user.entityId) {
+          console.error('Company admin user has no entityId (company_id)');
+          setError('Error: Administrador de empresa sin ID de empresa');
+          setIsLoading(false);
+          return;
+        }
+        queryFilters.companyId = user.entityId;
+        console.log('Applied company filter for company admin role:', user.entityId);
+      }
+      
       console.log('Using query filters:', queryFilters);
 
       if (user.role === USER_ROLES.SUPERADMIN) {
@@ -184,6 +198,12 @@ const Dashboard: React.FC = () => {
         dashboardStats = await getGeneralDashboardStats(queryFilters);
       } else if (user.role === USER_ROLES.ADVISOR) {
         console.log('Loading stats for ADVISOR with ID:', user.id);
+        if (!user.id) {
+          console.error('Advisor user has no ID');
+          setError('Error: Asesor sin ID');
+          setIsLoading(false);
+          return;
+        }
         dashboardStats = await getAdvisorStats(user.id, queryFilters);
         console.log('ADVISOR stats loaded:', {
           totalApplications: dashboardStats?.totalApplications,
@@ -192,13 +212,17 @@ const Dashboard: React.FC = () => {
         });
       } else if (user.role === USER_ROLES.COMPANY_ADMIN) {
         console.log('Loading stats for COMPANY_ADMIN with entity ID:', user.entityId);
-        
-        if (user.entityId) {
-          // Si el usuario es administrador de empresa, cargar estadísticas de la empresa
-          dashboardStats = await getCompanyDashboardStats(user.entityId, queryFilters);
-        } else {
-          console.error('Company admin user has no entityId (company_id)');
+        if (!user.entityId) {
+          console.error('Company admin user has no entityId (company_id) - already checked above');
+          setIsLoading(false);
+          return;
         }
+        dashboardStats = await getCompanyDashboardStats(user.entityId, queryFilters);
+        console.log('COMPANY_ADMIN stats loaded:', {
+          totalApplications: dashboardStats?.totalApplications,
+          approvedApplications: dashboardStats?.approvedApplications,
+          applicationsByStatus: dashboardStats?.applicationsByStatus
+        });
       }
 
       console.log('Received dashboard stats:', dashboardStats);
@@ -209,6 +233,18 @@ const Dashboard: React.FC = () => {
       
       if (dashboardStats && 'applicationsByMonth' in dashboardStats) {
         console.log('Applications by month:', dashboardStats.applicationsByMonth);
+      }
+
+      // Validar que los números coincidan - comprobación adicional
+      if (dashboardStats) {
+        console.log('Verification - Dashboard total stats:', {
+          totalApplications: dashboardStats.totalApplications,
+          byStatus: dashboardStats.applicationsByStatus 
+            ? Array.isArray(dashboardStats.applicationsByStatus) 
+              ? dashboardStats.applicationsByStatus.reduce((sum, item) => sum + item.count, 0) 
+              : Object.values(dashboardStats.applicationsByStatus).reduce((sum: number, count) => sum + (count as number), 0)
+            : 0
+        });
       }
 
       // Obtener información de aprobaciones pendientes
@@ -232,6 +268,7 @@ const Dashboard: React.FC = () => {
       setStats(dashboardStats);
     } catch (error) {
       console.error('Error loading dashboard stats:', error);
+      setError('Error al cargar las estadísticas del dashboard');
     } finally {
       setIsLoading(false);
     }
@@ -256,7 +293,12 @@ const Dashboard: React.FC = () => {
 
   // Check if stats has the amountRanges and mockAdvisorPerformance properties
   const hasExtendedData = (stats: any): stats is DashboardStatsType & { amountRanges: AmountRange[], mockAdvisorPerformance: AdvisorData[] } => {
-    return 'amountRanges' in stats && 'mockAdvisorPerformance' in stats;
+    return stats && 
+           typeof stats === 'object' && 
+           'amountRanges' in stats && 
+           Array.isArray(stats.amountRanges) && 
+           stats.amountRanges.length > 0 &&
+           'mockAdvisorPerformance' in stats;
   };
 
   // Add debug logging for dashboard rendering
@@ -345,7 +387,10 @@ const Dashboard: React.FC = () => {
   return (
     <MainLayout>
       <div className="p-6 space-y-6">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6">Dashboard</h1>
+        <div className="flex items-center">
+          <h1 className="text-2xl font-bold text-gray-800 mb-6">Dashboard</h1>
+          <div className="badge badge-primary ml-3 mb-6">Solo Planes Seleccionados</div>
+        </div>
 
         {partialData && (
           <div className="alert alert-warning mb-4">
@@ -369,14 +414,18 @@ const Dashboard: React.FC = () => {
           />
           <MetricCard
             title="Solicitudes Aprobadas"
-            value={isAdvisorStats(stats) ? stats.approvedApplications : stats.approvedApplications}
+            value={isAdvisorStats(stats) 
+              ? (stats.approvedApplications || 0) 
+              : (stats.approvedApplications || 0)}
             previousValue={0}
             icon={<ClipboardDocumentCheckIcon className="h-5 w-5" />}
             color="green"
           />
           <MetricCard
             title="Monto Promedio"
-            value={isCompanyStats(stats) ? stats.avgAmount : stats.averageAmount}
+            value={isCompanyStats(stats) 
+              ? (stats.avgAmount || 0) 
+              : (stats.avgAmount || 0)}
             formatValue={formatMetricValue}
             icon={<CurrencyDollarIcon className="h-5 w-5" />}
             color="indigo"
@@ -384,7 +433,7 @@ const Dashboard: React.FC = () => {
           {isAdvisorStats(stats) ? (
             <MetricCard
               title="Tasa de Conversión"
-              value={stats.conversionRate}
+              value={Number(stats.conversionRate || 0)}
               isPercentage={true}
               icon={<UserGroupIcon className="h-5 w-5" />}
               color="purple"
@@ -436,12 +485,16 @@ const Dashboard: React.FC = () => {
           <div className="card bg-base-100 shadow-md">
             <div className="card-body">
               <h2 className="card-title text-lg font-semibold">Distribución por Monto</h2>
-              {hasExtendedData(stats) && stats.amountRanges && stats.amountRanges.length > 0 && (
+              {stats && stats.amountRanges && Array.isArray(stats.amountRanges) && stats.amountRanges.length > 0 ? (
                 <AmountRangeChart
                   data={stats.amountRanges}
                   height={300}
                   title=""
                 />
+              ) : (
+                <div className="flex items-center justify-center h-[300px] bg-base-200 rounded-lg">
+                  <p className="text-sm text-gray-500">Sin datos disponibles</p>
+                </div>
               )}
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { Database } from './database.types';
+import type { Database } from './database.types';
 
 type Tables = Database['public']['Tables'];
 type Application = Tables['applications']['Row'];
@@ -6,8 +6,32 @@ type Advisor = Tables['advisors']['Row'];
 
 export interface AdvisorPerformance {
   advisorId: string;
-  applications: number;
+  advisorName: string;
+  totalApplications: number;
+  approvedApplications: number;
+  conversionRate: number;
   approvalRate: number;
+}
+
+export interface StatusCount {
+  status: string;
+  count: number;
+}
+
+export interface MonthlyApplicationCount {
+  month: string;
+  count: number;
+}
+
+export interface AmountRange {
+  range: string;
+  count: number;
+}
+
+export interface MockAdvisorData {
+  advisor_name: string;
+  total_applications: number;
+  approved_applications?: number;
 }
 
 export interface AdvisorPerformanceStats {
@@ -21,58 +45,48 @@ export interface AdvisorPerformanceStats {
   avgApprovalTime: number;
 }
 
+export interface DashboardStats {
+  totalApplications: number;
+  pendingApplications: number;
+  approvedApplications: number;
+  rejectedApplications: number;
+  applicationsByStatus: StatusCount[];
+  applicationsByStatusChart: StatusCount[];
+  applicationsByMonth: MonthlyApplicationCount[];
+  recentApplications: Application[];
+  totalClients: number;
+  totalCompanies?: number;
+  avgAmount: number;
+  totalAmount: number;
+  conversionRate?: number;
+  amountRanges?: AmountRange[];
+  mockAdvisorPerformance?: MockAdvisorData[];
+}
+
+export interface ApplicationStats extends Omit<DashboardStats, 'mockAdvisorPerformance'> {
+  applicationId: string;
+  advisorId: string;
+  applicationsByStatusChart: StatusCount[];
+}
+
+export interface AdvisorStats extends Omit<DashboardStats, 'mockAdvisorPerformance'> {
+  advisorId: string;
+  applicationsByStatusChart: StatusCount[];
+}
+
+export interface CompanyStats extends DashboardStats {
+  totalAdvisors: number;
+  avgApprovalTime: number;
+  advisorPerformance: AdvisorPerformanceStats[];
+  companyId: string;
+}
+
 export interface QueryFilters {
   startDate?: string;
   endDate?: string;
   advisorId?: string;
   companyId?: string;
   status?: string;
-}
-
-export interface DashboardStats {
-  totalApplications: number;
-  pendingApplications: number;
-  approvedApplications: number;
-  rejectedApplications: number;
-  totalAmount: number;
-  averageAmount: number;
-  recentApplications: Application[];
-  applicationsByMonth: Array<{ month: string; count: number }>;
-  applicationsByStatus: Record<string, number>;
-  advisorPerformance: Array<AdvisorPerformance>;
-}
-
-export interface ApplicationStats extends Omit<DashboardStats, 'applicationsByMonth' | 'applicationsByStatus'> {
-  advisorId: string;
-  advisorName: string;
-  applicationsByMonth: Array<{month: string, count: number}>;
-  applicationsByStatus: Record<string, number>;
-  applicationsByStatusChart?: Array<{status: string, count: number}>;
-  totalApproved: number;
-  totalRejected: number;
-  totalPending: number;
-  pendingApproval: number;
-  totalClients: number;
-  totalCompanies: number;
-  conversionRate: number;
-  avgTimeToApproval: number;
-  recent?: any[];
-}
-
-export interface CompanyStats {
-  totalApplications: number;
-  pendingApplications: number;
-  approvedApplications: number;
-  rejectedApplications: number;
-  totalAmount: number;
-  avgAmount: number;
-  recentApplications: Application[];
-  applicationsByMonth: Array<{ month: string; count: number }>;
-  applicationsByStatus: Array<{ status: string; count: number }>;
-  advisorPerformance: AdvisorPerformanceStats[];
-  totalClients: number;
-  totalAdvisors: number;
-  avgApprovalTime: number;
 }
 
 export interface RecentApplication {
