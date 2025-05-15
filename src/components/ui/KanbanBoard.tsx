@@ -17,6 +17,7 @@ interface KanbanBoardProps {
   onStatusChange?: (application: any, newStatus: string, statusField?: string) => Promise<void>;
   statusField?: 'status' | 'advisor_status' | 'company_status' | 'global_status';
   applicationTypeFilter?: string;
+  attentionNeededOnly?: boolean; // Add attentionNeededOnly property
 }
 
 interface ApplicationWithApproval {
@@ -50,7 +51,13 @@ interface ApplicationStatusPayload {
   global_status?: string;
 }
 
-const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange, statusField = 'status', applicationTypeFilter }) => {
+const KanbanBoard: React.FC<KanbanBoardProps> = ({ 
+  applications, 
+  onStatusChange, 
+  statusField = 'status', 
+  applicationTypeFilter,
+  attentionNeededOnly = false // Default to false
+}) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [warnMessage, setWarnMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -165,11 +172,24 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange,
   
   // Get visible applications (limited to 5 by default)
   const getVisibleApplications = (status: string) => {
-    const apps = getApplicationsByStatus(status);
-    if (expandedColumns[status]) {
-      return apps; // Show all if expanded
+    let visibleApps = getApplicationsByStatus(status);
+
+    // Apply application type filter if specified
+    if (applicationTypeFilter && applicationTypeFilter !== 'all') {
+      visibleApps = visibleApps.filter(app => app.application_type === applicationTypeFilter);
     }
-    return apps.slice(0, 5); // Show only first 5
+
+    // Apply attention needed filter if enabled
+    if (attentionNeededOnly) {
+      visibleApps = visibleApps.filter(app => requiresAttention(app));
+    }
+
+    // Expand or collapse based on column state
+    if (expandedColumns[status]) {
+      return visibleApps;
+    } else {
+      return visibleApps.slice(0, 3);
+    }
   };
   
   // Toggle expanded state for a column
@@ -1196,7 +1216,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange,
     const hoursSinceUpdate = (currentTime - lastUpdateTime) / (1000 * 60 * 60);
     
     // Return true if more than 48 hours have passed since the last status update
-    return hoursSinceUpdate >= 1;
+    return hoursSinceUpdate >= 48;
   };
   
     return (

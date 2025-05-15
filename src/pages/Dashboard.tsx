@@ -475,6 +475,12 @@ const Dashboard: React.FC = () => {
     return [];
   };
 
+  // Function to navigate to KanbanBoard with needs attention filter
+  const navigateToAttentionNeededApplications = () => {
+    // Navigate to the Kanban board with a query parameter to indicate we want to filter for attention needed applications
+    navigate('/applications/kanban?filter=attention_needed');
+  };
+
   // Si está cargando, mostrar indicador
   if (isLoading) {
     console.log('Dashboard is in loading state');
@@ -601,6 +607,7 @@ const Dashboard: React.FC = () => {
             icon={<ExclamationCircleIcon className="h-5 w-5" />}
             color="red"
             tooltip="Solicitudes sin cambios en 48+ horas (no rechazadas ni completadas)"
+            onClick={navigateToAttentionNeededApplications}
           />
         </div>
 

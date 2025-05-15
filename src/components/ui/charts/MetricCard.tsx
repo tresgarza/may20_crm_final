@@ -12,6 +12,7 @@ interface MetricCardProps {
   isLoading?: boolean;
   className?: string;
   tooltip?: string;
+  onClick?: () => void;
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -25,6 +26,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
   isLoading = false,
   className = '',
   tooltip,
+  onClick,
 }) => {
   // Calcular la variación porcentual si hay un valor previo
   const calculateChange = () => {
@@ -58,8 +60,14 @@ const MetricCard: React.FC<MetricCardProps> = ({
     ? 'text-red-600 bg-red-50'
     : 'text-gray-600 bg-gray-50';
 
+  // Determine if the card should be clickable
+  const isClickable = typeof onClick === 'function';
+
   return (
-    <div className={`border rounded-lg shadow-sm overflow-hidden ${className}`}>
+    <div 
+      className={`border rounded-lg shadow-sm overflow-hidden ${className} ${isClickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+      onClick={onClick}
+    >
       <div className="p-4">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-gray-600 group relative">
