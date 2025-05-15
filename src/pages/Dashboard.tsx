@@ -4,6 +4,7 @@ import { ChartBarIcon, CurrencyDollarIcon, UserGroupIcon, ClipboardDocumentCheck
 import { useAuth } from '../contexts/AuthContext';
 import { USER_ROLES } from '../utils/constants/roles';
 import { APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
+import { STATUS_LABELS, STATUS_THEME_COLORS, APPLICATION_STATUS } from '../utils/constants/statuses';
 import { DashboardStats, ApplicationStats, CompanyStats } from '../types/dashboard.types';
 import { formatCurrency, formatDate } from '../utils/formatters';
 
@@ -60,6 +61,36 @@ interface ExtendedStats {
 // Tipo combinado para stats con todas las propiedades posibles
 type DashboardStatsType = (DashboardStats | ApplicationStats | CompanyStats) & Partial<ExtendedStats>;
 
+// Add helper functions for getting status labels and colors
+const getStatusLabel = (status: string): string => {
+  // Normalize status to lowercase for case-insensitive comparison
+  const normalizedStatus = status.toLowerCase();
+  
+  // Find the matching APPLICATION_STATUS enum key
+  const statusKey = Object.keys(APPLICATION_STATUS).find(
+    key => APPLICATION_STATUS[key as keyof typeof APPLICATION_STATUS].toLowerCase() === normalizedStatus
+  ) as keyof typeof APPLICATION_STATUS | undefined;
+  
+  // Return the label if found, otherwise return the original status
+  return statusKey ? STATUS_LABELS[APPLICATION_STATUS[statusKey]] : status;
+};
+
+const getStatusColor = (status: string): string => {
+  // Normalize status to lowercase for case-insensitive comparison
+  const normalizedStatus = status.toLowerCase();
+  
+  // Find the matching APPLICATION_STATUS enum key
+  const statusKey = Object.keys(APPLICATION_STATUS).find(
+    key => APPLICATION_STATUS[key as keyof typeof APPLICATION_STATUS].toLowerCase() === normalizedStatus
+  ) as keyof typeof APPLICATION_STATUS | undefined;
+  
+  // Map to appropriate badge color class
+  if (!statusKey) return 'ghost';
+  
+  const themeColor = STATUS_THEME_COLORS[APPLICATION_STATUS[statusKey]];
+  return themeColor || 'ghost';
+};
+
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -83,6 +114,12 @@ const Dashboard: React.FC = () => {
       return formatCurrency(parseFloat(value) || 0);
     }
     return formatCurrency(value || 0);
+  };
+
+  // Create a formatter for percentage values with 2 decimal places
+  const formatPercentageValue = (value: string | number): string => {
+    const numValue = typeof value === 'string' ? parseFloat(value) : value;
+    return numValue.toFixed(2);
   };
 
   // Comprobar si el objeto es de tipo ApplicationStats
@@ -589,6 +626,7 @@ const Dashboard: React.FC = () => {
               title="Tasa de Conversión"
               value={Number(stats?.conversionRate || 0)}
               isPercentage={true}
+              formatValue={formatPercentageValue}
               icon={<UserGroupIcon className="h-5 w-5" />}
               color="purple"
             />
@@ -608,7 +646,19 @@ const Dashboard: React.FC = () => {
             color="red"
             tooltip="Solicitudes sin cambios en 48+ horas (no rechazadas ni completadas)"
             onClick={navigateToAttentionNeededApplications}
-          />
+          >
+            <div className="mt-3 flex justify-center">
+              <button 
+                className="btn btn-sm btn-error text-white" 
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevent double navigation
+                  navigateToAttentionNeededApplications();
+                }}
+              >
+                Ver Solicitudes
+              </button>
+            </div>
+          </MetricCard>
         </div>
 
         {/* Gráficos principales - Always show regardless of data */}
@@ -900,11 +950,8 @@ const Dashboard: React.FC = () => {
                         </td>
                         <td>{formatCurrency(Number(app.amount || 0))}</td>
                         <td>
-                          <span className={`badge badge-${String(app.status) === 'approved' ? 'success' : 
-                                                           String(app.status) === 'rejected' ? 'error' : 
-                                                           String(app.status) === 'pending' ? 'warning' : 
-                                                           String(app.status) === 'in_review' ? 'info' : 'ghost'}`}>
-                            {String(app.status || 'N/A')}
+                          <span className={`badge badge-${getStatusColor(String(app.status || ''))}`}>
+                            {getStatusLabel(String(app.status || 'N/A'))}
                           </span>
                         </td>
                         <td>{app.created_at ? formatDate(String(app.created_at), 'datetime') : 'N/A'}</td>
