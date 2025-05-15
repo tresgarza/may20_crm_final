@@ -856,15 +856,6 @@ const Dashboard: React.FC = () => {
                         );
                       })}
                     </div>
-                    
-                    {/* Información del tiempo de aprobación solo para empresa */}
-                    {isCompanyStats(stats) && (
-                      <div className="stat mt-2 border-t pt-4">
-                        <div className="stat-title">Promedio de Tiempo de Aprobación</div>
-                        <div className="stat-value text-info">{stats.avgApprovalTime.toFixed(1)} días</div>
-                        <div className="stat-desc">Tiempo promedio desde solicitud hasta aprobación</div>
-                      </div>
-                    )}
                   </>
                 ) : (
                 <div className="stats stats-vertical shadow">
@@ -904,13 +895,6 @@ const Dashboard: React.FC = () => {
                             .reduce((sum, item) => sum + item.count, 0) : 0}
                       </div>
                     </div>
-                    {isCompanyStats(stats) && (
-                      <div className="stat">
-                        <div className="stat-title">Promedio de Tiempo de Aprobación</div>
-                        <div className="stat-value text-info">{stats.avgApprovalTime.toFixed(1)} días</div>
-                        <div className="stat-desc">Tiempo promedio desde solicitud hasta aprobación</div>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
