@@ -13,35 +13,115 @@ let tablesVerified = false;
 /**
  * Verifica si una tabla existe en la base de datos
  * @param tableName Nombre de la tabla a verificar
- * @returns Boolean indicando si la tabla existe
+ * @returns true si la tabla existe, false en caso contrario
  */
 export const checkTableExists = async (tableName: string): Promise<boolean> => {
   try {
-    // Add a timeout to prevent blocking the app startup
-    const timeoutPromise = new Promise<boolean>((resolve) => {
-      setTimeout(() => resolve(true), 2000); // 2 second timeout
-    });
+    // Intentar verificar con una consulta simple
+    const { error } = await supabase
+      .from(tableName)
+      .select('count(*)', { count: 'exact', head: true });
+    
+    // Si no hay error, la tabla existe
+    return error ? false : true;
+  } catch (error) {
+    console.error(`Error verificando si la tabla ${tableName} existe:`, error);
+    return false;
+  }
+};
 
-    // Intenta hacer una consulta mínima a la tabla - usando GET en lugar de HEAD
-    const queryPromise = new Promise<boolean>(async (resolve) => {
-      try {
-        const { error } = await supabase
-          .from(tableName)
-          .select('id') // Solo seleccionar ID en lugar de usar HEAD
-          .limit(1);
-        
-        resolve(!error);
-      } catch (error) {
-        console.warn(`Error verificando si la tabla ${tableName} existe:`, error);
-        resolve(false);
+/**
+ * Verifica si una columna existe en una tabla específica
+ * @param tableName Nombre de la tabla
+ * @param columnName Nombre de la columna
+ * @returns true si la columna existe, false en caso contrario
+ */
+export const checkColumnExists = async (tableName: string, columnName: string): Promise<boolean> => {
+  try {
+    // Intentar usar la función RPC si está disponible
+    try {
+      const { data, error } = await supabase.rpc('check_column_exists', {
+        _table_name: tableName,
+        _column_name: columnName
+      });
+      
+      if (error) {
+        throw error;
       }
+      
+      return !!data;
+    } catch (rpcError) {
+      console.warn(`No se pudo usar RPC para verificar columna, usando método alternativo:`, rpcError);
+      
+      // Método alternativo: intentar ordenar por la columna
+      // Si la columna no existe, arrojará un error
+      const { error } = await supabase
+        .from(tableName)
+        .select('id')
+        .limit(1)
+        .order(columnName, { ascending: true });
+      
+      // Si hay error y contiene "column" y el nombre de la columna, es probable que no exista
+      if (error && error.message && (
+        error.message.toLowerCase().includes(`column "${columnName}" does not exist`) ||
+        error.message.toLowerCase().includes(`column ${columnName} does not exist`)
+      )) {
+        return false;
+      }
+      
+      // Si no hay error específico sobre la columna, asumimos que existe
+      return true;
+    }
+  } catch (error) {
+    console.error(`Error verificando si la columna ${columnName} existe en la tabla ${tableName}:`, error);
+    return false;
+  }
+};
+
+/**
+ * Crea una estructura básica de tabla si no existe
+ * @param tableName Nombre de la tabla a crear
+ * @param columns Definición de columnas en formato SQL
+ * @returns true si se creó la tabla con éxito o ya existía, false si hubo error
+ */
+export const ensureTableExists = async (tableName: string, columns: string): Promise<boolean> => {
+  try {
+    // Primero verificar si la tabla ya existe
+    const tableExists = await checkTableExists(tableName);
+    
+    if (tableExists) {
+      console.log(`Tabla ${tableName} ya existe.`);
+      return true;
+    }
+    
+    // Intentar crear la tabla usando SQL directo
+    const query = `
+      CREATE TABLE IF NOT EXISTS public.${tableName} (
+        ${columns}
+      );
+    `;
+    
+    // Ejecutar la consulta usando el endpoint de SQL
+    const response = await fetch('http://localhost:3100/query', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query }),
     });
     
-    // Return true if either the query succeeds or the timeout is reached
-    return await Promise.race([queryPromise, timeoutPromise]);
+    const result = await response.json();
+    
+    if (result.error) {
+      console.error(`Error creando tabla ${tableName}:`, result.error);
+      return false;
+    }
+    
+    console.log(`Tabla ${tableName} creada con éxito.`);
+    return true;
   } catch (error) {
-    console.warn(`Error verificando si la tabla ${tableName} existe:`, error);
-    return true; // Assume table exists on error to prevent blocking the app
+    console.error(`Error en ensureTableExists para ${tableName}:`, error);
+    return false;
   }
 };
 

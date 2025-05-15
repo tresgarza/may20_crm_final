@@ -3,6 +3,14 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { setupDatabase } from './lib/dbSetup';
+
+// Iniciar configuración de la base de datos
+// Ejecuta esta función de forma asíncrona para no bloquear el renderizado
+setupDatabase().catch(err => {
+  console.error('Error en la configuración inicial de la base de datos:', err);
+  // No fallamos catastróficamente, permitimos que la app continúe
+});
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
