@@ -30,7 +30,7 @@ const Applications: React.FC = () => {
   const [amountMaxFilter, setAmountMaxFilter] = useState<string>('');
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('list');
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [sortField, setSortField] = useState<string>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   
