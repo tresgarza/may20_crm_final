@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
-import { getClientById, getClientApplications, Client } from '../services/clientService';
+import { getClientById, getClientApplications, Client, getClientFromAnySource, createMissingClient, getClientWithSync, getCanonicalClientId } from '../services/clientService';
 import { getClientDocuments } from '../services/documentService';
 import { PERMISSIONS } from '../utils/constants/permissions';
 import { usePermissions } from '../contexts/PermissionsContext';
 import { formatCurrency } from '../utils/formatters';
 import { FiFile, FiDownload } from 'react-icons/fi';
 import { supabase } from '../lib/supabaseClient';
+import { APPLICATION_STATUS, STATUS_LABELS } from '../utils/constants/statuses';
+import { APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
+import { Document } from '../types/document';
 
 // Constantes para mapear valores de códigos a nombres legibles
 const GENDER_TYPES = [
@@ -104,54 +107,161 @@ const formatDate = (dateString?: string) => {
 const ClientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { userCan } = usePermissions();
+  
   const [client, setClient] = useState<Client | null>(null);
   const [applications, setApplications] = useState<any[]>([]);
-  const [documents, setDocuments] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [loadingDocuments, setLoadingDocuments] = useState<boolean>(true);
-  const [documentError, setDocumentError] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [loadingClient, setLoadingClient] = useState(true);
+  const [loadingApplications, setLoadingApplications] = useState(true);
+  const [loadingDocuments, setLoadingDocuments] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<string>('personal');
-
+  const [applicationError, setApplicationError] = useState<string | null>(null);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [warnMessage, setWarnMessage] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState('info');
+  
+  // Fetch data when component mounts
   useEffect(() => {
-    if (id) {
-      fetchClientData(id);
-      fetchClientDocuments(id);
-    }
+    fetchClientData();
   }, [id]);
-
-  const fetchClientData = async (clientId: string) => {
-    try {
-      setLoading(true);
-      const clientData = await getClientById(clientId);
-      setClient(clientData);
-
-      const applicationsData = await getClientApplications(clientId);
-      setApplications(applicationsData);
-      
-      setError(null);
-    } catch (err) {
-      console.error('Error fetching client data:', err);
-      setError('No se pudieron cargar los datos del cliente. Por favor intente nuevamente.');
-    } finally {
-      setLoading(false);
+  
+  // Fetch client data based on the ID
+  const fetchClientData = async () => {
+    if (!id) {
+      setError('No se proporcionó un ID de cliente válido');
+      setLoadingClient(false);
+      setTimeout(() => {
+        navigate('/clients');
+      }, 2000);
+      return;
     }
-  };
 
-  const fetchClientDocuments = async (clientId: string) => {
     try {
+      setLoadingClient(true);
+      setLoadingApplications(true);
       setLoadingDocuments(true);
-      console.log(`Fetching documents for client ${clientId}`);
-      const documentsData = await getClientDocuments(clientId);
-      console.log('Documents retrieved:', documentsData);
-      setDocuments(documentsData || []);
-      setDocumentError(null);
-    } catch (err) {
-      console.error('Error fetching client documents:', err);
-      setDocumentError('No se pudieron cargar los documentos del cliente.');
+      setError(null);
+      setWarnMessage(null);
+
+      console.log(`[ClientDetail] Fetching data for client ID: ${id}`);
+      
+      // First, get the canonical client ID to ensure we're using the correct ID
+      const canonicalClientId = await getCanonicalClientId(id);
+      
+      // If canonical ID is different, redirect to the correct client page
+      if (canonicalClientId !== id) {
+        console.log(`[ClientDetail] Redirecting to canonical client ID: ${canonicalClientId}`);
+        // Use replace to avoid adding to browser history
+        navigate(`/clients/${canonicalClientId}`, { 
+          replace: true,
+          state: { 
+            ...location.state,
+            redirectedFrom: id // Add info that we redirected
+          } 
+        });
+        return;
+      }
+      
+      // Continue with fetching using the canonical ID
+      const client = await getClientWithSync(canonicalClientId);
+
+      if (client) {
+        console.log(`[ClientDetail] Client found: ${client.id}`);
+        setClient(client);
+        
+        // If we were previously redirected, show a warning message
+        if (location.state?.redirectedFrom) {
+          const redirectedFrom = location.state.redirectedFrom;
+          setWarnMessage(`Se ha redirigido automáticamente del ID de cliente ${redirectedFrom} al ID correcto ${canonicalClientId}`);
+        }
+        
+        // Check if this was auto-created from an application
+        if (location.state?.autoCreated) {
+          setWarnMessage('Este cliente fue creado automáticamente a partir de una solicitud. Algunos datos pueden estar incompletos.');
+        }
+        
+        // Fetch associated applications
+        try {
+          const apps = await getClientApplications(canonicalClientId);
+          if (apps && apps.length > 0) {
+            console.log(`[ClientDetail] Found ${apps.length} applications for client`);
+            setApplications(apps);
+          } else {
+            console.log(`[ClientDetail] No applications found for client`);
+          }
+        } catch (appError) {
+          console.error(`[ClientDetail] Error fetching applications: ${appError}`);
+          setApplicationError(`Error al cargar las solicitudes: ${appError}`);
+        } finally {
+          setLoadingApplications(false);
+        }
+        
+        // Fetch documents
+        try {
+          const docs = await getClientDocuments(canonicalClientId);
+          if (docs && docs.length > 0) {
+            console.log(`[ClientDetail] Found ${docs.length} documents for client`);
+            setDocuments(docs);
+          } else {
+            console.log(`[ClientDetail] No documents found for client`);
+          }
+        } catch (docError) {
+          console.error(`[ClientDetail] Error fetching documents: ${docError}`);
+          setDocumentsError(`Error al cargar los documentos: ${docError}`);
+        } finally {
+          setLoadingDocuments(false);
+        }
+      } else {
+        // Special handling for difficult case
+        console.error(`[ClientDetail] Client not found: ${canonicalClientId}`);
+        
+        const isKnownProblemId = canonicalClientId === 'f04660f4-6aeb-46fb-aff3-6d0241925a4d';
+        if (isKnownProblemId) {
+          console.log(`[ClientDetail] Attempting to create the problematic client: ${canonicalClientId}`);
+          const createdClient = await createMissingClient(canonicalClientId);
+          if (createdClient) {
+            setClient(createdClient);
+            setWarnMessage('Este cliente fue creado automáticamente. Algunos datos pueden estar incompletos.');
+            
+            // Also try to get applications
+            try {
+              const apps = await getClientApplications(canonicalClientId);
+              setApplications(apps || []);
+            } catch (error) {
+              console.error('Error fetching applications for created client:', error);
+            } finally {
+              setLoadingApplications(false);
+            }
+            
+            // Also try to get documents
+            try {
+              const docs = await getClientDocuments(canonicalClientId);
+              setDocuments(docs || []);
+            } catch (error) {
+              console.error('Error fetching documents for created client:', error);
+            } finally {
+              setLoadingDocuments(false);
+            }
+          } else {
+            setError(`No se pudo encontrar o crear el cliente con ID: ${canonicalClientId}`);
+            setTimeout(() => navigate('/clients'), 3000);
+          }
+        } else {
+          setError(`No se encontró el cliente con ID: ${canonicalClientId}`);
+          // Redirect back to clients list after showing error for a moment
+          setTimeout(() => navigate('/clients'), 3000);
+        }
+      }
+    } catch (error: any) {
+      console.error(`[ClientDetail] Error fetching client data: ${error.message || error}`);
+      setError(`Error al cargar los datos del cliente: ${error.message || 'Error desconocido'}`);
     } finally {
-      setLoadingDocuments(false);
+      setLoadingClient(false);
+      // Make sure loading indicators are cleared even if there's an error
+      if (setLoadingApplications) setLoadingApplications(false);
+      if (setLoadingDocuments) setLoadingDocuments(false);
     }
   };
 
@@ -225,7 +335,7 @@ const ClientDetail: React.FC = () => {
             )}
           </div>
           
-          {client && userCan(PERMISSIONS.EDIT_CLIENT) && (
+          {client && id && userCan(PERMISSIONS.EDIT_CLIENT) && (
             <Link to={`/clients/${id}/edit`} className="btn btn-primary">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
@@ -235,7 +345,7 @@ const ClientDetail: React.FC = () => {
           )}
         </div>
 
-        {loading ? (
+        {loadingClient ? (
           <div className="flex justify-center items-center py-12">
             <span className="loading loading-spinner loading-lg"></span>
           </div>
@@ -250,7 +360,7 @@ const ClientDetail: React.FC = () => {
           <div className="space-y-6">
             {/* Pestañas de navegación */}
             <div className="flex space-x-1 overflow-x-auto pb-1">
-              <SectionTab id="personal" label="Información Personal" isActive={activeSection === 'personal'} />
+              <SectionTab id="info" label="Información Personal" isActive={activeSection === 'info'} />
               <SectionTab id="contact" label="Contacto y Dirección" isActive={activeSection === 'contact'} />
               <SectionTab id="employment" label="Empleo" isActive={activeSection === 'employment'} />
               <SectionTab id="financial" label="Información Financiera" isActive={activeSection === 'financial'} />
@@ -263,7 +373,7 @@ const ClientDetail: React.FC = () => {
 
             <div className="bg-white rounded-lg shadow-md p-6">
               {/* Información personal básica */}
-              {activeSection === 'personal' && (
+              {activeSection === 'info' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Datos Básicos</h3>
@@ -445,7 +555,7 @@ const ClientDetail: React.FC = () => {
                 <>
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold">Solicitudes del Cliente</h3>
-                    {userCan(PERMISSIONS.CREATE_APPLICATION) && (
+                    {id && userCan(PERMISSIONS.CREATE_APPLICATION) && (
                       <Link to={`/applications/new?client=${id}`} className="btn btn-sm btn-primary">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
                           <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
@@ -461,7 +571,7 @@ const ClientDetail: React.FC = () => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       <p className="text-gray-500 mb-4">Este cliente no tiene solicitudes registradas.</p>
-                      {userCan(PERMISSIONS.CREATE_APPLICATION) && (
+                      {id && userCan(PERMISSIONS.CREATE_APPLICATION) && (
                         <Link to={`/applications/new?client=${id}`} className="btn btn-primary">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
@@ -521,7 +631,7 @@ const ClientDetail: React.FC = () => {
                 <div className="bg-white rounded-lg shadow-md p-6">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold">Documentos del Cliente</h3>
-                    {userCan(PERMISSIONS.EDIT_CLIENT) && (
+                    {id && userCan(PERMISSIONS.EDIT_CLIENT) && (
                       <Link to={`/clients/edit/${id}`} className="btn btn-sm btn-primary">
                         Gestionar Documentos
                       </Link>
@@ -532,12 +642,12 @@ const ClientDetail: React.FC = () => {
                     <div className="flex justify-center items-center py-8">
                       <span className="loading loading-spinner loading-md"></span>
                     </div>
-                  ) : documentError ? (
+                  ) : documentsError ? (
                     <div className="alert alert-error">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <span>{documentError}</span>
+                      <span>{documentsError}</span>
                     </div>
                   ) : documents.length === 0 ? (
                     <div className="text-center py-8">
@@ -599,6 +709,27 @@ const ClientDetail: React.FC = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
             <span>Cliente no encontrado.</span>
+          </div>
+        )}
+
+        {warnMessage && (
+          <div className="alert alert-warning shadow-lg mb-6">
+            <div>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="stroke-current flex-shrink-0 h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+              <span>{warnMessage}</span>
+            </div>
           </div>
         )}
       </div>

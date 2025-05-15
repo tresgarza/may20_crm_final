@@ -11,6 +11,7 @@ interface MetricCardProps {
   isPercentage?: boolean;
   isLoading?: boolean;
   className?: string;
+  tooltip?: string;
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -23,6 +24,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
   isPercentage = false,
   isLoading = false,
   className = '',
+  tooltip,
 }) => {
   // Calcular la variación porcentual si hay un valor previo
   const calculateChange = () => {
@@ -60,7 +62,14 @@ const MetricCard: React.FC<MetricCardProps> = ({
     <div className={`border rounded-lg shadow-sm overflow-hidden ${className}`}>
       <div className="p-4">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-medium text-gray-600">{title}</h3>
+          <h3 className="text-sm font-medium text-gray-600 group relative">
+            {title}
+            {tooltip && (
+              <span className="hidden group-hover:block absolute bottom-full left-0 bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap z-10">
+                {tooltip}
+              </span>
+            )}
+          </h3>
           {icon && <div className={`p-2 rounded-full ${colorClasses}`}>{icon}</div>}
         </div>
 

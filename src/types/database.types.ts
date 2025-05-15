@@ -1,76 +1,71 @@
 // Generated types for Supabase database
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       applications: {
         Row: {
           id: string;
-          client_id: string;
-          company_id: string;
-          assigned_to: string;
-          application_type: string;
-          product_type?: string;
-          requested_amount: number;
-          status: string;
-          status_previous?: string;
-          advisor_status?: string;
-          company_status?: string;
-          global_status?: string;
-          previous_status?: string;
-          previous_advisor_status?: string;
-          previous_company_status?: string;
-          previous_global_status?: string;
-          created_at: string;
-          updated_at: string;
+          client_id?: string;
           client_name?: string;
-          client_email?: string;
-          client_phone?: string;
-          client_address?: string;
+          company_id?: string;
           company_name?: string;
-          advisor_name?: string;
-          approved_by_advisor: boolean;
-          approved_by_company: boolean;
+          assigned_to?: string;
+          status?: string;
+          amount?: number;
+          application_type?: string;
+          created_at?: string;
+          updated_at?: string;
+          approved_by_advisor?: boolean;
+          approved_by_company?: boolean;
           rejected_by_advisor?: boolean;
           rejected_by_company?: boolean;
           approval_date_advisor?: string;
           approval_date_company?: string;
-          dispersal_date?: string;
-          dni?: string;
-          amount?: number;
-          term?: number;
-          interest_rate?: number;
-          monthly_payment?: number;
           financing_type?: string;
-          product_url?: string;
-          product_title?: string;
-          product_image?: string;
+          product_type?: string;
+          deletedAt?: string | null;
+          [key: string]: any;
         };
-        Insert: any;
-        Update: any;
       };
       advisors: {
         Row: {
           id: string;
-          user_id: string;
-          first_name?: string;
-          last_name?: string;
-          email: string;
-          phone?: string;
+          user_id?: string;
+          email?: string;
+          name?: string;
+          access_code?: string;
           specialization?: string;
           company_id?: string;
-          created_at: string;
-          updated_at?: string;
-          status?: string;
+          [key: string]: any;
         };
-        Insert: any;
-        Update: any;
       };
-      // Define other tables as needed
+      companies: {
+        Row: {
+          id: string;
+          name?: string;
+          [key: string]: any;
+        };
+      };
+      clients: {
+        Row: {
+          id: string;
+          [key: string]: any;
+        };
+      };
+      users: {
+        Row: {
+          id: string;
+          first_name?: string;
+          last_name?: string;
+          email?: string;
+          [key: string]: any;
+        };
+      };
     };
     Functions: {};
     Enums: {};
   };
-}
+};
 
 export interface User {
   id: string;

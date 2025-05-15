@@ -121,11 +121,11 @@ export const executeMcpQuery = async (query: string): Promise<any[]> => {
       },
       body: JSON.stringify({ query }),
     });
-    
+
     if (!response.ok) {
       throw new Error(`MCP server responded with status: ${response.status}`);
     }
-    
+
     const result = await response.json();
     return result.data || [];
   } catch (error) {
@@ -212,8 +212,8 @@ export const executeQuery = async (query: string): Promise<any[]> => {
             return [approvalStatusCache.get(appId)];
           }
           // Otherwise, rethrow the error
-          throw error;
-        }
+    throw error;
+  }
       }
     }
     

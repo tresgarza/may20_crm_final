@@ -186,7 +186,7 @@ export const getApplications = async (filters?: ApplicationFilter, entityFilter?
       
       return {
         id: app.id,
-        client_id: app.source_id || "",
+        client_id: app.client_id || "",
         company_id: app.company_id || "",
         assigned_to: app.assigned_to || "",
         application_type: app.application_type || "",
@@ -206,6 +206,8 @@ export const getApplications = async (filters?: ApplicationFilter, entityFilter?
         advisor_name: "", // Este campo no está en la BD
         approved_by_advisor: app.approved_by_advisor || false,
         approved_by_company: app.approved_by_company || false,
+        rejected_by_advisor: app.rejected_by_advisor || false,
+        rejected_by_company: app.rejected_by_company || false,
         approval_date_advisor: app.approval_date_advisor,
         approval_date_company: app.approval_date_company,
         
@@ -279,6 +281,8 @@ const mapStatusFromDB = (dbStatus: string): ApplicationStatus => {
 
 // Get a single application by ID
 export const getApplicationById = async (id: string, entityFilter?: Record<string, any> | null) => {
+  console.log(`[getApplicationById] Fetching application with ID: ${id}`);
+  
   let query = `SELECT * FROM ${TABLES.APPLICATIONS} WHERE id = '${id}'`;
   
   // Aplicar filtro por entidad si es necesario
@@ -294,7 +298,56 @@ export const getApplicationById = async (id: string, entityFilter?: Record<strin
   try {
     const data = await executeQuery(query);
     if (data && data.length > 0) {
-      return data[0] as Application;
+      const app = data[0];
+      const originalClientId = app.client_id;
+      
+      // Verificar si el ID del cliente es válido (formato UUID y existe en la BD)
+      if (app.client_id) {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        const isValidUuid = uuidRegex.test(app.client_id);
+        
+        if (isValidUuid) {
+          // Importamos la función para verificar la existencia del cliente
+          const { checkClientExistsById } = require('../services/clientService');
+          
+          try {
+            const clientExists = await checkClientExistsById(app.client_id);
+            
+            // Si el cliente no existe pero tenemos source_id, intentamos usarlo como respaldo
+            if (!clientExists && app.source_id) {
+              console.log(`[getApplicationById] Cliente con ID ${app.client_id} no encontrado, verificando source_id: ${app.source_id}`);
+              
+              // Verificar también si source_id existe como cliente
+              const sourceIdExists = await checkClientExistsById(app.source_id);
+              
+              if (sourceIdExists) {
+                console.log(`[getApplicationById] source_id ${app.source_id} es válido, usándolo como respaldo`);
+                app.client_id = app.source_id;
+              } else {
+                console.log(`[getApplicationById] Ni client_id ni source_id son válidos. Manteniendo client_id original.`);
+              }
+            } else {
+              console.log(`[getApplicationById] Cliente con ID ${app.client_id} ${clientExists ? 'existe' : 'no existe'}`);
+            }
+          } catch (checkError) {
+            console.error(`[getApplicationById] Error verificando cliente: ${checkError}`);
+          }
+        } else {
+          console.log(`[getApplicationById] ID de cliente ${app.client_id} tiene formato no válido`);
+          
+          // Si el ID no es un UUID válido y tenemos source_id, intentamos usarlo
+          if (app.source_id) {
+            console.log(`[getApplicationById] Usando source_id ${app.source_id} como respaldo`);
+            app.client_id = app.source_id;
+          }
+        }
+      }
+      
+      if (originalClientId !== app.client_id) {
+        console.log(`[getApplicationById] client_id cambiado de ${originalClientId} a ${app.client_id}`);
+      }
+      
+      return app as Application;
     }
     throw new Error('Application not found');
   } catch (error) {
@@ -985,221 +1038,270 @@ export const calculateMonthlyPayment = (loanAmount: number, interestRate: number
   return Math.round(monthlyPayment * 100) / 100;
 };
 
-// Update a specific status field (advisor_status, company_status, or global_status)
-export const updateApplicationStatusField = async (
-  id: string, 
-  status: Application['status'],
-  statusField: 'advisor_status' | 'company_status' | 'global_status' | 'status',
+/**
+ * Logs a status change to the application history table
+ */
+export const logStatusChange = async (
+  applicationId: string,
+  statusField: string,
+  newStatus: string,
   comment: string, 
-  user_id: string,
-  entityFilter?: Record<string, any> | null
-) => {
+  userId: string
+): Promise<void> => {
   try {
-    // Validate the status field
-    if (!['advisor_status', 'company_status', 'global_status', 'status'].includes(statusField)) {
-      throw new Error(`Invalid status field: ${statusField}`);
+    console.log(`Registrando cambio de ${statusField} a ${newStatus} en el historial para aplicación ${applicationId}`);
+    
+    const { error } = await supabase
+      .from(APPLICATION_HISTORY_TABLE)
+      .insert({
+        application_id: applicationId,
+        status: newStatus,
+        comment: comment || `Estado ${statusField} cambiado a ${newStatus}`,
+        created_by: userId || null
+      });
+    
+    if (error) {
+      console.error(`Error al registrar historial para aplicación ${applicationId}:`, error);
+      // No interrumpimos el flujo por errores en el historial
+    } else {
+      console.log(`Historial registrado correctamente para la aplicación ${applicationId}`);
     }
+  } catch (error) {
+    console.error(`Error en logStatusChange para aplicación ${applicationId}:`, error);
+    // No interrumpimos el flujo por errores en el historial
+  }
+};
 
-    // Fetch the application
+/**
+ * Update a specific status field of an application
+ */
+export const updateApplicationStatusField = async (
+  applicationId: string,
+  newStatus: ApplicationStatus,
+  statusField: 'status' | 'advisor_status' | 'company_status' | 'global_status',
+  comment: string,
+  userId: string
+): Promise<void> => {
+  try {
+    console.log(`Actualizando ${statusField} a ${newStatus} para aplicación ${applicationId}`);
+    
+    // First, get the current application to check approval statuses
     const { data: application, error: fetchError } = await supabase
-      .from(TABLES.APPLICATIONS)
+      .from('applications')
       .select('*')
-      .eq('id', id)
+      .eq('id', applicationId)
       .single();
 
     if (fetchError) {
-      console.error(`Error fetching application with ID ${id}:`, fetchError);
-      throw fetchError;
+      console.error(`Error obteniendo solicitud ${applicationId}:`, fetchError);
+      throw new Error(`Error al obtener solicitud: ${fetchError.message}`);
     }
 
-    if (!application) {
-      throw new Error(`Application with ID ${id} not found`);
-    }
-
-    // Apply entity filter if provided
-    if (entityFilter) {
-      if (entityFilter.advisor_id && application.assigned_to !== entityFilter.advisor_id) {
-        throw new Error('You do not have permission to update this application status');
-      }
-      if (entityFilter.company_id && application.company_id !== entityFilter.company_id) {
-        throw new Error('You do not have permission to update this application status');
-      }
-    }
-
-    // Save the previous status to record the change
-    const previousStatus = statusField === 'status' ? application.status : (application[statusField] || application.status);
-
-    // Prepare the update data - ONLY update the specific field requested
-    const updateData: Record<string, any> = {
-      [statusField]: status,
+    // 1. Primero actualizamos el campo específico
+    const updatePayload: Record<string, any> = {
+      [statusField]: newStatus,
       updated_at: new Date().toISOString()
     };
 
-    // Additional specific logic for approval status changes
+    // 2. Además del campo específico, actualizamos el global_status para reflejar el cambio
+    // Esto asegura que los dashboards siempre vean el estado más reciente
+    if (statusField !== 'global_status') {
+      updatePayload['global_status'] = newStatus;
+      console.log(`También actualizando global_status a ${newStatus}`);
+    }
+    
+    // 3. Si se está rechazando, establecer los flags correspondientes y actualizar todos los estados
+    if (newStatus === APPLICATION_STATUS.REJECTED) {
+      console.log('Solicitud rechazada, actualizando todos los estados a REJECTED');
+      
+      // Actualizar todos los estados para asegurar consistencia en todas las vistas
+      updatePayload['status'] = APPLICATION_STATUS.REJECTED;
+      updatePayload['global_status'] = APPLICATION_STATUS.REJECTED;
+      updatePayload['advisor_status'] = APPLICATION_STATUS.REJECTED;
+      updatePayload['company_status'] = APPLICATION_STATUS.REJECTED;
+      
+      // IMPORTANTE: Establecer SOLO UNO de los flags de rechazo, nunca ambos
     if (statusField === 'advisor_status') {
-      // Update the approved_by_advisor flag if status is changing to APPROVED
-      if (status === APPLICATION_STATUS.APPROVED) {
-        updateData.approved_by_advisor = true;
-        updateData.approval_date_advisor = new Date().toISOString();
+        // El asesor rechazó la solicitud - explícitamente marcar solo uno
+        updatePayload['rejected_by_advisor'] = true;
+        updatePayload['rejected_by_company'] = false; // Asegurarse que no se marca como rechazado por la empresa
+        updatePayload['approved_by_advisor'] = false; // Quitar flag de aprobación del asesor
+        console.log('Marcando como rechazado ÚNICAMENTE por el asesor (advisor_status)');
+      } else if (statusField === 'company_status') {
+        // La empresa rechazó la solicitud - explícitamente marcar solo uno
+        updatePayload['rejected_by_company'] = true;
+        updatePayload['rejected_by_advisor'] = false; // Asegurarse que no se marca como rechazado por el asesor
+        updatePayload['approved_by_company'] = false; // Quitar flag de aprobación de la empresa
+        console.log('Marcando como rechazado ÚNICAMENTE por la empresa (company_status)');
       } else {
-        // If status is changing from APPROVED to something else, remove the approval
-        if (previousStatus === APPLICATION_STATUS.APPROVED) {
-          updateData.approved_by_advisor = false;
-          updateData.approval_date_advisor = null;
+        // Para global_status o status principal, determinar según usuario
+        try {
+          // Intentar obtener información del usuario para determinar su rol
+          const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', userId)
+            .single();
+          
+          if (userData?.role === 'advisor') {
+            // Si es asesor quien rechaza - explícitamente marcar solo uno
+            updatePayload['rejected_by_advisor'] = true;
+            updatePayload['rejected_by_company'] = false; // Explícitamente false para evitar doble rechazo
+            updatePayload['approved_by_advisor'] = false; // Quitar flag de aprobación del asesor
+            console.log('Marcando como rechazado ÚNICAMENTE por asesor basado en el rol explícito');
+          } else if (userData?.role === 'company_admin') {
+            // Si es admin de empresa quien rechaza - explícitamente marcar solo uno
+            updatePayload['rejected_by_company'] = true;
+            updatePayload['rejected_by_advisor'] = false; // Explícitamente false para evitar doble rechazo
+            updatePayload['approved_by_company'] = false; // Quitar flag de aprobación de la empresa
+            console.log('Marcando como rechazado ÚNICAMENTE por empresa basado en el rol explícito');
+          } else {
+            // Para super admin u otros roles, usar contexto adicional para determinar
+            if (application.approved_by_advisor && !application.approved_by_company) {
+              // Si el asesor ya aprobó pero la empresa no, entonces la empresa rechazó
+              updatePayload['rejected_by_company'] = true;
+              updatePayload['rejected_by_advisor'] = false; // Explícitamente false para evitar doble rechazo
+              updatePayload['approved_by_company'] = false; // Quitar flag de aprobación de la empresa
+              console.log('Rechazo por admin - ÚNICAMENTE por empresa (basado en aprobaciones previas)');
+            } else if (application.approved_by_company && !application.approved_by_advisor) {
+              // Si la empresa ya aprobó pero el asesor no, entonces el asesor rechazó
+              updatePayload['rejected_by_advisor'] = true;
+              updatePayload['rejected_by_company'] = false; // Explícitamente false para evitar doble rechazo
+              updatePayload['approved_by_advisor'] = false; // Quitar flag de aprobación del asesor
+              console.log('Rechazo por admin - ÚNICAMENTE por asesor (basado en aprobaciones previas)');
+            } else {
+              // Si no hay contexto claro, elegir explícitamente uno basado en el comentario
+              const lowerComment = comment?.toLowerCase() || '';
+              
+              if (lowerComment.includes('asesor') || lowerComment.includes('advisor')) {
+                // El comentario sugiere que es un rechazo del asesor
+                updatePayload['rejected_by_advisor'] = true;
+                updatePayload['rejected_by_company'] = false; // Explícitamente false para evitar doble rechazo
+                updatePayload['approved_by_advisor'] = false; // Quitar flag de aprobación del asesor
+                console.log('Marcando como rechazado ÚNICAMENTE por asesor basado en el comentario');
+              } else if (lowerComment.includes('empresa') || lowerComment.includes('company')) {
+                // El comentario sugiere que es un rechazo de la empresa
+                updatePayload['rejected_by_company'] = true;
+                updatePayload['rejected_by_advisor'] = false; // Explícitamente false para evitar doble rechazo
+                updatePayload['approved_by_company'] = false; // Quitar flag de aprobación de la empresa
+                console.log('Marcando como rechazado ÚNICAMENTE por empresa basado en el comentario');
+      } else {
+                // Si no hay información específica, verificar el estado reciente
+                if (application.advisor_status === APPLICATION_STATUS.REJECTED) {
+                  // Si el estado específico del asesor ya es REJECTED, probablemente el asesor rechazó
+                  updatePayload['rejected_by_advisor'] = true;
+                  updatePayload['rejected_by_company'] = false; // Explícitamente false para evitar doble rechazo
+                  updatePayload['approved_by_advisor'] = false; // Quitar flag de aprobación del asesor
+                  console.log('Marcando como rechazado ÚNICAMENTE por asesor basado en estado previo');
+                } else if (application.company_status === APPLICATION_STATUS.REJECTED) {
+                  // Si el estado específico de la empresa ya es REJECTED, probablemente la empresa rechazó
+                  updatePayload['rejected_by_company'] = true;
+                  updatePayload['rejected_by_advisor'] = false; // Explícitamente false para evitar doble rechazo
+                  updatePayload['approved_by_company'] = false; // Quitar flag de aprobación de la empresa
+                  console.log('Marcando como rechazado ÚNICAMENTE por empresa basado en estado previo');
+                } else {
+                  // En caso de completa ambigüedad, tomar una decisión explícita por defecto
+                  // Elegir empresa por defecto para ser consistente en ambigüedades
+                  updatePayload['rejected_by_company'] = true;
+                  updatePayload['rejected_by_advisor'] = false; // Explícitamente false para evitar doble rechazo
+                  updatePayload['approved_by_company'] = false; // Quitar flag de aprobación de la empresa
+                  console.log('Marcando como rechazado ÚNICAMENTE por empresa (decisión por defecto en ambigüedad)');
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Error al determinar el rol del usuario que rechaza:', err);
+          // En caso de error, aplicar lógica de último recurso clara, pero siempre solo un flag activo
+          updatePayload['rejected_by_company'] = true;
+          updatePayload['rejected_by_advisor'] = false; // Explícitamente false para evitar doble rechazo
+          updatePayload['approved_by_company'] = false; // Quitar flag de aprobación de la empresa
+          console.log('ERROR: Marcando como rechazado ÚNICAMENTE por empresa tras error de consulta');
         }
+      }
+    }
+    
+    // 4. Si se está aprobando, establecer los flags correspondientes
+    if (newStatus === APPLICATION_STATUS.APPROVED) {
+      if (statusField === 'advisor_status') {
+        updatePayload['approved_by_advisor'] = true;
+        updatePayload['approval_date_advisor'] = new Date().toISOString();
+        updatePayload['rejected_by_advisor'] = false; // Ensure rejection flag is removed
         
-        // Caso especial: Al mover de POR_DISPERSAR a IN_REVIEW, resetear la aprobación del asesor
-        if (previousStatus === APPLICATION_STATUS.POR_DISPERSAR && status === APPLICATION_STATUS.IN_REVIEW) {
-          console.log('Caso especial: Asesor moviendo de POR_DISPERSAR a IN_REVIEW - reseteando aprobación');
-          updateData.approved_by_advisor = false;
-          updateData.approval_date_advisor = null;
+        // Check if company has already approved
+        if (application.approved_by_company === true) {
+          // If both have approved, move to POR_DISPERSAR
+          updatePayload['status'] = APPLICATION_STATUS.POR_DISPERSAR;
+          updatePayload['global_status'] = APPLICATION_STATUS.POR_DISPERSAR;
+          updatePayload['advisor_status'] = APPLICATION_STATUS.POR_DISPERSAR;
+          updatePayload['company_status'] = APPLICATION_STATUS.POR_DISPERSAR;
+          console.log('Ambos aprobaron, moviendo automáticamente a POR_DISPERSAR');
+        }
+      } else if (statusField === 'company_status') {
+        updatePayload['approved_by_company'] = true;
+        updatePayload['approval_date_company'] = new Date().toISOString();
+        updatePayload['rejected_by_company'] = false; // Ensure rejection flag is removed
+        
+        // Check if advisor has already approved
+        if (application.approved_by_advisor === true) {
+          // If both have approved, move to POR_DISPERSAR
+          updatePayload['status'] = APPLICATION_STATUS.POR_DISPERSAR;
+          updatePayload['global_status'] = APPLICATION_STATUS.POR_DISPERSAR;
+          updatePayload['advisor_status'] = APPLICATION_STATUS.POR_DISPERSAR;
+          updatePayload['company_status'] = APPLICATION_STATUS.POR_DISPERSAR;
+          console.log('Ambos aprobaron, moviendo automáticamente a POR_DISPERSAR');
         }
       }
-      
-      // CRITICAL: Do NOT update the main status field when making advisor-specific changes
-      // Remove any code that would update 'status' here
     }
-    else if (statusField === 'company_status') {
-      // Update the approved_by_company flag if status is changing to APPROVED
-      if (status === APPLICATION_STATUS.APPROVED) {
-        updateData.approved_by_company = true;
-        updateData.approval_date_company = new Date().toISOString();
+    
+    // 5. Si se está moviendo manualmente a POR_DISPERSAR, asegurarse de que sea posible y actualizar todos los campos
+    if (newStatus === APPLICATION_STATUS.POR_DISPERSAR) {
+      // Para ir a POR_DISPERSAR, debe estar previamente en APPROVED o ambas partes deben haber aprobado
+      const bothApproved = application.approved_by_advisor === true && application.approved_by_company === true;
+      const fromApproved = application.status === APPLICATION_STATUS.APPROVED || 
+                           application[statusField] === APPLICATION_STATUS.APPROVED;
+      
+      if (bothApproved || fromApproved) {
+        // Asegurarse de que todos los estados se actualicen a POR_DISPERSAR
+        updatePayload['status'] = APPLICATION_STATUS.POR_DISPERSAR;
+        updatePayload['global_status'] = APPLICATION_STATUS.POR_DISPERSAR;
+        updatePayload['advisor_status'] = APPLICATION_STATUS.POR_DISPERSAR;
+        updatePayload['company_status'] = APPLICATION_STATUS.POR_DISPERSAR;
+        console.log('Moviendo manualmente a POR_DISPERSAR y actualizando todos los estados');
       } else {
-        // If status is changing from APPROVED to something else, remove the approval
-        if (previousStatus === APPLICATION_STATUS.APPROVED) {
-          updateData.approved_by_company = false;
-          updateData.approval_date_company = null;
-        }
-      }
-      
-      // CRITICAL: Do NOT update the main status field when making company-specific changes
-      // Remove any code that would update 'status' here
-    }
-    else if (statusField === 'status') {
-      // When explicitly updating the main status field, we allow it
-      updateData.status = status;
-    }
-    
-    // Handle clearing of rejection flags when status changes from REJECTED to something else
-    if (status !== APPLICATION_STATUS.REJECTED) {
-      // Check if the current status is rejected using string comparison
-      // to avoid TypeScript type errors
-      if (String(application.status).toLowerCase() === 'rejected') {
-        // If moving from REJECTED to another status, clear rejection flags
-        updateData.rejected_by_advisor = false;
-        updateData.rejected_by_company = false;
-        console.log(`Clearing rejection flags as application ${id} is changing from REJECTED to ${status}`);
+        console.error('No se puede mover a POR_DISPERSAR sin ambas aprobaciones o desde APPROVED');
+        throw new Error('La solicitud no puede moverse a Por Dispersar. Requiere aprobación de asesor y empresa.');
       }
     }
     
-    // Special logic for when both parties have approved
-    if (
-      status === APPLICATION_STATUS.APPROVED &&
-      ((statusField === 'advisor_status' && application.approved_by_company === true) ||
-       (statusField === 'company_status' && application.approved_by_advisor === true))
-    ) {
-      // Both parties have approved, update global_status to POR_DISPERSAR
-      console.log('Both parties have approved, updating global_status to POR_DISPERSAR');
-      updateData.global_status = APPLICATION_STATUS.POR_DISPERSAR;
-      updateData.status = APPLICATION_STATUS.POR_DISPERSAR;
-      updateData.advisor_status = APPLICATION_STATUS.POR_DISPERSAR;
-      updateData.company_status = APPLICATION_STATUS.POR_DISPERSAR;
+    // Actualizar la aplicación en Supabase
+    const { error } = await supabase
+      .from('applications')
+      .update(updatePayload)
+      .eq('id', applicationId);
+
+    if (error) {
+      console.error('Error updating application status:', error);
+      throw new Error(`Error updating application status: ${error.message}`);
     }
     
-    // Special logic for when any party rejects the application
-    if (status === APPLICATION_STATUS.REJECTED && 
-        (statusField === 'advisor_status' || statusField === 'company_status')) {
-      // When any party rejects, update the global status to move the card to Rejected column for both users
-      console.log('Application rejected, updating statuses selectively');
-      
-      // Always update the global statuses so the card moves to Rejected in both Kanbans
-      updateData.global_status = APPLICATION_STATUS.REJECTED;
-      updateData.status = APPLICATION_STATUS.REJECTED;
-      
-      const isAdvisorReject = (statusField === 'advisor_status');
-      
-      // IMPORTANT: Only update the status field of the role that rejected
-      // Keep the other role's status field unchanged
-      if (isAdvisorReject) {
-        // If the advisor rejects, update advisor_status but DO NOT touch company_status
-        updateData.advisor_status = APPLICATION_STATUS.REJECTED;
-        // DO NOT include company_status in updateData to maintain its current state
-        
-        // Set rejection flags
-        updateData.rejected_by_advisor = true;
-        updateData.rejected_by_company = false;
-        console.log('Setting rejected_by_advisor=true, rejected_by_company=false');
-      } else {
-        // If the company rejects, update company_status but DO NOT touch advisor_status
-        updateData.company_status = APPLICATION_STATUS.REJECTED;
-        // DO NOT include advisor_status in updateData to maintain its current state
-        
-        // Set rejection flags
-        updateData.rejected_by_advisor = false;
-        updateData.rejected_by_company = true;
-        console.log('Setting rejected_by_advisor=false, rejected_by_company=true');
-      }
-      
-      console.log(`Rejection update data:`, updateData);
+    // 6. Registrar el cambio de estado en el historial
+    await logStatusChange(applicationId, statusField, newStatus, comment, userId);
+    
+    // Si se movió automáticamente a POR_DISPERSAR, registrar ese cambio también
+    if (updatePayload['status'] === APPLICATION_STATUS.POR_DISPERSAR && newStatus !== APPLICATION_STATUS.POR_DISPERSAR) {
+      await logStatusChange(
+        applicationId, 
+        'status', 
+        APPLICATION_STATUS.POR_DISPERSAR, 
+        'Movido automáticamente a Por Dispersar porque ambas partes aprobaron', 
+        userId
+      );
     }
     
-    // When using the global_status field, also update the main status to match
-    if (statusField === 'global_status') {
-      updateData.status = status;
-    }
-
-    console.log(`Updating application ${id} ${statusField} to ${status}`, updateData);
-
-    // Update the application
-    const { error: updateError } = await supabase
-      .from(TABLES.APPLICATIONS)
-      .update(updateData)
-      .eq('id', id);
-
-    if (updateError) {
-      console.error(`Error updating ${statusField} for application ${id}:`, updateError);
-      throw updateError;
-    }
-
-    // Record the status change in the history
-    try {
-      const historyEntry = {
-        application_id: id,
-        status: status,
-        comment: comment || `Status changed from ${previousStatus} to ${status}`,
-        created_by: user_id ? user_id : null
-      };
-
-      const { error: historyError } = await supabase
-        .from(APPLICATION_HISTORY_TABLE)
-        .insert([historyEntry]);
-
-      if (historyError) {
-        console.error(`Error recording status history for application ${id}:`, historyError);
-        // Don't throw, as the primary operation succeeded
-      } else {
-        console.log(`Successfully recorded status history for application ${id}`);
-      }
-    } catch (historyError) {
-      console.error(`Error recording status history for application ${id}:`, historyError);
-    }
-
-    return { 
-      success: true, 
-      application: { 
-        ...application, 
-        [statusField]: status,
-        // Include these updated fields in the response so the UI can reflect them
-        ...(statusField === 'advisor_status' && status === APPLICATION_STATUS.APPROVED 
-            ? { approved_by_advisor: true, approval_date_advisor: updateData.approval_date_advisor } 
-            : {}),
-        ...(statusField === 'company_status' && status === APPLICATION_STATUS.APPROVED 
-            ? { approved_by_company: true, approval_date_company: updateData.approval_date_company } 
-            : {})
-      } 
-    };
+    console.log(`Estado de aplicación ${applicationId} actualizado correctamente a ${newStatus}`);
   } catch (error) {
-    console.error('Error updating application status field:', error);
+    console.error('Error in updateApplicationStatusField:', error);
     throw error;
   }
 };
@@ -1301,4 +1403,72 @@ const recordHistory = (tx: any, applicationId: string, previousStatus: string, n
     comment: `Status changed from ${previousStatus} to ${newStatus}`,
     created_by: null
   });
+};
+
+// Función para actualizar el client_id de una aplicación específica
+export const updateApplicationClientId = async (
+  applicationId: string, 
+  newClientId: string,
+  comment: string = "Actualización manual de client_id"
+) => {
+  console.log(`[updateApplicationClientId] Actualizando client_id de aplicación ${applicationId} a ${newClientId}`);
+  
+  try {
+    // Primero, verificar que el nuevo client_id existe
+    const { checkClientExistsById } = require('../services/clientService');
+    const clientExists = await checkClientExistsById(newClientId);
+    
+    if (!clientExists) {
+      throw new Error(`El cliente con ID ${newClientId} no existe en la base de datos`);
+    }
+    
+    // Obtener la aplicación actual para registrar el cambio en el historial
+    const currentApp = await getApplicationById(applicationId);
+    
+    if (!currentApp) {
+      throw new Error(`No se encontró la aplicación con ID ${applicationId}`);
+    }
+
+    const oldClientId = currentApp.client_id || 'ninguno';
+    
+    // Actualizar el client_id
+    const { data, error } = await supabase
+      .from(TABLES.APPLICATIONS)
+      .update({ 
+        client_id: newClientId,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', applicationId)
+      .select('*');
+    
+    if (error) {
+      console.error('Error al actualizar client_id:', error);
+      throw error;
+    }
+    
+    if (!data || data.length === 0) {
+      throw new Error('No se pudo actualizar la aplicación');
+    }
+    
+    // Registrar el cambio en el historial
+    const { error: historyError } = await supabase
+      .from(APPLICATION_HISTORY_TABLE)
+      .insert({
+        application_id: applicationId,
+        status: currentApp.status,
+        comment: `${comment} (Cambio de client_id: ${oldClientId} → ${newClientId})`,
+        created_by: null
+      });
+    
+    if (historyError) {
+      console.error('Error al registrar historial de cambio de client_id:', historyError);
+      // No interrumpimos el proceso por errores en el historial
+    }
+    
+    console.log(`[updateApplicationClientId] Client_id actualizado correctamente para aplicación ${applicationId}`);
+    return data[0] as Application;
+  } catch (error) {
+    console.error(`Error al actualizar client_id para aplicación ${applicationId}:`, error);
+    throw error;
+  }
 }; 

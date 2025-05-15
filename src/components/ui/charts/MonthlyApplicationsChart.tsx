@@ -11,6 +11,7 @@ import {
   Legend,
   Filler,
 } from 'chart.js';
+import { TimePeriod } from '../filters/TimePeriodToggle';
 
 // Registrar componentes necesarios de Chart.js
 ChartJS.register(
@@ -28,11 +29,17 @@ interface MonthlyApplicationsChartProps {
   data: {
     month: string;
     count: number;
+    // Add raw data with actual dates
+    applications?: Array<{
+      date: string;
+      count: number;
+    }>;
   }[];
   title?: string;
   height?: number;
   className?: string;
   color?: string;
+  timePeriod?: TimePeriod;
 }
 
 const MonthlyApplicationsChart: React.FC<MonthlyApplicationsChartProps> = ({
@@ -41,6 +48,7 @@ const MonthlyApplicationsChart: React.FC<MonthlyApplicationsChartProps> = ({
   height = 300,
   className = '',
   color = 'rgba(53, 162, 235, 0.7)',
+  timePeriod = 'month',
 }) => {
   const [chartData, setChartData] = useState<any>({
     labels: [],
@@ -62,8 +70,26 @@ const MonthlyApplicationsChart: React.FC<MonthlyApplicationsChartProps> = ({
     // Ordenar los datos por mes
     const sortedData = [...data].sort((a, b) => a.month.localeCompare(b.month));
 
+    // Procesamos los datos según el período de tiempo seleccionado
+    let processedData: { label: string; count: number }[] = [];
+    
+    switch (timePeriod) {
+      case 'day':
+        // Agrupar por día (último día hasta 30 días atrás)
+        processedData = processDataByDay(sortedData);
+        break;
+      case 'week':
+        // Agrupar por semana (último mes, por semana)
+        processedData = processDataByWeek(sortedData);
+        break;
+      case 'year':
+        // Agrupar por año
+        processedData = processDataByYear(sortedData);
+        break;
+      case 'month':
+      default:
     // Formatear los meses para mostrar nombres en español
-    const formattedMonths = sortedData.map((item) => {
+        processedData = sortedData.map((item) => {
       const [year, month] = item.month.split('-');
       const date = new Date(parseInt(year), parseInt(month) - 1, 1);
       
@@ -73,15 +99,21 @@ const MonthlyApplicationsChart: React.FC<MonthlyApplicationsChartProps> = ({
         'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
       ];
       
-      return `${monthNames[date.getMonth()]} ${year}`;
+          return {
+            label: `${monthNames[date.getMonth()]} ${year}`,
+            count: item.count
+          };
     });
+        break;
+    }
 
-    // Extraer los valores para el gráfico
-    const counts = sortedData.map((item) => item.count);
+    // Extraer las etiquetas y valores para el gráfico
+    const labels = processedData.map(item => item.label);
+    const counts = processedData.map(item => item.count);
 
     // Actualizar los datos del gráfico
     setChartData({
-      labels: formattedMonths,
+      labels: labels,
       datasets: [
         {
           label: 'Solicitudes',
@@ -93,7 +125,144 @@ const MonthlyApplicationsChart: React.FC<MonthlyApplicationsChartProps> = ({
         },
       ],
     });
-  }, [data, color]);
+  }, [data, color, timePeriod]);
+
+  // Función para procesar datos por día
+  const processDataByDay = (sortedData: { month: string; count: number; daily?: Array<{date: string; count: number}> }[]) => {
+    // Obtener fecha actual y fecha hace 30 días
+    const now = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(now.getDate() - 30);
+    
+    // Crear mapa para agrupar por día exacto (YYYY-MM-DD)
+    const dailyData: Record<string, number> = {};
+    
+    // Inicializar el mapa con los últimos 30 días (todos en 0)
+    for (let i = 0; i < 30; i++) {
+      const day = new Date();
+      day.setDate(now.getDate() - i);
+      const dayKey = day.toISOString().split('T')[0]; // formato YYYY-MM-DD
+      dailyData[dayKey] = 0;
+    }
+    
+    // Procesar la información diaria si está disponible
+    sortedData.forEach(monthItem => {
+      if (monthItem.daily && Array.isArray(monthItem.daily)) {
+        // Usar datos diarios de la API cuando estén disponibles
+        monthItem.daily.forEach(dayData => {
+          const dayDate = new Date(dayData.date);
+          // Solo incluir si está dentro de los últimos 30 días
+          if (dayDate >= thirtyDaysAgo && dayDate <= now) {
+            dailyData[dayData.date] = dayData.count;
+          }
+        });
+      } else {
+        // Fallback al método anterior si no hay datos diarios
+        const [year, month] = monthItem.month.split('-');
+        const currentDate = new Date().toISOString().split('T')[0];
+        const currentMonth = currentDate.substring(0, 7); // YYYY-MM
+        
+        // Si es el mes actual, usar el recuento para hoy o distribuir
+        if (`${year}-${month}` === currentMonth) {
+          // Para el mes actual, asignar todo al día de hoy
+          const today = new Date().toISOString().split('T')[0];
+          dailyData[today] = monthItem.count;
+        }
+      }
+    });
+    
+    // Convertir el mapa a array y ordenar
+    return Object.entries(dailyData)
+      .map(([date, count]) => {
+        const displayDate = new Date(date);
+        const day = displayDate.getDate().toString().padStart(2, '0');
+        const month = displayDate.toLocaleString('es-ES', { month: 'short' });
+        return {
+          label: `${day} ${month}`,
+          count,
+          date
+        };
+      })
+      .sort((a, b) => a.date.localeCompare(b.date))
+      // Limitar a los últimos 30 días
+      .slice(-30);
+  };
+
+  // Función para procesar datos por semana
+  const processDataByWeek = (sortedData: { month: string; count: number; daily?: Array<{date: string; count: number}> }[]) => {
+    const now = new Date();
+    const weeks: { label: string; count: number; startDate: string; endDate: string }[] = [];
+    
+    // Crear un arreglo de las últimas 5 semanas
+    for (let i = 0; i < 5; i++) {
+      const weekEnd = new Date(now);
+      weekEnd.setDate(now.getDate() - (i * 7));
+      
+      const weekStart = new Date(weekEnd);
+      weekStart.setDate(weekEnd.getDate() - 6);
+      
+      const formatDate = (date: Date) => {
+        return `${date.getDate()} ${date.toLocaleString('es-ES', { month: 'short' })}`;
+      };
+      
+      const weekStartISO = weekStart.toISOString().split('T')[0];
+      const weekEndISO = weekEnd.toISOString().split('T')[0];
+      
+      weeks.unshift({
+        label: `${formatDate(weekStart)} - ${formatDate(weekEnd)}`,
+        count: 0,
+        startDate: weekStartISO,
+        endDate: weekEndISO
+      });
+    }
+    
+    // Recolectar todos los datos diarios disponibles
+    const allDailyData: Record<string, number> = {};
+    
+    sortedData.forEach(monthItem => {
+      if (monthItem.daily && Array.isArray(monthItem.daily)) {
+        // Usar datos diarios detallados cuando estén disponibles
+        monthItem.daily.forEach(dayData => {
+          allDailyData[dayData.date] = dayData.count;
+        });
+      } else {
+        // Si no hay datos diarios, usar la información mensual para el mes actual
+        const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
+        if (monthItem.month === currentMonth) {
+          // Distribuir al día de hoy
+          const today = new Date().toISOString().split('T')[0];
+          allDailyData[today] = monthItem.count;
+        }
+      }
+    });
+    
+    // Distribuir conteos diarios a las semanas correspondientes
+    Object.entries(allDailyData).forEach(([date, count]) => {
+      // Encontrar la semana a la que pertenece esta fecha
+      const week = weeks.find(w => date >= w.startDate && date <= w.endDate);
+      if (week) {
+        week.count += count;
+      }
+    });
+    
+    return weeks;
+  };
+
+  // Función para procesar datos por año
+  const processDataByYear = (sortedData: { month: string; count: number }[]) => {
+    // Agrupar por año
+    const yearCount: Record<string, number> = {};
+    
+    sortedData.forEach(item => {
+      const [year] = item.month.split('-');
+      yearCount[year] = (yearCount[year] || 0) + item.count;
+    });
+    
+    // Ordenar por año
+    return Object.entries(yearCount)
+      .map(([year, count]) => ({ label: year, count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  };
 
   const options = {
     responsive: true,

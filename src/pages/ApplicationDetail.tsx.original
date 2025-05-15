@@ -1,0 +1,72 @@
+import * as React from 'react';
+import { useEffect, useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import MainLayout from '../components/layout/MainLayout';
+import { 
+  getApplicationById, 
+  Application as ApplicationType, 
+  getApprovalStatus, 
+  approveByAdvisor, 
+  approveByCompany,
+  cancelCompanyApproval,
+  updateApplicationStatus,
+  ApplicationStatus,
+  markAsDispersed
+} from '../services/applicationService';
+import { usePermissions } from '../contexts/PermissionsContext';
+import { PERMISSIONS } from '../utils/constants/permissions';
+import { useAuth } from '../contexts/AuthContext';
+import Alert from '../components/ui/Alert';
+import { STATUS_LABELS } from '../utils/constants/statuses';
+import { APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
+import { APPLICATION_STATUS } from '../utils/constants/statuses';
+import { TABLES } from '../utils/constants/tables';
+import { useNotifications, NotificationType } from '../contexts/NotificationContext';
+import { formatDate } from '../utils/formatters';
+import ClientIdWarning from '../components/ClientIdWarning';
+
+// Helper function for status badge styling - moved outside component so it's accessible to all components
+const getStatusBadgeClass = (status: string) => {
+  switch (status) {
+    case 'pending':
+      return 'badge-warning';
+    case 'in_review':
+      return 'badge-info';
+    case 'approved':
+      return 'badge-success';
+    case 'rejected':
+      return 'badge-error';
+    default:
+      return 'badge-ghost';
+  }
+};
+
+// Interfaces para estados de aprobación
+interface ApprovalStatus {
+  isFullyApproved: boolean;
+  approvedByAdvisor: boolean;
+  approvedByCompany: boolean;
+  approvalDateAdvisor?: string;
+  approvalDateCompany?: string;
+  advisorStatus?: string;
+  companyStatus?: string;
+  globalStatus?: string;
+}
+
+const ApplicationDetail = () => {
+  console.log('React at start', React); // Diagnostic log to check for shadowing
+  
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { addNotification, showPopup } = useNotifications();
+  const [application, setApplication] = useState<ApplicationType | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [approvalStatus, setApprovalStatus] = useState<ApprovalStatus | null>(null);
+  const [approving, setApproving] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const { shouldFilterByEntity, getEntityFilter, userCan, isAdvisor, isCompanyAdmin } = usePermissions();
+
+  // Rest of file content...
+} 

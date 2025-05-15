@@ -1,5 +1,4 @@
-import * as React from 'react';
-import { useEffect, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import { 
@@ -23,6 +22,31 @@ import { APPLICATION_STATUS } from '../utils/constants/statuses';
 import { TABLES } from '../utils/constants/tables';
 import { useNotifications, NotificationType } from '../contexts/NotificationContext';
 import { formatDate } from '../utils/formatters';
+import ClientProfileButton from '../components/ClientProfileButton';
+
+// Helper function for status badge styling - moved outside component so it's accessible to all components
+const getStatusBadgeClass = (status: string) => {
+  switch (status) {
+    case 'approved':
+      return 'badge-success';
+    case 'rejected':
+      return 'badge-error';
+    case 'pending':
+    case 'in_review':
+      return 'badge-warning';
+    case 'cancelled':
+      return 'badge-secondary';
+    case 'completed':
+      return 'badge-primary';
+    case 'solicitud':
+    case 'new':
+      return 'badge-info';
+    case 'por_dispersar':
+      return 'badge-accent';
+    default:
+      return 'badge-secondary';
+  }
+};
 
 // Interfaces para estados de aprobación
 interface ApprovalStatus {
@@ -79,6 +103,14 @@ const ApplicationDetail = () => {
       
       const entityFilter = shouldFilterByEntity() ? getEntityFilter() : null;
       const data = await getApplicationById(id, entityFilter);
+      
+      // Debug log para client_id
+      console.log(`[ApplicationDetail] Client ID for application ${id}:`, {
+        client_id: data.client_id,
+        hasClientId: !!data.client_id,
+        client_name: data.client_name
+      });
+      
       setApplication(data);
       
       // Obtener estado de aprobación
@@ -316,21 +348,6 @@ const ApplicationDetail = () => {
     }).format(amount);
   };
   
-  const getStatusClass = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'badge-warning';
-      case 'in_review':
-        return 'badge-info';
-      case 'approved':
-        return 'badge-success';
-      case 'rejected':
-        return 'badge-error';
-      default:
-        return 'badge-ghost';
-    }
-  };
-  
   // Obtener la etiqueta legible para el tipo de aplicación
   const getProductTypeLabel = (type: string | null | undefined): string => {
     if (!type) return 'N/A';
@@ -338,14 +355,7 @@ const ApplicationDetail = () => {
     // Normalizar el tipo a minúsculas para comparación
     const normalizedType = type.toLowerCase();
     
-    // Verificar si es alguno de los tipos definidos en APPLICATION_TYPE_LABELS
-    for (const [key, value] of Object.entries(APPLICATION_TYPE_LABELS)) {
-      if (key.toLowerCase() === normalizedType || key.toLowerCase().includes(normalizedType) || normalizedType.includes(key.toLowerCase())) {
-        return value;
-      }
-    }
-    
-    // Mapeo adicional para otros valores comunes
+    // Mapeo para valores comunes
     const typeMappings: Record<string, string> = {
       'selected_plans': 'Crédito a Plazos',
       'product_simulations': 'Simulación',
@@ -362,8 +372,11 @@ const ApplicationDetail = () => {
       }
     }
     
-    // Si no hay coincidencia, retornar el valor original
-    return type;
+    // Si no hay coincidencia, retornar el valor original con formato
+    return type
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   };
   
   // Verificar si la solicitud está totalmente aprobada
@@ -422,242 +435,414 @@ const ApplicationDetail = () => {
             <span className="loading loading-spinner loading-lg"></span>
           </div>
         ) : application ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Información básica */}
-            <div className="card bg-base-100 shadow-xl col-span-2">
-              <div className="card-body">
-                <h2 className="card-title text-lg border-b pb-2 mb-4">Información de la Solicitud</h2>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">ID de Solicitud</p>
-                    <p className="font-medium">{application.id}</p>
-                  </div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Información básica */}
+              <div className="card bg-base-100 shadow-xl col-span-2">
+                <div className="card-body">
+                  <h2 className="card-title text-lg border-b pb-2 mb-4">Información de la Solicitud</h2>
                   
-                  <div>
-                    <p className="text-sm text-gray-500">Fecha de Creación</p>
-                    <p className="font-medium">{formatDate(application.created_at, 'short')}</p>
-                  </div>
-                  
-                  <div className="mb-4">
-                    <h3 className="text-sm font-medium text-gray-500">Tipo de Producto</h3>
-                    <p className="text-sm text-gray-900">
-                      {(() => {
-                        const appType = application.application_type;
-                        if (!appType) return 'No especificado';
-                        
-                        // Check for common types
-                        if (appType === 'selected_plans') return 'Planes Seleccionados';
-                        if (appType === 'product_simulations') return 'Simulación de Producto';
-                        if (appType === 'cash_requests') return 'Solicitud de Efectivo';
-                        
-                        // Use the imported APPLICATION_TYPE_LABELS directly
-                        if (APPLICATION_TYPE_LABELS[appType as keyof typeof APPLICATION_TYPE_LABELS]) {
-                          return APPLICATION_TYPE_LABELS[appType as keyof typeof APPLICATION_TYPE_LABELS];
-                        }
-                        
-                        // Format nicely as fallback
-                        return appType
-                          .split('_')
-                          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                          .join(' ');
-                      })()}
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <p className="text-sm text-gray-500">Estado</p>
-                    <p>
-                      <span className={`badge ${getStatusClass(application.status)}`}>
-                        {STATUS_LABELS[application.status as keyof typeof STATUS_LABELS] || application.status}
-                      </span>
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <p className="text-sm text-gray-500">Monto Solicitado</p>
-                    <p className="font-medium">{formatCurrency(application.requested_amount || application.amount || 0)}</p>
-                  </div>
-                </div>
-                
-                {/* Estado de aprobación */}
-                {approvalStatus && (
-                  <div className="mt-6 pt-4 border-t">
-                    <h3 className="font-semibold mb-4">Estado de Aprobación</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">ID de Solicitud</p>
+                      <p className="font-medium">{application.id}</p>
+                    </div>
                     
-                    {/* Indicador de aprobación completa */}
-                    {approvalStatus.isFullyApproved && (
-                      <div className="mb-4 p-3 bg-success text-white rounded-lg">
-                        <div className="flex items-center">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                          <span className="font-medium">Solicitud completamente aprobada</span>
-                        </div>
-                        <p className="text-sm mt-1">Esta solicitud ha sido aprobada tanto por el asesor como por la empresa</p>
+                    <div>
+                      <p className="text-sm text-gray-500">Fecha de Creación</p>
+                      <p className="font-medium">{formatDate(application.created_at, 'short')}</p>
+                    </div>
+                    
+                    <div>
+                      <p className="text-sm text-gray-500">Tipo de Solicitud</p>
+                      <p className="font-medium">
+                        {(() => {
+                          const appType = application.application_type;
+                          if (!appType) return 'No especificado';
+                          
+                          // Check for common types
+                          if (appType === 'selected_plans') return 'Planes Seleccionados';
+                          if (appType === 'product_simulations') return 'Simulación de Producto';
+                          if (appType === 'cash_requests') return 'Solicitud de Efectivo';
+                          if (appType === 'auto_loan') return 'Crédito Automotriz';
+                          if (appType === 'car_backed_loan') return 'Crédito con Garantía Automotriz';
+                          if (appType === 'personal_loan') return 'Préstamo Personal';
+                          if (appType === 'cash_advance') return 'Adelanto de Efectivo';
+                          
+                          // Format nicely as fallback
+                          return appType
+                            .split('_')
+                            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                            .join(' ');
+                        })()}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <p className="text-sm text-gray-500">Estado</p>
+                      <p>
+                        <span className={`badge ${getStatusBadgeClass(application.status)}`}>
+                          {STATUS_LABELS[application.status as keyof typeof STATUS_LABELS] || application.status}
+                        </span>
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <p className="text-sm text-gray-500">Monto Solicitado</p>
+                      <p className="font-medium">{formatCurrency(application.requested_amount || application.amount || 0)}</p>
+                    </div>
+
+                    {application.term && (
+                      <div>
+                        <p className="text-sm text-gray-500">Plazo (meses)</p>
+                        <p className="font-medium">{application.term}</p>
                       </div>
                     )}
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                      {/* Aprobación por asesor */}
-                      <div className="border rounded-lg p-3">
-                        <div className="flex items-center justify-between">
-                          <p className="font-medium">Estado Asesor</p>
-                          {approvalStatus.approvedByAdvisor ? (
-                            <span className="badge badge-success">Aprobado</span>
-                          ) : (
-                            <span className="badge badge-warning">Pendiente</span>
-                          )}
-                        </div>
-                        {application && application.advisor_status && (
-                          <div className="flex items-center mt-2">
-                            <p className="text-xs text-gray-500 mr-2">Estado en vista de Asesor:</p>
-                            <span className={`badge badge-sm ${getStatusClass(application.advisor_status)}`}>
-                              {STATUS_LABELS[application.advisor_status as keyof typeof STATUS_LABELS] || application.advisor_status}
-                            </span>
+
+                    {application.interest_rate && (
+                      <div>
+                        <p className="text-sm text-gray-500">Tasa de Interés</p>
+                        <p className="font-medium">{application.interest_rate}%</p>
+                      </div>
+                    )}
+
+                    {application.monthly_payment && (
+                      <div>
+                        <p className="text-sm text-gray-500">Pago Mensual</p>
+                        <p className="font-medium">{formatCurrency(application.monthly_payment)}</p>
+                      </div>
+                    )}
+
+                    {application.financing_type && (
+                      <div>
+                        <p className="text-sm text-gray-500">Tipo de Financiamiento</p>
+                        <p className="font-medium">{application.financing_type}</p>
+                      </div>
+                    )}
+
+                    {application.product_type && (
+                      <div>
+                        <p className="text-sm text-gray-500">Tipo de Producto</p>
+                        <p className="font-medium">{getProductTypeLabel(application.product_type)}</p>
+                      </div>
+                    )}
+
+                    {application.dispersal_date && (
+                      <div>
+                        <p className="text-sm text-gray-500">Fecha de Dispersión</p>
+                        <p className="font-medium">{formatDate(application.dispersal_date, 'short')}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Detalles del producto/artículo si están disponibles */}
+                  {(application.product_title || application.product_image || application.product_url) && (
+                    <div className="mt-6 pt-4 border-t">
+                      <h3 className="font-semibold mb-4">Detalles del Producto</h3>
+                      <div className="flex flex-col md:flex-row gap-4">
+                        {application.product_image && (
+                          <div className="w-full md:w-1/3">
+                            <img 
+                              src={application.product_image} 
+                              alt={application.product_title || "Producto"} 
+                              className="rounded-lg object-cover w-full h-40"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=Sin+Imagen';
+                              }}
+                            />
                           </div>
                         )}
-                        {approvalStatus.approvalDateAdvisor && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            Fecha de aprobación: {formatDate(approvalStatus.approvalDateAdvisor, 'short')}
-                          </p>
-                        )}
+                        <div className="w-full md:w-2/3">
+                          {application.product_title && (
+                            <p className="font-medium text-lg mb-2">{application.product_title}</p>
+                          )}
+                          {application.product_url && (
+                            <a 
+                              href={application.product_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-500 hover:underline text-sm"
+                            >
+                              Ver producto en sitio web
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Estado de aprobación */}
+                  {approvalStatus && (
+                    <div className="mt-6 pt-4 border-t">
+                      <h3 className="font-semibold mb-4">Estado de Aprobación</h3>
+                      
+                      {/* Indicador de aprobación completa */}
+                      {approvalStatus.isFullyApproved && (
+                        <div className="mb-4 p-3 bg-success text-white rounded-lg">
+                          <div className="flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            <span className="font-medium">Solicitud completamente aprobada</span>
+                          </div>
+                          <p className="text-sm mt-1">Esta solicitud ha sido aprobada tanto por el asesor como por la empresa</p>
+                        </div>
+                      )}
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        {/* Aprobación por asesor */}
+                        <div className="border rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <p className="font-medium">Estado Asesor</p>
+                            {approvalStatus.approvedByAdvisor ? (
+                              <span className="badge badge-success">Aprobado</span>
+                            ) : (
+                              <span className="badge badge-warning">Pendiente</span>
+                            )}
+                          </div>
+                          {application && application.advisor_status && (
+                            <div className="flex items-center mt-2">
+                              <p className="text-xs text-gray-500 mr-2">Estado en vista de Asesor:</p>
+                              <span className={`badge badge-sm ${getStatusBadgeClass(application.advisor_status)}`}>
+                                {STATUS_LABELS[application.advisor_status as keyof typeof STATUS_LABELS] || application.advisor_status}
+                              </span>
+                            </div>
+                          )}
+                          {approvalStatus.approvalDateAdvisor && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Fecha de aprobación: {formatDate(approvalStatus.approvalDateAdvisor, 'short')}
+                            </p>
+                          )}
+                        </div>
+                        
+                        {/* Aprobación por empresa */}
+                        <div className="border rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <p className="font-medium">Estado Empresa</p>
+                            {approvalStatus.approvedByCompany ? (
+                              <span className="badge badge-success">Aprobado</span>
+                            ) : (
+                              <span className="badge badge-warning">Pendiente</span>
+                            )}
+                          </div>
+                          {application && application.company_status && (
+                            <div className="flex items-center mt-2">
+                              <p className="text-xs text-gray-500 mr-2">Estado en vista de Empresa:</p>
+                              <span className={`badge badge-sm ${getStatusBadgeClass(application.company_status)}`}>
+                                {STATUS_LABELS[application.company_status as keyof typeof STATUS_LABELS] || application.company_status}
+                              </span>
+                            </div>
+                          )}
+                          {approvalStatus.approvalDateCompany && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Fecha de aprobación: {formatDate(approvalStatus.approvalDateCompany, 'short')}
+                            </p>
+                          )}
+                        </div>
                       </div>
                       
-                      {/* Aprobación por empresa */}
-                      <div className="border rounded-lg p-3">
-                        <div className="flex items-center justify-between">
-                          <p className="font-medium">Estado Empresa</p>
-                          {approvalStatus.approvedByCompany ? (
-                            <span className="badge badge-success">Aprobado</span>
-                          ) : (
-                            <span className="badge badge-warning">Pendiente</span>
-                          )}
-                        </div>
-                        {application && application.company_status && (
-                          <div className="flex items-center mt-2">
-                            <p className="text-xs text-gray-500 mr-2">Estado en vista de Empresa:</p>
-                            <span className={`badge badge-sm ${getStatusClass(application.company_status)}`}>
-                              {STATUS_LABELS[application.company_status as keyof typeof STATUS_LABELS] || application.company_status}
+                      {/* Estado Global */}
+                      {application && application.global_status && (
+                        <div className="border rounded-lg p-3 mt-2">
+                          <div className="flex items-center justify-between">
+                            <p className="font-medium">Estado Global del Proceso</p>
+                            <span className={`badge ${getStatusBadgeClass(application.global_status)}`}>
+                              {STATUS_LABELS[application.global_status as keyof typeof STATUS_LABELS] || application.global_status}
                             </span>
                           </div>
-                        )}
-                        {approvalStatus.approvalDateCompany && (
                           <p className="text-xs text-gray-500 mt-1">
-                            Fecha de aprobación: {formatDate(approvalStatus.approvalDateCompany, 'short')}
+                            Este es el estado consolidado que refleja el progreso global de la solicitud en el sistema.
                           </p>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Estado Global */}
-                    {application && application.global_status && (
-                      <div className="border rounded-lg p-3 mt-2">
-                        <div className="flex items-center justify-between">
-                          <p className="font-medium">Estado Global del Proceso</p>
-                          <span className={`badge ${getStatusClass(application.global_status)}`}>
-                            {STATUS_LABELS[application.global_status as keyof typeof STATUS_LABELS] || application.global_status}
-                          </span>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Este es el estado consolidado que refleja el progreso global de la solicitud en el sistema.
-                        </p>
-                      </div>
-                    )}
-                    
-                    {/* Sección de depuración para administradores del sistema */}
-                    {application && (isCompanyAdmin() || isAdvisor()) && userCan(PERMISSIONS.VIEW_REPORTS) && (
-                      <div className="mt-4 pt-4 border-t border-dashed">
-                        <div className="bg-base-300 p-3 rounded-lg">
-                          <h4 className="text-sm font-bold mb-2">Debug: Todos los estados (Solo administradores)</h4>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div>
-                              <span className="font-bold">Estado Principal:</span> {application.status}
-                            </div>
-                            <div>
-                              <span className="font-bold">Estado Asesor:</span> {application.advisor_status || 'No definido'}
-                            </div>
-                            <div>
-                              <span className="font-bold">Estado Empresa:</span> {application.company_status || 'No definido'}
-                            </div>
-                            <div>
-                              <span className="font-bold">Estado Global:</span> {application.global_status || 'No definido'}
+                      )}
+                      
+                      {/* Sección de depuración para administradores del sistema */}
+                      {application && (isCompanyAdmin() || isAdvisor()) && userCan(PERMISSIONS.VIEW_REPORTS) && (
+                        <div className="mt-4 pt-4 border-t border-dashed">
+                          <div className="bg-base-300 p-3 rounded-lg">
+                            <h4 className="text-sm font-bold mb-2">Debug: Todos los estados (Solo administradores)</h4>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div>
+                                <span className="font-bold">Estado Principal:</span> {application.status}
+                              </div>
+                              <div>
+                                <span className="font-bold">Estado Asesor:</span> {application.advisor_status || 'No definido'}
+                              </div>
+                              <div>
+                                <span className="font-bold">Estado Empresa:</span> {application.company_status || 'No definido'}
+                              </div>
+                              <div>
+                                <span className="font-bold">Estado Global:</span> {application.global_status || 'No definido'}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Información del cliente */}
-            <div className="card bg-base-100 shadow-xl">
-              <div className="card-body">
-                <h2 className="card-title text-lg border-b pb-2 mb-4">Información del Cliente</h2>
-                
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Nombre</p>
-                    <p className="font-medium">{application.client_name}</p>
-                  </div>
-                  
-                  <div>
-                    <p className="text-sm text-gray-500">Email</p>
-                    <p className="font-medium">{application.client_email}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* Información de la empresa */}
-            {(application.company_id || application.company_name) && (
-              <div className="card bg-base-100 shadow-xl">
-                <div className="card-body">
-                  <h2 className="card-title text-lg border-b pb-2 mb-4">Información de la Empresa</h2>
-                  
-                  <div className="space-y-4">
-                    {application.company_name && (
-                      <div>
-                        <p className="text-sm text-gray-500">Nombre de la Empresa</p>
-                        <p className="font-medium">{application.company_name}</p>
-                      </div>
-                    )}
-                    
-                    {application.company_id && (
-                      <div>
-                        <p className="text-sm text-gray-500">ID de la Empresa</p>
-                        <p className="font-medium">{application.company_id}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Información del asesor */}
-            {application.assigned_to && (
-              <div className="card bg-base-100 shadow-xl">
-                <div className="card-body">
-                  <h2 className="card-title text-lg border-b pb-2 mb-4">Asesor Asignado</h2>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-sm text-gray-500">ID del Asesor</p>
-                      <p className="font-medium">{application.assigned_to}</p>
+                      )}
                     </div>
-                    {application.advisor_name && (
-                      <div>
-                        <p className="text-sm text-gray-500">Nombre del Asesor</p>
-                        <p className="font-medium">{application.advisor_name}</p>
+                  )}
+                </div>
+              </div>
+              
+              {/* Información del cliente */}
+              <div className="card bg-base-100 shadow-md p-4 mb-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-semibold mb-2">
+                    Información del Cliente
+                  </h3>
+                </div>
+                <div className="mb-4">
+                  <div className="flex flex-col space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div className="text-sm text-gray-500">
+                        Nombre:
                       </div>
-                    )}
+                      <div className="font-semibold">
+                        {application.client_name || 'No disponible'}
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <div className="text-sm text-gray-500">
+                        Email:
+                      </div>
+                      <div>
+                        {application.client_email || 'No disponible'}
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <div className="text-sm text-gray-500">
+                        Teléfono:
+                      </div>
+                      <div>
+                        {application.client_phone || 'No disponible'}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4">
+                    <ClientProfileButton
+                      clientId={application.client_id}
+                      clientName={application.client_name}
+                      applicationId={application.id}
+                      useSync={true}
+                      className="mt-2"
+                    />
                   </div>
                 </div>
               </div>
-            )}
-          </div>
+              
+              {/* Información de la empresa */}
+              {(application.company_id || application.company_name) && (
+                <div className="card bg-base-100 shadow-xl">
+                  <div className="card-body">
+                    <h2 className="card-title text-lg border-b pb-2 mb-4">Información de la Empresa</h2>
+                    
+                    <div className="space-y-4">
+                      {application.company_name && (
+                        <div>
+                          <p className="text-sm text-gray-500">Nombre de la Empresa</p>
+                          <p className="font-medium">{application.company_name}</p>
+                        </div>
+                      )}
+                      
+                      {application.company_id && (
+                        <div>
+                          <p className="text-sm text-gray-500">ID de la Empresa</p>
+                          <p className="font-medium">{application.company_id}</p>
+                        </div>
+                      )}
+
+                      {/* Botón para ver detalles de la empresa si tiene permisos */}
+                      {userCan(PERMISSIONS.VIEW_COMPANIES) && (
+                        <div className="pt-2 mt-2 border-t">
+                          <Link 
+                            to={`/companies/${application.company_id}`} 
+                            className="btn btn-sm btn-outline btn-primary w-full"
+                          >
+                            Ver Detalles de la Empresa
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Información del asesor */}
+              {application.assigned_to && (
+                <div className="card bg-base-100 shadow-xl">
+                  <div className="card-body">
+                    <h2 className="card-title text-lg border-b pb-2 mb-4">Asesor Asignado</h2>
+                    
+                    <div className="space-y-4">
+                      {application.advisor_name && (
+                        <div>
+                          <p className="text-sm text-gray-500">Nombre del Asesor</p>
+                          <p className="font-medium">{application.advisor_name}</p>
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-sm text-gray-500">ID del Asesor</p>
+                        <p className="font-medium">{application.assigned_to}</p>
+                      </div>
+
+                      {/* Botón para ver detalles del asesor si tiene permisos */}
+                      {userCan(PERMISSIONS.VIEW_ADVISORS) && (
+                        <div className="pt-2 mt-2 border-t">
+                          <Link 
+                            to={`/advisors/${application.assigned_to}`} 
+                            className="btn btn-sm btn-outline btn-primary w-full"
+                          >
+                            Ver Perfil del Asesor
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Sección para documentos */}
+            <div className="mt-8">
+              <div className="card bg-base-100 shadow-xl">
+                <div className="card-body">
+                  <h2 className="card-title text-lg border-b pb-2 mb-4 flex justify-between">
+                    <span>Documentos de la Solicitud</span>
+                    {userCan(PERMISSIONS.UPLOAD_DOCUMENTS) && (
+                      <button 
+                        className="btn btn-sm btn-primary"
+                        onClick={() => {
+                          /* Aquí iría la lógica para subir nuevos documentos */
+                          console.log("Función para subir documentos - pendiente de implementar");
+                        }}
+                      >
+                        Subir Documento
+                      </button>
+                    )}
+                  </h2>
+                  
+                  <div className="p-4 bg-base-200 text-center rounded-lg">
+                    <p>La lista de documentos no está disponible en este momento.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Historial de la solicitud */}
+            <div className="mt-8">
+              <div className="card bg-base-100 shadow-xl">
+                <div className="card-body">
+                  <h2 className="card-title text-lg border-b pb-2 mb-4">Historial de la Solicitud</h2>
+                  
+                  <div className="p-4 bg-base-200 text-center rounded-lg">
+                    <p>El historial de la solicitud no está disponible en este momento.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
         ) : (
           <div className="text-center p-10">
             <h3 className="text-xl text-gray-500">No se encontró la solicitud</h3>

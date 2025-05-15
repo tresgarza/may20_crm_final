@@ -1,0 +1,32 @@
+export const APPLICATION_STATUS = {
+  NEW: 'NEW',
+  IN_REVIEW: 'IN_REVIEW',
+  APPROVED: 'APPROVED', 
+  REJECTED: 'REJECTED',
+  POR_DISPERSAR: 'POR_DISPERSAR',
+  COMPLETED: 'COMPLETED',
+} as const;
+
+export const APPROVAL_STATUS = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+} as const;
+
+export type ApplicationStatus = typeof APPLICATION_STATUS[keyof typeof APPLICATION_STATUS];
+export type ApprovalStatus = typeof APPROVAL_STATUS[keyof typeof APPROVAL_STATUS];
+
+export const APPLICATION_STATUS_DISPLAY_NAME = {
+  [APPLICATION_STATUS.NEW]: 'Nuevo',
+  [APPLICATION_STATUS.IN_REVIEW]: 'En Revisión',
+  [APPLICATION_STATUS.APPROVED]: 'Aprobado',
+  [APPLICATION_STATUS.REJECTED]: 'Rechazado',
+  [APPLICATION_STATUS.POR_DISPERSAR]: 'Por Dispersar',
+  [APPLICATION_STATUS.COMPLETED]: 'Completado',
+} as const;
+
+export const APPROVAL_STATUS_DISPLAY_NAME = {
+  [APPROVAL_STATUS.PENDING]: 'Pendiente',
+  [APPROVAL_STATUS.APPROVED]: 'Aprobado',
+  [APPROVAL_STATUS.REJECTED]: 'Rechazado',
+} as const; 

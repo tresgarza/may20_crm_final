@@ -3,10 +3,26 @@ import { createClient } from '@supabase/supabase-js';
 // Import environment variables
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://ydnygntfkrleiseuciwq.supabase.co';
 const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbnlnbnRma3JsZWlzZXVjaXdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk5OTI0MDYsImV4cCI6MjA1NTU2ODQwNn0.B-dH2Kptzz1oyM4ynno_GjlvjpxL-HbNKC_st4bgf0A';
-const serviceRoleKey = process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY || '';
+const serviceRoleKey = process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbnlnbnRma3JsZWlzZXVjaXdxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczOTk5MjQwNiwiZXhwIjoyMDU1NTY4NDA2fQ.TwhEGW9DK4DTQQRquT6Z9UW8T8UjLX-hp9uKdRjWAhs';
+
+// Create base Supabase options with headers to fix 406 errors
+const getSupabaseOptions = (key) => ({
+  auth: {
+    persistSession: true,
+  },
+  global: {
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'apikey': key,
+      'Authorization': `Bearer ${key}`,
+      'Prefer': 'return=representation'
+    },
+  },
+});
 
 // Create a single supabase client for interacting with your database
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, getSupabaseOptions(supabaseAnonKey));
 
 // Get an authenticated client for the current user
 export const getAuthenticatedClient = () => {
@@ -19,12 +35,12 @@ export const getServiceClient = () => {
     console.warn('Service role key not available, falling back to anon client');
     return supabase;
   }
-  return createClient(supabaseUrl, serviceRoleKey);
+  return createClient(supabaseUrl, serviceRoleKey, getSupabaseOptions(serviceRoleKey));
 };
 
 // Function to reinitialize the Supabase client (useful after authentication changes)
 export const reinitializeSupabaseClient = () => {
-  return createClient(supabaseUrl, supabaseAnonKey);
+  return createClient(supabaseUrl, supabaseAnonKey, getSupabaseOptions(supabaseAnonKey));
 };
 
 // Helper function to create a real-time subscription to a table

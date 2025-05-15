@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChartBarIcon, CurrencyDollarIcon, UserGroupIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
+import { ChartBarIcon, CurrencyDollarIcon, UserGroupIcon, ClipboardDocumentCheckIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../contexts/AuthContext';
 import { USER_ROLES } from '../utils/constants/roles';
 import { APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
@@ -15,6 +15,7 @@ import MonthlyApplicationsChart from '../components/ui/charts/MonthlyApplication
 import AmountRangeChart from '../components/ui/charts/AmountRangeChart';
 import AdvisorPerformanceChart from '../components/ui/charts/AdvisorPerformanceChart';
 import DateRangeFilter, { DateRange, DateRangeOption } from '../components/ui/filters/DateRangeFilter';
+import TimePeriodToggle, { TimePeriod } from '../components/ui/filters/TimePeriodToggle';
 
 // Servicios
 import {
@@ -52,6 +53,7 @@ interface ExtendedStats {
   totalPending?: number;
   totalApproved?: number;
   totalRejected?: number;
+  attentionNeededCount?: number;
   // Add any other extra fields needed
 }
 
@@ -73,6 +75,7 @@ const Dashboard: React.FC = () => {
     companyId: '',
   });
   const [pendingApproval, setPendingApproval] = useState(0);
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>('week');
 
   // Create a wrapper for formatCurrency that matches MetricCard's formatValue type
   const formatMetricValue = (value: string | number): string => {
@@ -115,7 +118,8 @@ const Dashboard: React.FC = () => {
       applicationsByStatus: [],
       applicationsByMonth: [],
       applicationsByStatusChart: [],
-      totalClients: 0
+      totalClients: 0,
+      attentionNeededCount: 0
     };
   };
 
@@ -135,7 +139,8 @@ const Dashboard: React.FC = () => {
       applicationsByStatus: [],
       applicationsByStatusChart: [],
       totalClients: 0,
-      conversionRate: 0
+      conversionRate: 0,
+      attentionNeededCount: 0
     };
   };
 
@@ -156,7 +161,8 @@ const Dashboard: React.FC = () => {
       applicationsByStatus: [],
       applicationsByStatusChart: [],
       applicationsByMonth: [],
-      advisorPerformance: []
+      advisorPerformance: [],
+      attentionNeededCount: 0
     };
   };
 
@@ -524,9 +530,9 @@ const Dashboard: React.FC = () => {
     <MainLayout>
       <div className="p-6 space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-          <div className="flex items-center">
-            <h1 className="text-2xl font-bold text-gray-800 mb-6">Dashboard</h1>
-            <div className="badge badge-primary ml-3 mb-6">Solo Planes Seleccionados</div>
+        <div className="flex items-center">
+          <h1 className="text-2xl font-bold text-gray-800 mb-6">Dashboard</h1>
+          <div className="badge badge-primary ml-3 mb-6">Solo Planes Seleccionados</div>
           </div>
           
           {/* Filtro de rango de fechas */}
@@ -551,7 +557,7 @@ const Dashboard: React.FC = () => {
         )}
 
         {/* Tarjetas de métricas principales - Always show regardless of value */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <MetricCard
             title="Total de Solicitudes"
             value={stats?.totalApplications || 0}
@@ -588,21 +594,43 @@ const Dashboard: React.FC = () => {
               color="purple"
             />
           )}
+          
+          <MetricCard
+            title="Requieren Atención"
+            value={stats?.attentionNeededCount || 0}
+            icon={<ExclamationCircleIcon className="h-5 w-5" />}
+            color="red"
+            tooltip="Solicitudes sin cambios en 48+ horas (no rechazadas ni completadas)"
+          />
         </div>
 
         {/* Gráficos principales - Always show regardless of data */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
           <div className="card bg-base-100 shadow-md">
             <div className="card-body">
-              <h2 className="card-title text-lg font-semibold">Solicitudes por Mes</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="card-title text-lg font-semibold">
+                  {timePeriod === 'day' && 'Solicitudes por Día'}
+                  {timePeriod === 'week' && 'Solicitudes por Semana'}
+                  {timePeriod === 'month' && 'Solicitudes por Mes'}
+                  {timePeriod === 'year' && 'Solicitudes por Año'}
+                </h2>
+                <TimePeriodToggle
+                  value={timePeriod}
+                  onChange={setTimePeriod}
+                  className="ml-auto"
+                />
+              </div>
               {stats.applicationsByMonth && (
                 <MonthlyApplicationsChart
                   data={Array.isArray(stats.applicationsByMonth) ? stats.applicationsByMonth.map((item: any) => ({
                     month: String(item.month || ''),
-                    count: Number(item.count || 0)
+                    count: Number(item.count || 0),
+                    daily: Array.isArray(item.daily) ? item.daily : undefined
                   })) : []}
                   height={300}
                   title=""
+                  timePeriod={timePeriod}
                 />
               )}
             </div>
@@ -782,8 +810,8 @@ const Dashboard: React.FC = () => {
                     )}
                   </>
                 ) : (
-                  <div className="stats stats-vertical shadow">
-                    <div className="stat">
+                <div className="stats stats-vertical shadow">
+                  <div className="stat">
                       <div className="stat-title">Nuevo</div>
                       <div className="stat-value text-amber-400">{stats.pendingApplications}</div>
                     </div>
@@ -795,8 +823,8 @@ const Dashboard: React.FC = () => {
                             .filter(item => item.status.toLowerCase() === 'approved')
                             .reduce((sum, item) => sum + item.count, 0) : 0}
                       </div>
-                    </div>
-                    <div className="stat">
+                  </div>
+                  <div className="stat">
                       <div className="stat-title">Rechazado</div>
                       <div className="stat-value text-rose-600">{stats.rejectedApplications}</div>
                     </div>
@@ -809,8 +837,8 @@ const Dashboard: React.FC = () => {
                             .filter(item => item.status.toLowerCase() === 'por_dispersar')
                             .reduce((sum, item) => sum + item.count, 0) : 0}
                       </div>
-                    </div>
-                    <div className="stat">
+                  </div>
+                  <div className="stat">
                       <div className="stat-title">Completado</div>
                       <div className="stat-value text-emerald-700">
                         {Array.isArray(stats.applicationsByStatus) ?

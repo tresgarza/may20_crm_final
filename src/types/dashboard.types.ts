@@ -61,6 +61,7 @@ export interface DashboardStats {
   conversionRate?: number;
   amountRanges?: AmountRange[];
   mockAdvisorPerformance?: MockAdvisorData[];
+  attentionNeededCount?: number;
 }
 
 export interface ApplicationStats extends Omit<DashboardStats, 'mockAdvisorPerformance'> {

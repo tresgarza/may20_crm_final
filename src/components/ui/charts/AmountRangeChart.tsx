@@ -53,43 +53,71 @@ const AmountRangeChart: React.FC<AmountRangeChartProps> = ({
 
   // Procesar los datos para el gráfico
   useEffect(() => {
-    if (!data || data.length === 0) return;
+    // First, validate that we have valid data
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      console.log('AmountRangeChart: No data or invalid data provided', data);
+      return;
+    }
 
-    // Ordenar los rangos por valor
-    const sortedData = [...data].sort((a, b) => {
-      // Extraer el valor mínimo de cada rango para ordenar
-      const getMinValue = (range: string) => {
-        const match = range.match(/(\d+)/);
-        return match ? parseInt(match[1], 10) : 0;
-      };
+    try {
+      // Validate and normalize data (filter out invalid items)
+      const validData = data.filter(item => 
+        item && 
+        typeof item === 'object' && 
+        typeof item.range === 'string' && 
+        item.range !== '' &&
+        typeof item.count === 'number'
+      );
       
-      return getMinValue(a.range) - getMinValue(b.range);
-    });
+      if (validData.length === 0) {
+        console.log('AmountRangeChart: No valid data items found');
+        return;
+      }
 
-    const labels = sortedData.map(item => item.range);
-    const counts = sortedData.map(item => item.count);
+      // Sort the ranges by value
+      const sortedData = [...validData].sort((a, b) => {
+        // Extract the minimum value of each range for sorting
+        const getMinValue = (range: string) => {
+          if (!range) return 0; // Handle undefined or null values
+          try {
+            const match = range.match(/(\d+)/);
+            return match ? parseInt(match[1], 10) : 0;
+          } catch (error) {
+            console.error('Error parsing range:', range, error);
+            return 0;
+          }
+        };
+        
+        return getMinValue(a.range) - getMinValue(b.range);
+      });
 
-    // Generar colores con gradiente según el monto
-    const colors = sortedData.map((_, index) => {
-      const value = index / (sortedData.length - 1 || 1);
-      const r = Math.round(255 - (value * 100));
-      const g = Math.round(120 + (value * 60));
-      const b = Math.round(50 + (value * 100));
-      return `rgba(${r}, ${g}, ${b}, 0.8)`;
-    });
+      const labels = sortedData.map(item => item.range);
+      const counts = sortedData.map(item => item.count);
 
-    setChartData({
-      labels,
-      datasets: [
-        {
-          label: 'Solicitudes',
-          data: counts,
-          backgroundColor: colors,
-          borderColor: colors.map(color => color.replace('0.8', '1')),
-          borderWidth: 1,
-        },
-      ],
-    });
+      // Generate gradient colors based on the amount
+      const colors = sortedData.map((_, index) => {
+        const value = index / (sortedData.length - 1 || 1);
+        const r = Math.round(255 - (value * 100));
+        const g = Math.round(120 + (value * 60));
+        const b = Math.round(50 + (value * 100));
+        return `rgba(${r}, ${g}, ${b}, 0.8)`;
+      });
+
+      setChartData({
+        labels,
+        datasets: [
+          {
+            label: 'Solicitudes',
+            data: counts,
+            backgroundColor: colors,
+            borderColor: colors.map(color => color.replace('0.8', '1')),
+            borderWidth: 1,
+          },
+        ],
+      });
+    } catch (error) {
+      console.error('Error processing chart data:', error);
+    }
   }, [data]);
 
   const options = {
@@ -132,7 +160,7 @@ const AmountRangeChart: React.FC<AmountRangeChartProps> = ({
 
   return (
     <div className={`chart-container ${className}`} style={{ height: `${height}px` }}>
-      {data && data.length > 0 ? (
+      {data && Array.isArray(data) && data.length > 0 ? (
         <Bar data={chartData} options={options} />
       ) : (
         <div className="flex items-center justify-center h-full bg-base-200 rounded-lg">
