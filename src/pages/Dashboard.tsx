@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChartBarIcon, CurrencyDollarIcon, UserGroupIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,6 +14,7 @@ import StatusDistributionChart from '../components/ui/charts/StatusDistributionC
 import MonthlyApplicationsChart from '../components/ui/charts/MonthlyApplicationsChart';
 import AmountRangeChart from '../components/ui/charts/AmountRangeChart';
 import AdvisorPerformanceChart from '../components/ui/charts/AdvisorPerformanceChart';
+import DateRangeFilter, { DateRange, DateRangeOption } from '../components/ui/filters/DateRangeFilter';
 
 // Servicios
 import {
@@ -64,6 +65,7 @@ const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStatsType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [partialData, setPartialData] = useState(false);
+  const [dateRangeOption, setDateRangeOption] = useState<DateRangeOption>('all');
   const [filters, setFilters] = useState({
     startDate: '',
     endDate: '',
@@ -82,14 +84,21 @@ const Dashboard: React.FC = () => {
 
   // Comprobar si el objeto es de tipo ApplicationStats
   const isAdvisorStats = (obj: any): obj is ApplicationStats => {
-    console.log('Checking if stats is AdvisorStats:', JSON.stringify(obj));
-    return obj && 'advisorId' in obj && 'conversionRate' in obj;
+    console.log('Checking if stats is AdvisorStats');
+    return obj && 
+           'advisorId' in obj && 
+           typeof obj.advisorId === 'string' && 
+           'conversionRate' in obj;
   };
 
   // Comprobar si el objeto es de tipo CompanyStats
   const isCompanyStats = (obj: any): obj is CompanyStats => {
-    console.log('Checking if stats is CompanyStats:', JSON.stringify(obj));
-    return obj && 'totalAdvisors' in obj && 'avgApprovalTime' in obj;
+    console.log('Checking if stats is CompanyStats');
+    return obj && 
+           'companyId' in obj && 
+           typeof obj.companyId === 'string' &&
+           'totalAdvisors' in obj && 
+           'avgApprovalTime' in obj;
   };
 
   // Define the fallback functions before they're used in useEffect
@@ -133,6 +142,7 @@ const Dashboard: React.FC = () => {
   // Crear datos de respaldo para estadísticas de empresa
   const createFallbackCompanyStats = (companyId: string): CompanyStats => {
     return {
+      companyId: companyId,
       totalApplications: 0,
       pendingApplications: 0,
       approvedApplications: 0,
@@ -144,15 +154,14 @@ const Dashboard: React.FC = () => {
       totalAdvisors: 0,
       avgApprovalTime: 0,
       applicationsByStatus: [],
-      applicationsByMonth: [],
-      advisorPerformance: [],
       applicationsByStatusChart: [],
-      companyId: companyId
+      applicationsByMonth: [],
+      advisorPerformance: []
     };
   };
 
   // Función para cargar estadísticas basadas en el rol
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       setIsLoading(true);
       console.log('Loading dashboard stats...');
@@ -272,11 +281,38 @@ const Dashboard: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user, filters]);
 
   useEffect(() => {
     loadStats();
-  }, [user, filters]);
+    console.log('Refreshing stats with dateRangeOption:', dateRangeOption);
+  }, [user, filters, loadStats, dateRangeOption]);
+
+  // Agregar useEffect para detectar cuando la página está visible
+  useEffect(() => {
+    // Esta función se ejecutará cada vez que el componente reciba el foco
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('Dashboard visible, recargando estadísticas...');
+        loadStats();
+      }
+    };
+
+    // Agregar listener para detectar cambios de visibilidad
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Polling cada 30 segundos para mantener el dashboard actualizado
+    const intervalId = setInterval(() => {
+      console.log('Refresco periódico del dashboard...');
+      loadStats();
+    }, 30000);
+
+    // Limpiar listeners y intervalos al desmontar
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(intervalId);
+    };
+  }, [loadStats]);
 
   // Manejadores para los filtros
   const handleFilterChange = (newFilters: any) => {
@@ -284,6 +320,106 @@ const Dashboard: React.FC = () => {
       ...prev,
       ...newFilters
     }));
+  };
+
+  // Manejador para el cambio en el filtro de fechas
+  const handleDateRangeChange = (range: DateRange) => {
+    console.log('Date range changed:', range);
+    console.log('Current user role:', user?.role);
+    
+    // Convertir fechas a strings solo si las fechas existen
+    const startDateStr = range.startDate ? range.startDate.toISOString().split('T')[0] : '';
+    const endDateStr = range.endDate ? range.endDate.toISOString().split('T')[0] : '';
+    
+    console.log('Converting to date strings:', { 
+      startDate: startDateStr, 
+      endDate: endDateStr,
+      currentStartDate: filters.startDate,
+      currentEndDate: filters.endDate
+    });
+    
+    // Determinar la opción de fecha seleccionada primero
+    let newDateRangeOption: DateRangeOption = 'all';
+    
+    if (!range.startDate && !range.endDate) {
+      console.log('Setting date option to "all"');
+      newDateRangeOption = 'all';
+    } else if (range.startDate && range.endDate) {
+      // Comprueba si es una opción predefinida o rango personalizado
+      const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+      
+      // Obtener el primer día de la semana (lunes)
+      const currentDay = today.getDay();
+      const diff = today.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
+      const weekStart = new Date(today);
+      weekStart.setDate(diff);
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
+      
+      // Obtener el primer y último día del mes
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
+      
+      // Obtener el primer y último día del año
+      const yearStart = new Date(today.getFullYear(), 0, 1);
+      const yearEnd = new Date(today.getFullYear(), 11, 31, 23, 59, 59);
+      
+      // Comparar fechas para determinar la opción
+      const startTime = range.startDate.getTime();
+      const endTime = range.endDate.getTime();
+      
+      console.log('Date comparisons:', {
+        startTime,
+        endTime,
+        todayStart: todayStart.getTime(),
+        todayEnd: todayEnd.getTime(),
+        weekStart: weekStart.getTime(),
+        weekEnd: weekEnd.getTime(),
+        monthStart: monthStart.getTime(),
+        monthEnd: monthEnd.getTime(),
+        yearStart: yearStart.getTime(),
+        yearEnd: yearEnd.getTime()
+      });
+      
+      if (startTime === todayStart.getTime() && endTime === todayEnd.getTime()) {
+        console.log('Setting date option to "today"');
+        newDateRangeOption = 'today';
+      } else if (startTime === weekStart.getTime() && endTime === weekEnd.getTime()) {
+        console.log('Setting date option to "thisWeek"');
+        newDateRangeOption = 'thisWeek';
+      } else if (startTime === monthStart.getTime() && endTime === monthEnd.getTime()) {
+        console.log('Setting date option to "thisMonth"');
+        newDateRangeOption = 'thisMonth';
+      } else if (startTime === yearStart.getTime() && endTime === yearEnd.getTime()) {
+        console.log('Setting date option to "thisYear"');
+        newDateRangeOption = 'thisYear';
+      } else {
+        console.log('Setting date option to "custom"');
+        newDateRangeOption = 'custom';
+      }
+    }
+    
+    // Actualizar la opción de fecha seleccionada
+    console.log('Updating dateRangeOption from', dateRangeOption, 'to', newDateRangeOption);
+    setDateRangeOption(newDateRangeOption);
+    
+    // Solo actualizar si las fechas son diferentes a las actuales
+    // para evitar ciclos de renderizado infinitos
+    if (startDateStr !== filters.startDate || endDateStr !== filters.endDate) {
+      console.log('Date range differs from current filters, updating...');
+      
+      setFilters(prev => ({
+        ...prev,
+        startDate: startDateStr,
+        endDate: endDateStr
+      }));
+    } else {
+      console.log('Date range is the same as current filters, but still updating dateRangeOption');
+    }
   };
 
   // Utility function to get application type label
@@ -387,9 +523,19 @@ const Dashboard: React.FC = () => {
   return (
     <MainLayout>
       <div className="p-6 space-y-6">
-        <div className="flex items-center">
-          <h1 className="text-2xl font-bold text-gray-800 mb-6">Dashboard</h1>
-          <div className="badge badge-primary ml-3 mb-6">Solo Planes Seleccionados</div>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+          <div className="flex items-center">
+            <h1 className="text-2xl font-bold text-gray-800 mb-6">Dashboard</h1>
+            <div className="badge badge-primary ml-3 mb-6">Solo Planes Seleccionados</div>
+          </div>
+          
+          {/* Filtro de rango de fechas */}
+          <div className="mb-6 w-full sm:w-auto">
+            <DateRangeFilter 
+              onChange={handleDateRangeChange}
+              initialOption={dateRangeOption}
+            />
+          </div>
         </div>
 
         {partialData && (
@@ -408,24 +554,20 @@ const Dashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricCard
             title="Total de Solicitudes"
-            value={stats.totalApplications}
+            value={stats?.totalApplications || 0}
             icon={<ChartBarIcon className="h-5 w-5" />}
             color="blue"
           />
           <MetricCard
             title="Solicitudes Aprobadas"
-            value={isAdvisorStats(stats) 
-              ? (stats.approvedApplications || 0) 
-              : (stats.approvedApplications || 0)}
+            value={stats?.approvedApplications || 0}
             previousValue={0}
             icon={<ClipboardDocumentCheckIcon className="h-5 w-5" />}
             color="green"
           />
           <MetricCard
-            title="Monto Promedio"
-            value={isCompanyStats(stats) 
-              ? (stats.avgAmount || 0) 
-              : (stats.avgAmount || 0)}
+            title="Monto Aprobado Promedio"
+            value={stats?.avgAmount || 0}
             formatValue={formatMetricValue}
             icon={<CurrencyDollarIcon className="h-5 w-5" />}
             color="indigo"
@@ -433,15 +575,15 @@ const Dashboard: React.FC = () => {
           {isAdvisorStats(stats) ? (
             <MetricCard
               title="Tasa de Conversión"
-              value={Number(stats.conversionRate || 0)}
+              value={Number(stats?.conversionRate || 0)}
               isPercentage={true}
               icon={<UserGroupIcon className="h-5 w-5" />}
               color="purple"
             />
           ) : (
             <MetricCard
-              title="Total de Clientes"
-              value={'totalClients' in stats && stats.totalClients !== undefined ? Number(stats.totalClients) : 0}
+              title="Total de Empleados"
+              value={Number(stats?.totalClients || 0)}
               icon={<UserGroupIcon className="h-5 w-5" />}
               color="purple"
             />
@@ -475,6 +617,7 @@ const Dashboard: React.FC = () => {
                   : formatStatusData(stats.applicationsByStatus)}
                 height={300}
                 title=""
+                preserveOriginalStatuses={true}
               />
             </div>
           </div>
@@ -485,6 +628,19 @@ const Dashboard: React.FC = () => {
           <div className="card bg-base-100 shadow-md">
             <div className="card-body">
               <h2 className="card-title text-lg font-semibold">Distribución por Monto</h2>
+              {(() => {
+                // Logs fuera del JSX para evitar errores de 'void not assignable to ReactNode'
+                console.log('Dashboard - amountRanges:', stats?.amountRanges);
+                console.log('Dashboard - amountRanges type:', Array.isArray(stats?.amountRanges) ? 'Array' : typeof stats?.amountRanges);
+                console.log('Dashboard - amountRanges conditions:', {
+                  exists: !!stats?.amountRanges,
+                  isArray: Array.isArray(stats?.amountRanges),
+                  length: stats?.amountRanges?.length,
+                  validLength: (stats?.amountRanges?.length || 0) > 0,
+                  userRole: user?.role
+                });
+                return null;
+              })()}
               {stats && stats.amountRanges && Array.isArray(stats.amountRanges) && stats.amountRanges.length > 0 ? (
                 <AmountRangeChart
                   data={stats.amountRanges}
@@ -516,25 +672,162 @@ const Dashboard: React.FC = () => {
             </div>
           )}
 
-          {/* Mostrar información adicional para asesores */}
-          {isAdvisorStats(stats) && (
+          {/* Mostrar información adicional para asesores y empresas */}
+          {(isAdvisorStats(stats) || isCompanyStats(stats)) && (
             <div className="card bg-base-100 shadow-md">
               <div className="card-body">
                 <h2 className="card-title text-lg font-semibold">Resumen de Solicitudes</h2>
-                <div className="stats stats-vertical shadow">
-                  <div className="stat">
-                    <div className="stat-title">Solicitudes Aprobadas</div>
-                    <div className="stat-value text-success">{stats.approvedApplications}</div>
+                
+                {/* Verificar si existen los datos de la gráfica circular para usarlos */}
+                {stats.applicationsByStatusChart && stats.applicationsByStatusChart.length > 0 ? (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Definir manualmente todos los estados que deben aparecer */}
+                      {[
+                        { status: 'Nuevo', color: 'amber-400', key: 'pending' },
+                        { status: 'En Revisión', color: 'sky-400', key: 'in_review' },
+                        { status: 'Aprobado', color: 'green-400', key: 'approved' },
+                        { status: 'Por Dispersar', color: 'purple-400', key: 'por_dispersar' },
+                        { status: 'Completado', color: 'emerald-700', key: 'completed' },
+                        { status: 'Rechazado', color: 'rose-600', key: 'rejected' }
+                      ].map((statusItem) => {
+                        // Obtener el conteo directamente de applicationsByStatus, que contiene los datos originales
+                        // tal como aparecen en el Kanban
+                        let count = 0;
+                        
+                        if (stats.applicationsByStatus && Array.isArray(stats.applicationsByStatus)) {
+                          // Buscar datos específicamente con la clave exacta para evitar mezclar categorías
+                          switch (statusItem.key) {
+                            case 'pending':
+                              // Para "Nuevo" buscar 'pending', 'new', 'solicitud'
+                              count = stats.applicationsByStatus
+                                .filter(item => 
+                                  item.status.toLowerCase() === 'pending' || 
+                                  item.status.toLowerCase() === 'new' || 
+                                  item.status.toLowerCase() === 'solicitud' ||
+                                  item.status.toLowerCase() === 'nuevo')
+                                .reduce((sum, item) => sum + item.count, 0);
+                              break;
+                            case 'in_review':
+                              // Para "En Revisión"
+                              count = stats.applicationsByStatus
+                                .filter(item => 
+                                  item.status.toLowerCase() === 'in_review' || 
+                                  item.status.toLowerCase().includes('revis'))
+                                .reduce((sum, item) => sum + item.count, 0);
+                              break;
+                            case 'approved':
+                              // Para "Aprobado" - SOLO incluir estado "approved"
+                              count = stats.applicationsByStatus
+                                .filter(item => 
+                                  item.status.toLowerCase() === 'approved')
+                                .reduce((sum, item) => sum + item.count, 0);
+                              break;
+                            case 'por_dispersar':
+                              // Para "Por Dispersar" - SOLO incluir estado "por_dispersar"
+                              count = stats.applicationsByStatus
+                                .filter(item => 
+                                  item.status.toLowerCase() === 'por_dispersar')
+                                .reduce((sum, item) => sum + item.count, 0);
+                              break;
+                            case 'completed':
+                              // Para "Completado" - SOLO incluir estado "completed"
+                              count = stats.applicationsByStatus
+                                .filter(item => 
+                                  item.status.toLowerCase() === 'completed')
+                                .reduce((sum, item) => sum + item.count, 0);
+                              break;
+                            case 'rejected':
+                              // Para "Rechazado"
+                              count = stats.applicationsByStatus
+                                .filter(item => 
+                                  item.status.toLowerCase() === 'rejected' || 
+                                  item.status.toLowerCase().includes('recha'))
+                                .reduce((sum, item) => sum + item.count, 0);
+                              break;
+                          }
+                        }
+                        
+                        // Casos especiales si no se encontró en applicationsByStatus
+                        if (count === 0) {
+                          // Usar los contadores globales
+                          if (statusItem.key === 'pending') {
+                            count = stats.pendingApplications || 0;
+                          } else if (statusItem.key === 'rejected') {
+                            count = stats.rejectedApplications || 0;
+                          }
+                        }
+                        
+                        return (
+                          <div className="stat px-4 py-2" key={statusItem.status}>
+                            <div className="stat-title">{statusItem.status}</div>
+                            {statusItem.key === 'pending' && <div className="stat-value text-amber-400">{count}</div>}
+                            {statusItem.key === 'in_review' && <div className="stat-value text-sky-400">{count}</div>}
+                            {statusItem.key === 'approved' && <div className="stat-value text-green-400">{count}</div>}
+                            {statusItem.key === 'por_dispersar' && <div className="stat-value text-purple-400">{count}</div>}
+                            {statusItem.key === 'completed' && <div className="stat-value text-emerald-700">{count}</div>}
+                            {statusItem.key === 'rejected' && <div className="stat-value text-rose-600">{count}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Información del tiempo de aprobación solo para empresa */}
+                    {isCompanyStats(stats) && (
+                      <div className="stat mt-2 border-t pt-4">
+                        <div className="stat-title">Promedio de Tiempo de Aprobación</div>
+                        <div className="stat-value text-info">{stats.avgApprovalTime.toFixed(1)} días</div>
+                        <div className="stat-desc">Tiempo promedio desde solicitud hasta aprobación</div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="stats stats-vertical shadow">
+                    <div className="stat">
+                      <div className="stat-title">Nuevo</div>
+                      <div className="stat-value text-amber-400">{stats.pendingApplications}</div>
+                    </div>
+                    <div className="stat">
+                      <div className="stat-title">Aprobado</div>
+                      <div className="stat-value text-green-400">
+                        {Array.isArray(stats.applicationsByStatus) ?
+                          stats.applicationsByStatus
+                            .filter(item => item.status.toLowerCase() === 'approved')
+                            .reduce((sum, item) => sum + item.count, 0) : 0}
+                      </div>
+                    </div>
+                    <div className="stat">
+                      <div className="stat-title">Rechazado</div>
+                      <div className="stat-value text-rose-600">{stats.rejectedApplications}</div>
+                    </div>
+                    {/* Añadir contadores para "Por Dispersar" y "Completado" */}
+                    <div className="stat">
+                      <div className="stat-title">Por Dispersar</div>
+                      <div className="stat-value text-purple-400">
+                        {Array.isArray(stats.applicationsByStatus) ?
+                          stats.applicationsByStatus
+                            .filter(item => item.status.toLowerCase() === 'por_dispersar')
+                            .reduce((sum, item) => sum + item.count, 0) : 0}
+                      </div>
+                    </div>
+                    <div className="stat">
+                      <div className="stat-title">Completado</div>
+                      <div className="stat-value text-emerald-700">
+                        {Array.isArray(stats.applicationsByStatus) ?
+                          stats.applicationsByStatus
+                            .filter(item => item.status.toLowerCase() === 'completed')
+                            .reduce((sum, item) => sum + item.count, 0) : 0}
+                      </div>
+                    </div>
+                    {isCompanyStats(stats) && (
+                      <div className="stat">
+                        <div className="stat-title">Promedio de Tiempo de Aprobación</div>
+                        <div className="stat-value text-info">{stats.avgApprovalTime.toFixed(1)} días</div>
+                        <div className="stat-desc">Tiempo promedio desde solicitud hasta aprobación</div>
+                      </div>
+                    )}
                   </div>
-                  <div className="stat">
-                    <div className="stat-title">Solicitudes Rechazadas</div>
-                    <div className="stat-value text-error">{stats.rejectedApplications}</div>
-                  </div>
-                  <div className="stat">
-                    <div className="stat-title">Solicitudes Pendientes</div>
-                    <div className="stat-value text-warning">{stats.pendingApplications}</div>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           )}
@@ -592,6 +885,16 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Mostrar información sobre el rango de fechas seleccionado */}
+        {filters.startDate && filters.endDate && (
+          <div className="alert alert-info mt-4">
+            <div className="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              <span>Mostrando datos desde {filters.startDate} hasta {filters.endDate}</span>
+            </div>
+          </div>
+        )}
       </div>
     </MainLayout>
   );

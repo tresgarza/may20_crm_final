@@ -15,25 +15,33 @@ interface StatusDistributionChartProps {
   height?: number;
   showLegend?: boolean;
   className?: string;
+  preserveOriginalStatuses?: boolean;
 }
 
 // Definir colores específicos para cada estado
 const STATUS_COLORS_MAP = {
-  'pending': '#FBBD23',     // amarillo para pendiente
-  'in_review': '#D926AA',   // magenta para revisión
-  'approved': '#36D399',    // verde para aprobado
-  'rejected': '#F87272',    // rojo para rechazado
-  'completed': '#570DF8',   // azul para completado
-  'cancelled': '#6E6E6E',   // gris para cancelado
-  'por_dispersar': '#62A0EA', // celeste para dispersar
-  'expired': '#FF5757',     // rojo brillante para expirado
-  'new': '#3ABFF8',         // azul claro para nuevo
+  'Nuevo': '#FBBD23',     // amarillo para pendiente/nuevo (warning)
+  'En Revisión': '#3ABFF8',   // azul claro para revisión (info)
+  'Aprobado': '#36D399',    // verde claro para aprobado (success)
+  'Por Dispersar': '#C084FC', // morado claro para dispersar (purple)
+  'Rechazado': '#E11D48',    // rojo obscuro para rechazado (rose)
+  'Completado': '#059669',   // verde obscuro para completado (emerald)
+  'Cancelado': '#6E6E6E',   // gris para cancelado
+  'Expirado': '#FF5757',     // rojo brillante para expirado
+  'pending': '#FBBD23',         // compatibilidad con claves antiguas
+  'in_review': '#3ABFF8',
+  'approved': '#36D399',
+  'rejected': '#E11D48',
+  'completed': '#059669',
+  'cancelled': '#6E6E6E',
+  'por_dispersar': '#C084FC',
+  'expired': '#FF5757',
   'default': '#cccccc'      // gris claro para desconocidos
 };
 
 // Definir etiquetas en español
 const STATUS_LABELS_MAP = {
-  'pending': 'Pendiente',
+  'pending': 'Nuevo',
   'in_review': 'En Revisión',
   'approved': 'Aprobado',
   'rejected': 'Rechazado',
@@ -42,7 +50,7 @@ const STATUS_LABELS_MAP = {
   'por_dispersar': 'Por Dispersar',
   'expired': 'Expirado',
   'new': 'Nuevo',
-  'solicitud': 'Pendiente',
+  'solicitud': 'Nuevo',
   'default': 'Desconocido'
 };
 
@@ -52,6 +60,7 @@ const StatusDistributionChart: React.FC<StatusDistributionChartProps> = ({
   height = 240,
   showLegend = true,
   className = '',
+  preserveOriginalStatuses = false,
 }) => {
   // Si no hay datos, mostrar mensaje
   if (!data || data.length === 0) {
@@ -66,42 +75,98 @@ const StatusDistributionChart: React.FC<StatusDistributionChartProps> = ({
   const normalizeStatus = (status: string): string => {
     const lowerStatus = status.toLowerCase();
     
-    if (lowerStatus.includes('pend') || lowerStatus === 'new' || lowerStatus === 'solicitud') {
-      return 'pending';
+    if (lowerStatus.includes('pend') || lowerStatus === 'new' || lowerStatus === 'solicitud' || lowerStatus === 'nuevo') {
+      return 'Nuevo';
     } else if (lowerStatus.includes('review') || lowerStatus.includes('revis')) {
-      return 'in_review';
-    } else if (lowerStatus.includes('aprob') || lowerStatus.includes('aprov')) {
-      return 'approved';
+      return 'En Revisión';
+    } else if (lowerStatus.includes('aprob') || lowerStatus.includes('aprov') || lowerStatus.includes('approv')) {
+      return 'Aprobado';
     } else if (lowerStatus.includes('recha') || lowerStatus.includes('reject')) {
-      return 'rejected';
+      return 'Rechazado';
     } else if (lowerStatus.includes('comple')) {
-      return 'completed';
+      return 'Completado';
     } else if (lowerStatus.includes('cancel')) {
-      return 'cancelled';
-    } else if (lowerStatus.includes('disper')) {
-      return 'por_dispersar';
+      return 'Cancelado';
+    } else if (lowerStatus.includes('dispers')) {
+      return 'Por Dispersar';
     } else if (lowerStatus.includes('expir')) {
-      return 'expired';
+      return 'Expirado';
     } else {
       return 'default';
     }
   };
 
-  // Agrupar datos por estado normalizado
+  // Agrupar datos por estado normalizado o mantener originales
   const groupedData: Record<string, number> = {};
-  data.forEach(item => {
-    const normalizedStatus = normalizeStatus(item.status);
-    if (!groupedData[normalizedStatus]) {
-      groupedData[normalizedStatus] = 0;
-    }
-    groupedData[normalizedStatus] += item.count;
-  });
+  
+  if (preserveOriginalStatuses) {
+    // Usar los estados originales sin normalizar
+    data.forEach(item => {
+      // Convertir a minúsculas para estandarizar
+      const originalStatus = item.status.toLowerCase();
+      if (!groupedData[originalStatus]) {
+        groupedData[originalStatus] = 0;
+      }
+      groupedData[originalStatus] += item.count;
+    });
+  } else {
+    // Normalizar estados (comportamiento original)
+    data.forEach(item => {
+      const normalizedStatus = normalizeStatus(item.status);
+      if (!groupedData[normalizedStatus]) {
+        groupedData[normalizedStatus] = 0;
+      }
+      groupedData[normalizedStatus] += item.count;
+    });
+  }
 
   // Preparar datos para el gráfico
   const statuses = Object.keys(groupedData);
   const counts = Object.values(groupedData);
-  const colors = statuses.map(status => STATUS_COLORS_MAP[status as keyof typeof STATUS_COLORS_MAP] || STATUS_COLORS_MAP.default);
-  const labels = statuses.map(status => STATUS_LABELS_MAP[status as keyof typeof STATUS_LABELS_MAP] || status);
+  
+  // Obtener colores y etiquetas
+  const colors = statuses.map(status => {
+    // Si preservamos estados originales, podemos intentar encontrar un color adecuado
+    if (preserveOriginalStatuses) {
+      // Intentar encontrar un color basado en palabras clave
+      const statusLower = status.toLowerCase();
+      if (statusLower.includes('pend') || statusLower === 'new' || statusLower === 'solicitud' || statusLower === 'nuevo') {
+        return STATUS_COLORS_MAP.pending; // Amarillo
+      } else if (statusLower.includes('review') || statusLower.includes('revis')) {
+        return STATUS_COLORS_MAP.in_review; // Azul claro
+      } else if (statusLower.includes('aprob') || statusLower.includes('aprov') || statusLower === 'aprobado' || statusLower.includes('approv')) {
+        return STATUS_COLORS_MAP.approved; // Verde claro
+      } else if (statusLower.includes('comple')) {
+        return STATUS_COLORS_MAP.completed; // Verde obscuro
+      } else if (statusLower.includes('disper')) {
+        return STATUS_COLORS_MAP.por_dispersar; // Morado claro
+      } else if (statusLower.includes('recha') || statusLower.includes('reject')) {
+        return STATUS_COLORS_MAP.rejected; // Rojo obscuro
+      } else if (statusLower.includes('cancel')) {
+        return STATUS_COLORS_MAP.cancelled;
+      } else if (statusLower.includes('expir')) {
+        return STATUS_COLORS_MAP.expired;
+      } else {
+        return STATUS_COLORS_MAP.default;
+      }
+    }
+    // Si no preservamos, usar el mapa de colores directamente
+    return STATUS_COLORS_MAP[status as keyof typeof STATUS_COLORS_MAP] || STATUS_COLORS_MAP.default;
+  });
+  
+  // Obtener etiquetas con la primera letra mayúscula si no hay un mapeo directo
+  const labels = statuses.map(status => {
+    if (preserveOriginalStatuses) {
+      // Buscar el estado en el mapa de etiquetas
+      const mappedLabel = STATUS_LABELS_MAP[status as keyof typeof STATUS_LABELS_MAP];
+      if (mappedLabel) {
+        return mappedLabel;
+      }
+      // Capitalizar la primera letra si no hay mapeo
+      return status.charAt(0).toUpperCase() + status.slice(1);
+    }
+    return STATUS_LABELS_MAP[status as keyof typeof STATUS_LABELS_MAP] || status;
+  });
 
   // Datos del gráfico
   const chartData = {
