@@ -301,11 +301,11 @@ const Dashboard: React.FC = () => {
     // Agregar listener para detectar cambios de visibilidad
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Polling cada 30 segundos para mantener el dashboard actualizado
+    // Polling cada 120 segundos para mantener el dashboard actualizado
     const intervalId = setInterval(() => {
       console.log('Refresco periódico del dashboard...');
       loadStats();
-    }, 30000);
+    }, 120000); // Cambiado de 30000 (30 segundos) a 120000 (120 segundos)
 
     // Limpiar listeners y intervalos al desmontar
     return () => {
