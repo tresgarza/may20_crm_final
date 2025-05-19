@@ -12,7 +12,7 @@ import {
   createNoEffectError
 } from '../utils/errorHandling';
 import { parseNumericString, processNumericField } from '../utils/numberFormatting';
-import { uploadClientDocuments as uploadDocs } from '../utils/documentUpload';
+import { uploadClientDocuments as uploadDocs, ClientDocument as UploadClientDocument } from '../utils/documentUpload';
 import * as clientDocumentService from './client/clientDocumentService';
 
 // Re-exportamos las interfaces para mantener compatibilidad
@@ -105,7 +105,20 @@ const mapUserToClient = (userData: any): Client => {
     reference2_phone: userData.reference2_phone,
   };
   
-  return client;
+  // Extraer company_name de la relación companies si existe (array u objeto)
+  let companyName: string | undefined = undefined;
+  const compRel: any = (userData as any).companies;
+  if (compRel) {
+    if (Array.isArray(compRel)) {
+      companyName = (compRel as any)[0]?.name;
+    } else if (typeof compRel === 'object') {
+      companyName = (compRel as any)?.name;
+    }
+  }
+  return {
+    ...client,
+    company_name: companyName
+  } as Client;
 };
 
 export const getClients = async (filters?: ClientFilter) => {
@@ -113,15 +126,43 @@ export const getClients = async (filters?: ClientFilter) => {
     // Usamos el cliente de servicio para evitar problemas de autenticación
     const serviceClient = getServiceClient();
     
+    // Additional debug logging
+    console.log('[getClients] Starting client query with filters:', JSON.stringify(filters));
+    
     let query = serviceClient.from(USERS_TABLE)
-      .select('id, email, first_name, paternal_surname, maternal_surname, phone, company_id, created_at, birth_date, rfc, curp, advisor_id, address, city, state, postal_code, gender, marital_status, employment_type, employment_years, monthly_income, additional_income, monthly_expenses, other_loan_balances, bank_name, bank_clabe, bank_account_number, bank_account_type, bank_account_origin, street_number_ext, street_number_int, neighborhood, home_phone, birth_state, nationality, job_position, employer_name, employer_phone, employer_address, employer_activity, mortgage_payment, rent_payment, dependent_persons, income_frequency, payment_method, credit_purpose, spouse_paternal_surname, spouse_maternal_surname, reference1_name, reference1_relationship, reference1_address, reference1_phone, reference2_name, reference2_relationship, reference2_address, reference2_phone, last_login', { count: 'exact' });
+      .select(`
+        id, email, first_name, paternal_surname, maternal_surname, phone, 
+        company_id, created_at, birth_date, rfc, curp, advisor_id, 
+        address, city, state, postal_code, gender, marital_status, employment_type, 
+        employment_years, monthly_income, additional_income, monthly_expenses, 
+        other_loan_balances, bank_name, bank_clabe, bank_account_number, 
+        bank_account_type, bank_account_origin, street_number_ext, street_number_int, 
+        neighborhood, home_phone, birth_state, nationality, job_position, 
+        employer_name, employer_phone, employer_address, employer_activity, 
+        mortgage_payment, rent_payment, dependent_persons, income_frequency, 
+        payment_method, credit_purpose, spouse_paternal_surname, spouse_maternal_surname, 
+        reference1_name, reference1_relationship, reference1_address, reference1_phone, 
+        reference2_name, reference2_relationship, reference2_address, reference2_phone, 
+        last_login,
+        companies(name)
+      `, { count: 'exact' });
 
     if (filters) {
+      // Apply strict filtering - each filter is applied independently
+      // Detailed filter logging for debugging
+      console.log('[getClients] Filter application details:');
+      console.log(`  - advisor_id filter: ${filters.advisor_id || 'not set'}`);
+      console.log(`  - company_id filter: ${filters.company_id || 'not set'}`);
+      
+      // Advisors ALWAYS filter by advisor_id to ensure data isolation
       if (filters.advisor_id) {
+        console.log(`[getClients] Applying STRICT advisor filter: advisor_id=${filters.advisor_id}`);
         query = query.eq('advisor_id', filters.advisor_id);
       }
 
+      // Company filter logic
       if (filters.company_id) {
+        console.log(`[getClients] Applying company filter: company_id=${filters.company_id}`);
         query = query.eq('company_id', filters.company_id);
       }
 
@@ -142,6 +183,7 @@ export const getClients = async (filters?: ClientFilter) => {
       if (filters.page !== undefined && filters.pageSize) {
         const from = filters.page * filters.pageSize;
         const to = from + filters.pageSize - 1;
+        console.log(`[getClients] Applying pagination: page ${filters.page}, size ${filters.pageSize}, range ${from}-${to}`);
         query = query.range(from, to);
       }
     }
@@ -151,17 +193,26 @@ export const getClients = async (filters?: ClientFilter) => {
     const { data, error, count } = await query;
 
     if (error) {
+      console.error('[getClients] Query error:', error);
       logError(error, 'getClients', { filters });
       throw handleApiError(error);
     }
 
-    const clients = data ? data.map(mapUserToClient) : [];
+    // Procesar los resultados para incluir company_name
+    const clients = data ? data.map(userData => {
+      // Crear el objeto cliente base usando la función existente
+      const client = mapUserToClient(userData);
+      return client;
+    }) : [];
 
+    console.log(`[getClients] Query returned ${clients.length} clients out of total ${count}`);
+    
     return {
       clients,
       totalCount: count || 0
     };
   } catch (error) {
+    console.error('[getClients] Error in getClients:', error);
     logError(error, 'getClients', { filters });
     throw handleApiError(error);
   }
@@ -169,6 +220,7 @@ export const getClients = async (filters?: ClientFilter) => {
 
 export const getClientById = async (id: string) => {
   try {
+    console.log(`[getClientById] Attempting to fetch client with ID: ${id}`);
     // Usamos el cliente de servicio para evitar problemas de autenticación
     const serviceClient = getServiceClient();
     
@@ -180,6 +232,7 @@ export const getClientById = async (id: string) => {
       .limit(1);  // Use limit(1) instead of single() to avoid 406 errors
 
     if (error) {
+      console.log(`[getClientById] Error on first attempt: ${error.message}`);
       logError(error, 'getClientById', { clientId: id });
       
       // Try fallback approach by getting array and taking first element
@@ -190,11 +243,13 @@ export const getClientById = async (id: string) => {
         .eq('id', id);
       
       if (fallbackError) {
+        console.log(`[getClientById] Fallback attempt also failed: ${fallbackError.message}`);
         logError(fallbackError, 'getClientById fallback', { clientId: id });
         throw handleApiError(fallbackError);
       }
       
       if (!fallbackData || fallbackData.length === 0) {
+        console.log(`[getClientById] No data found for client ID: ${id}`);
         const notFoundError = createAppError(
           ErrorType.NOT_FOUND,
           `No se encontró cliente con ID: ${id}`
@@ -203,10 +258,12 @@ export const getClientById = async (id: string) => {
         throw notFoundError;
       }
       
+      console.log(`[getClientById] Found client via fallback method: ${id}`);
       return mapUserToClient(fallbackData[0]);
     }
 
     if (!data || (Array.isArray(data) && data.length === 0)) {
+      console.log(`[getClientById] No data returned on first attempt for client ID: ${id}`);
       const notFoundError = createAppError(
         ErrorType.NOT_FOUND,
         `No se encontró cliente con ID: ${id}`
@@ -217,8 +274,10 @@ export const getClientById = async (id: string) => {
 
     // If data is an array, take the first element
     const clientData = Array.isArray(data) ? data[0] : data;
+    console.log(`[getClientById] Successfully found client with ID: ${id}`);
     return mapUserToClient(clientData);
   } catch (error) {
+    console.error(`[getClientById] Unexpected error for client ID ${id}:`, error);
     logError(error, 'getClientById', { clientId: id });
     throw handleApiError(error);
   }
@@ -231,67 +290,58 @@ function escapeSQLString(str: string) {
 
 export const getClientApplications = async (clientId: string) => {
   try {
+    // Obtener información básica del cliente para posible filtro por nombre
     const client = await getClientById(clientId).catch(err => {
       console.error(`Error obteniendo cliente con ID ${clientId}:`, err);
-      throw handleApiError(err);
+      return null; // Continuar aunque falle para intentar por client_id
     });
-    
-    if (!client) {
-      const notFoundError = createAppError(
-        ErrorType.NOT_FOUND,
-        `El cliente no existe`
-      );
-      logError(notFoundError, 'getClientApplications', { clientId });
-      return [];
+
+    const serviceClient = getServiceClient();
+
+    // Construir consulta principal por client_id
+    let query = serviceClient
+      .from(TABLES.APPLICATIONS)
+      .select('*')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false });
+
+    let { data, error } = await query;
+
+    if (error) {
+      console.error('[getClientApplications] Error fetching by client_id:', error);
+      data = [];
     }
-    
-    // Construir la consulta con el nombre del cliente
-    const query = `
-      SELECT * FROM ${TABLES.APPLICATIONS}
-      WHERE client_name = '${escapeSQLString(client.name || '')}'
-      ORDER BY created_at DESC
-    `;
-    
-    console.log(`Ejecutando consulta para obtener aplicaciones del cliente ${clientId}:`, query);
-    
-    // Utilizamos el servicio de consulta SQL directo que evita problemas de RLS
-    const executeQuery = async (query: string) => {
-      try {
-        const response = await fetch('http://localhost:3100/query', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ query: query }),
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Error en la respuesta HTTP: ${response.status} ${response.statusText}`);
-        }
-        
-        const result = await response.json();
-        
-        if (result.error) {
-          console.error('Error en la consulta SQL:', result.error);
-          throw new Error(result.error);
-        }
-        
-        return result.data || [];
-      } catch (error) {
-        console.error('Error ejecutando la consulta:', error);
-        throw error;
+
+    // Si no encontramos nada y tenemos nombre del cliente, intentar por nombre (datos viejos)
+    if ((!data || data.length === 0) && client?.name) {
+      const nameQuery = serviceClient
+        .from(TABLES.APPLICATIONS)
+        .select('*')
+        .ilike('client_name', `%${client.name}%`)
+        .order('created_at', { ascending: false });
+
+      const nameRes = await nameQuery;
+      if (!nameRes.error && nameRes.data) {
+        data = nameRes.data;
       }
-    };
-    
-    const data = await executeQuery(query);
-    console.log(`Aplicaciones encontradas para el cliente ${clientId}:`, data.length);
-    return data;
+    }
+
+    return data || [];
   } catch (error) {
     logError(error, 'getClientApplications', { clientId });
-    console.error(`Error completo al obtener aplicaciones para cliente ${clientId}:`, error);
-    // Devolvemos un array vacío en caso de error para no interrumpir el flujo
     return [];
   }
+};
+
+// Función para convertir documentos al formato correcto para upload
+const convertDocumentsForUpload = (documents: ClientDocument[]): UploadClientDocument[] => {
+  return documents.map(doc => ({
+    file: doc.file,
+    name: doc.name,
+    category: doc.category,
+    description: doc.description,
+    documentName: doc.name // Copiar name como documentName para satisfacer la interfaz
+  }));
 };
 
 export const uploadClientDocuments = async (
@@ -385,6 +435,8 @@ export const createClient = async (client: Omit<Client, 'id' | 'created_at'>, do
       company_id: client.company_id || "70b2aa97-a5b6-4b5e-91db-be8acbd3701a",
       rfc: client.rfc || '',
       curp: client.curp || '',
+      // Set advisor_id if userId is provided and current user is advisor
+      advisor_id: client.advisor_id || userId
     };
 
     // Log sanitized data for debugging
@@ -403,7 +455,8 @@ export const createClient = async (client: Omit<Client, 'id' | 'created_at'>, do
       p_company_id: userData.company_id,
       p_birth_date: userData.birth_date,
       p_rfc: userData.rfc,
-      p_curp: userData.curp
+      p_curp: userData.curp,
+      p_advisor_id: userData.advisor_id
     });
 
     if (error) {
@@ -413,7 +466,7 @@ export const createClient = async (client: Omit<Client, 'id' | 'created_at'>, do
         sql: `
           INSERT INTO users (
             id, first_name, paternal_surname, maternal_surname, email, phone, 
-            company_id, birth_date, rfc, curp, is_sso_user, is_anonymous
+            company_id, birth_date, rfc, curp, advisor_id, is_sso_user, is_anonymous
           ) VALUES (
             gen_random_uuid(), 
             '${userData.first_name}', 
@@ -425,6 +478,7 @@ export const createClient = async (client: Omit<Client, 'id' | 'created_at'>, do
             '${userData.birth_date}', 
             '${userData.rfc}', 
             '${userData.curp}',
+            ${userData.advisor_id ? `'${userData.advisor_id}'` : 'NULL'},
             false,
             false
           ) RETURNING id;
@@ -458,7 +512,9 @@ export const createClient = async (client: Omit<Client, 'id' | 'created_at'>, do
       if (documents && documents.length > 0 && userId && mappedClient.id) {
         try {
           console.log(`Uploading ${documents.length} documents for new client ${mappedClient.id}`);
-          const documentResult = await uploadDocs(mappedClient.id, documents);
+          // Convertir documentos al formato esperado por uploadDocs
+          const convertedDocs = convertDocumentsForUpload(documents);
+          const documentResult = await uploadDocs(mappedClient.id, convertedDocs);
           console.log(`${documentResult.length} documents uploaded successfully`);
         } catch (docError) {
           console.error('Error uploading documents during client creation:', docError);
@@ -494,7 +550,9 @@ export const createClient = async (client: Omit<Client, 'id' | 'created_at'>, do
     if (documents && documents.length > 0 && userId && mappedClient.id) {
       try {
         console.log(`Uploading ${documents.length} documents for new client ${mappedClient.id}`);
-        const documentResult = await uploadDocs(mappedClient.id, documents);
+        // Convertir documentos al formato esperado por uploadDocs
+        const convertedDocs = convertDocumentsForUpload(documents);
+        const documentResult = await uploadDocs(mappedClient.id, convertedDocs);
         console.log(`${documentResult.length} documents uploaded successfully`);
       } catch (docError) {
         console.error('Error uploading documents during client creation:', docError);
@@ -1009,6 +1067,23 @@ export const syncClientRelationships = async (clientId: string): Promise<boolean
     // Use service client for admin operations
     const serviceClient = getServiceClient();
     
+    // Check if user_id column exists in clients table
+    try {
+      // Check if user_id column exists in clients table
+      const { data: columnCheck, error: columnError } = await serviceClient.rpc('check_column_exists', {
+        _table_name: 'clients',
+        _column_name: 'user_id'
+      });
+      
+      if (columnError || !columnCheck) {
+        console.warn('[syncClientRelationships] user_id column does not exist in clients table. Skipping sync.');
+        return false;
+      }
+    } catch (columnCheckError) {
+      // If the RPC doesn't exist, just continue - we'll catch any column issues later
+      console.log('[syncClientRelationships] Could not check if column exists, proceeding anyway');
+    }
+    
     // First check client existence in users table
     const { data: userData, error: userError } = await serviceClient
       .from('users')
@@ -1168,44 +1243,49 @@ export const getClientWithSync = async (clientId: string): Promise<Client | null
     return null;
   }
   
-  console.log(`[getClientWithSync] Fetching client ${clientId} with relationship sync`);
+  console.log(`[getClientWithSync] Fetching client ${clientId} - simplified version`);
   
   try {
-    // First attempt to retrieve the client from any source
-    const client = await getClientFromAnySource(clientId);
+    // SIMPLIFICADO: Usar directamente getClientById para evitar complejidad adicional
+    const serviceClient = getServiceClient();
     
-    // If client was found, synchronize relationships in the background
-    if (client) {
-      // Don't await this - let it run in the background
-      syncClientRelationships(clientId).then(success => {
-        console.log(`[getClientWithSync] Background sync for client ${clientId} ${success ? 'succeeded' : 'failed'}`);
-      });
-      
-      return client;
+    // Intentar obtener el cliente directamente de la tabla users
+    const { data, error } = await serviceClient
+      .from(USERS_TABLE)
+      .select(`
+        id, email, first_name, paternal_surname, maternal_surname, phone, 
+        company_id, created_at, birth_date, rfc, curp, advisor_id, 
+        address, city, state, postal_code, gender, marital_status, employment_type, 
+        employment_years, monthly_income, additional_income, monthly_expenses, 
+        other_loan_balances, bank_name, bank_clabe, bank_account_number, 
+        bank_account_type, bank_account_origin, street_number_ext, street_number_int, 
+        neighborhood, home_phone, birth_state, nationality, job_position, 
+        employer_name, employer_phone, employer_address, employer_activity, 
+        mortgage_payment, rent_payment, dependent_persons, income_frequency, 
+        payment_method, credit_purpose, spouse_paternal_surname, spouse_maternal_surname, 
+        reference1_name, reference1_relationship, reference1_address, reference1_phone, 
+        reference2_name, reference2_relationship, reference2_address, reference2_phone, 
+        last_login,
+        companies(name)
+      `)
+      .eq('id', clientId)
+      .limit(1)
+      .single();
+    
+    if (error) {
+      console.error(`[getClientWithSync] Error fetching client: ${error.message}`);
+      return null;
     }
     
-    // Special handling for known problematic ID
-    if (clientId === 'f04660f4-6aeb-46fb-aff3-6d0241925a4d') {
-      console.log(`[getClientWithSync] Special handling for known problematic ID: ${clientId}`);
-      
-      // Create the client if it doesn't exist
-      const createdClient = await createMissingClient(clientId);
-      
-      if (createdClient) {
-        // Try to sync relationships for the newly created client
-        syncClientRelationships(clientId).then(success => {
-          console.log(`[getClientWithSync] Background sync for created client ${clientId} ${success ? 'succeeded' : 'failed'}`);
-        });
-        
-        return createdClient;
-      }
+    if (data) {
+      console.log(`[getClientWithSync] Client found: ${data.id}`);
+      return mapUserToClient(data);
     }
     
-    // If we get here, no client was found in any source
-    console.log(`[getClientWithSync] Client ${clientId} was not found in any source`);
+    console.log(`[getClientWithSync] Client not found: ${clientId}`);
     return null;
   } catch (error) {
-    console.error(`[getClientWithSync] Unexpected error: ${error}`);
+    console.error(`[getClientWithSync] Error: ${error}`);
     return null;
   }
 };
@@ -1328,6 +1408,12 @@ export const getCanonicalClientId = async (clientId: string): Promise<string> =>
   console.log(`[getCanonicalClientId] Resolving canonical ID for ${clientId}`);
 
   try {
+    // IMPORTANTE: Temporalmente deshabilitando el mapeo para evitar redireccionamientos incorrectos
+    // Simplemente devolver el ID original para diagnosticar el problema
+    console.log(`[getCanonicalClientId] Returning original ID ${clientId} (mapping temporarily disabled)`);
+    return clientId;
+    
+    /* CÓDIGO ORIGINAL COMENTADO
     // Special case for the known problematic ID
     const KNOWN_PROBLEMATIC_IDS: Record<string, string> = {
       // Maps problematic ID -> correct ID
@@ -1375,10 +1461,12 @@ export const getCanonicalClientId = async (clientId: string): Promise<string> =>
         return clientData.user_id;
       }
       
-      // No user_id, try to find a matching user by email or phone
+      // If the client has email or phone, try to find a matching user
       if (clientData.email || clientData.phone) {
-        let matchQuery = serviceClient.from('users').select('id');
-        
+        let matchQuery = serviceClient
+          .from('users')
+          .select('id, email, phone');
+          
         if (clientData.email) {
           matchQuery = matchQuery.eq('email', clientData.email);
         } else if (clientData.phone) {
@@ -1390,18 +1478,19 @@ export const getCanonicalClientId = async (clientId: string): Promise<string> =>
         if (matchError) {
           console.error(`[getCanonicalClientId] Error finding matching user: ${matchError.message}`);
         } else if (matchedUsers && matchedUsers.length > 0) {
-          // Found a matching user, return that user's ID
           console.log(`[getCanonicalClientId] Found matching user with ID ${matchedUsers[0].id}`);
           return matchedUsers[0].id;
         }
       }
     }
     
-    // If we get here, just return the original client ID
+    // No mapping found, return the original ID
     console.log(`[getCanonicalClientId] No mapping found for ${clientId}, returning original ID`);
     return clientId;
+    */
   } catch (error) {
     console.error(`[getCanonicalClientId] Unexpected error: ${error}`);
+    // In case of error, return the original ID to avoid further issues
     return clientId;
   }
 }; 

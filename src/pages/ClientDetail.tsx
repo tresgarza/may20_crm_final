@@ -1,16 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import { getClientById, getClientApplications, Client, getClientFromAnySource, createMissingClient, getClientWithSync, getCanonicalClientId } from '../services/clientService';
-import { getClientDocuments } from '../services/documentService';
+import { getClientDocuments, getAllClientDocuments } from '../services/documentService';
 import { PERMISSIONS } from '../utils/constants/permissions';
 import { usePermissions } from '../contexts/PermissionsContext';
 import { formatCurrency } from '../utils/formatters';
 import { FiFile, FiDownload } from 'react-icons/fi';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, getServiceClient } from '../lib/supabaseClient';
 import { APPLICATION_STATUS, STATUS_LABELS } from '../utils/constants/statuses';
 import { APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
 import { Document } from '../types/document';
+import { TABLES } from '../utils/constants/tables';
 
 // Constantes para mapear valores de códigos a nombres legibles
 const GENDER_TYPES = [
@@ -104,6 +105,25 @@ const formatDate = (dateString?: string) => {
   }
 };
 
+// Helper badge color by status (same logic used in other modules)
+const getStatusBadgeClass = (status: string) => {
+  switch (status) {
+    case 'approved':
+      return 'badge-success';
+    case 'rejected':
+      return 'badge-error';
+    case 'pending':
+    case 'in_review':
+      return 'badge-warning';
+    case 'por_dispersar':
+      return 'badge-accent';
+    case 'completed':
+      return 'badge-primary';
+    default:
+      return 'badge-info';
+  }
+};
+
 const ClientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -121,6 +141,54 @@ const ClientDetail: React.FC = () => {
   const [documentsError, setDocumentsError] = useState<string | null>(null);
   const [warnMessage, setWarnMessage] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState('info');
+  const [originFilter, setOriginFilter] = useState<'all' | 'general' | 'application'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [docSortField, setDocSortField] = useState<'file_name' | 'category' | 'origin' | 'created_at' | 'file_size'>('created_at');
+  const [docSortDirection, setDocSortDirection] = useState<'asc' | 'desc'>('desc');
+  
+  // Unique categories for filter dropdown
+  const documentCategories = useMemo(() => {
+    const set = new Set<string>();
+    documents.forEach(d => { if (d.category) set.add(d.category); });
+    return Array.from(set);
+  }, [documents]);
+  
+  // Helper to filter docs
+  const getFilteredDocuments = () => {
+    return documents.filter(doc => {
+      if (originFilter === 'general' && doc.application_id) return false;
+      if (originFilter === 'application' && !doc.application_id) return false;
+      if (categoryFilter !== 'all') {
+        const cat = doc.category || 'sin_categoria';
+        if (cat !== categoryFilter) return false;
+      }
+      return true;
+    });
+  };
+  
+  // Helper to sort docs
+  const getSortedDocuments = () => {
+    const filtered = getFilteredDocuments();
+    const arr = [...filtered];
+    arr.sort((a,b) => {
+      let aVal: any;
+      let bVal: any;
+      if (docSortField === 'origin') {
+        aVal = a.application_id ? 'Solicitud' : 'General';
+        bVal = b.application_id ? 'Solicitud' : 'General';
+      } else {
+        aVal = (a as any)[docSortField];
+        bVal = (b as any)[docSortField];
+      }
+      if (aVal === null || aVal === undefined) aVal = '';
+      if (bVal === null || bVal === undefined) bVal = '';
+      if (typeof aVal !== 'number') aVal = String(aVal).toLowerCase();
+      if (typeof bVal !== 'number') bVal = String(bVal).toLowerCase();
+      if (docSortDirection === 'asc') return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+      return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
+    });
+    return arr;
+  };
   
   // Fetch data when component mounts
   useEffect(() => {
@@ -147,44 +215,17 @@ const ClientDetail: React.FC = () => {
 
       console.log(`[ClientDetail] Fetching data for client ID: ${id}`);
       
-      // First, get the canonical client ID to ensure we're using the correct ID
-      const canonicalClientId = await getCanonicalClientId(id);
-      
-      // If canonical ID is different, redirect to the correct client page
-      if (canonicalClientId !== id) {
-        console.log(`[ClientDetail] Redirecting to canonical client ID: ${canonicalClientId}`);
-        // Use replace to avoid adding to browser history
-        navigate(`/clients/${canonicalClientId}`, { 
-          replace: true,
-          state: { 
-            ...location.state,
-            redirectedFrom: id // Add info that we redirected
-          } 
-        });
-        return;
-      }
-      
-      // Continue with fetching using the canonical ID
-      const client = await getClientWithSync(canonicalClientId);
+      // Simplificado: Cargar directamente el cliente con el ID proporcionado
+      // Omitimos la verificación de ID canónico para evitar redirecciones
+      const client = await getClientWithSync(id);
 
       if (client) {
         console.log(`[ClientDetail] Client found: ${client.id}`);
         setClient(client);
         
-        // If we were previously redirected, show a warning message
-        if (location.state?.redirectedFrom) {
-          const redirectedFrom = location.state.redirectedFrom;
-          setWarnMessage(`Se ha redirigido automáticamente del ID de cliente ${redirectedFrom} al ID correcto ${canonicalClientId}`);
-        }
-        
-        // Check if this was auto-created from an application
-        if (location.state?.autoCreated) {
-          setWarnMessage('Este cliente fue creado automáticamente a partir de una solicitud. Algunos datos pueden estar incompletos.');
-        }
-        
         // Fetch associated applications
         try {
-          const apps = await getClientApplications(canonicalClientId);
+          const apps = await getClientApplications(id);
           if (apps && apps.length > 0) {
             console.log(`[ClientDetail] Found ${apps.length} applications for client`);
             setApplications(apps);
@@ -200,12 +241,25 @@ const ClientDetail: React.FC = () => {
         
         // Fetch documents
         try {
-          const docs = await getClientDocuments(canonicalClientId);
+          console.log(`[ClientDetail] Intentando cargar documentos para el cliente con ID: ${id}`);
+          const docs = await getAllClientDocuments(id);
+          console.log(`[ClientDetail] Respuesta de getAllClientDocuments:`, JSON.stringify(docs));
           if (docs && docs.length > 0) {
             console.log(`[ClientDetail] Found ${docs.length} documents for client`);
             setDocuments(docs);
           } else {
-            console.log(`[ClientDetail] No documents found for client`);
+            console.log(`[ClientDetail] No documents found for client. Verificando tabla...`);
+            // Verificar si hay documentos en la tabla documents para este cliente
+            const serviceClient = getServiceClient();
+            try {
+              const { data, error } = await serviceClient
+                .from(TABLES.DOCUMENTS)
+                .select('count(*)')
+                .eq('client_id', id);
+              console.log(`[ClientDetail] Verificación directa de documentos:`, JSON.stringify(data), error);
+            } catch (verifyError) {
+              console.error(`[ClientDetail] Error verificando tabla documents: ${verifyError}`);
+            }
           }
         } catch (docError) {
           console.error(`[ClientDetail] Error fetching documents: ${docError}`);
@@ -214,45 +268,9 @@ const ClientDetail: React.FC = () => {
           setLoadingDocuments(false);
         }
       } else {
-        // Special handling for difficult case
-        console.error(`[ClientDetail] Client not found: ${canonicalClientId}`);
-        
-        const isKnownProblemId = canonicalClientId === 'f04660f4-6aeb-46fb-aff3-6d0241925a4d';
-        if (isKnownProblemId) {
-          console.log(`[ClientDetail] Attempting to create the problematic client: ${canonicalClientId}`);
-          const createdClient = await createMissingClient(canonicalClientId);
-          if (createdClient) {
-            setClient(createdClient);
-            setWarnMessage('Este cliente fue creado automáticamente. Algunos datos pueden estar incompletos.');
-            
-            // Also try to get applications
-            try {
-              const apps = await getClientApplications(canonicalClientId);
-              setApplications(apps || []);
-            } catch (error) {
-              console.error('Error fetching applications for created client:', error);
-            } finally {
-              setLoadingApplications(false);
-            }
-            
-            // Also try to get documents
-            try {
-              const docs = await getClientDocuments(canonicalClientId);
-              setDocuments(docs || []);
-            } catch (error) {
-              console.error('Error fetching documents for created client:', error);
-            } finally {
-              setLoadingDocuments(false);
-            }
-          } else {
-            setError(`No se pudo encontrar o crear el cliente con ID: ${canonicalClientId}`);
-            setTimeout(() => navigate('/clients'), 3000);
-          }
-        } else {
-          setError(`No se encontró el cliente con ID: ${canonicalClientId}`);
-          // Redirect back to clients list after showing error for a moment
-          setTimeout(() => navigate('/clients'), 3000);
-        }
+        setError(`No se encontró el cliente con ID: ${id}`);
+        // Redirect back to clients list after showing error for a moment
+        setTimeout(() => navigate('/clients'), 3000);
       }
     } catch (error: any) {
       console.error(`[ClientDetail] Error fetching client data: ${error.message || error}`);
@@ -594,28 +612,29 @@ const ClientDetail: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {applications.map(app => (
-                            <tr key={app.id} className="hover">
-                              <td>{app.id.substring(0, 8)}...</td>
+                          {applications
+                              .filter(app => app.application_type === 'selected_plans')
+                              .map((app, idx) => (
+                            <tr key={app.id || idx} className="hover">
+                              <td>{app.id ? `${String(app.id).substring(0,8)}...` : 'N/D'}</td>
                               <td>
                                 {formatDate(app.created_at)}
                               </td>
-                              <td>{app.application_type}</td>
-                              <td>{app.amount ? formatCurrency(app.amount) : '-'}</td>
+                              <td>{APPLICATION_TYPE_LABELS[app.application_type] || app.application_type}</td>
+                              <td>{app.amount ? formatCurrency(Number(app.amount)) : '-'}</td>
                               <td>
-                                <span className={`badge ${
-                                  app.status === 'approved' ? 'badge-success' :
-                                  app.status === 'rejected' ? 'badge-error' :
-                                  app.status === 'in_review' ? 'badge-warning' :
-                                  'badge-info'
-                                }`}>
-                                  {app.status}
+                                <span className={`badge ${getStatusBadgeClass(app.status)}`}>
+                                  {STATUS_LABELS[app.status as keyof typeof STATUS_LABELS] || app.status}
                                 </span>
                               </td>
                               <td>
-                                <Link to={`/applications/${app.id}`} className="btn btn-xs btn-info">
-                                  Ver
-                                </Link>
+                                {app.id ? (
+                                  <Link to={`/applications/${String(app.id)}`} className="btn btn-xs btn-info">
+                                    Ver
+                                  </Link>
+                                ) : (
+                                  <span className="text-gray-400">N/D</span>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -638,6 +657,38 @@ const ClientDetail: React.FC = () => {
                     )}
                   </div>
 
+                  {/* Filtro y ordenación */}
+                  {documents.length > 0 && !loadingDocuments && !documentsError && (
+                    <div className="flex flex-col md:flex-row gap-4 mb-4">
+                      <div className="form-control w-full md:w-1/4">
+                        <label className="label"><span className="label-text">Origen</span></label>
+                        <select
+                          className="select select-bordered"
+                          value={originFilter}
+                          onChange={(e) => setOriginFilter(e.target.value as any)}
+                        >
+                          <option value="all">Todos</option>
+                          <option value="general">Generales</option>
+                          <option value="application">Solicitudes</option>
+                        </select>
+                      </div>
+
+                      <div className="form-control w-full md:w-1/4">
+                        <label className="label"><span className="label-text">Categoría</span></label>
+                        <select
+                          className="select select-bordered"
+                          value={categoryFilter}
+                          onChange={(e) => setCategoryFilter(e.target.value)}
+                        >
+                          <option value="all">Todas</option>
+                          {documentCategories.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
                   {loadingDocuments ? (
                     <div className="flex justify-center items-center py-8">
                       <span className="loading loading-spinner loading-md"></span>
@@ -658,21 +709,73 @@ const ClientDetail: React.FC = () => {
                       <table className="table w-full">
                         <thead>
                           <tr>
-                            <th>Nombre</th>
-                            <th>Categoría</th>
-                            <th>Fecha de subida</th>
-                            <th>Tamaño</th>
+                            <th onClick={() => {
+                              const field: any = 'file_name';
+                              if (docSortField === field) {
+                                setDocSortDirection(docSortDirection === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setDocSortField(field);
+                                setDocSortDirection('asc');
+                              }
+                            }} className="cursor-pointer">
+                              <div className="flex items-center">Nombre {docSortField === 'file_name' && <span className="ml-1">{docSortDirection === 'asc' ? '↑' : '↓'}</span>}</div>
+                            </th>
+                            <th onClick={() => {
+                              const field: any = 'category';
+                              if (docSortField === field) {
+                                setDocSortDirection(docSortDirection === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setDocSortField(field);
+                                setDocSortDirection('asc');
+                              }
+                            }} className="cursor-pointer">
+                              <div className="flex items-center">Categoría {docSortField === 'category' && <span className="ml-1">{docSortDirection === 'asc' ? '↑' : '↓'}</span>}</div>
+                            </th>
+                            <th onClick={() => {
+                              const field: any = 'origin';
+                              if (docSortField === 'origin') {
+                                setDocSortDirection(docSortDirection === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setDocSortField('origin');
+                                setDocSortDirection('asc');
+                              }
+                            }} className="cursor-pointer">
+                              <div className="flex items-center">Origen {docSortField === 'origin' && <span className="ml-1">{docSortDirection === 'asc' ? '↑' : '↓'}</span>}</div>
+                            </th>
+                            <th onClick={() => {
+                              const field: any = 'created_at';
+                              if (docSortField === field) {
+                                setDocSortDirection(docSortDirection === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setDocSortField(field);
+                                setDocSortDirection('asc');
+                              }
+                            }} className="cursor-pointer">
+                              <div className="flex items-center">Fecha {docSortField === 'created_at' && <span className="ml-1">{docSortDirection === 'asc' ? '↑' : '↓'}</span>}</div>
+                            </th>
+                            <th onClick={() => {
+                              const field: any = 'file_size';
+                              if (docSortField === field) {
+                                setDocSortDirection(docSortDirection === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setDocSortField(field);
+                                setDocSortDirection('asc');
+                              }
+                            }} className="cursor-pointer">
+                              <div className="flex items-center">Tamaño {docSortField === 'file_size' && <span className="ml-1">{docSortDirection === 'asc' ? '↑' : '↓'}</span>}</div>
+                            </th>
                             <th>Acciones</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {documents.map((doc) => (
+                          {getSortedDocuments().map((doc) => (
                             <tr key={doc.id || `doc-${Math.random()}`}>
                               <td className="flex items-center gap-2">
                                 <FiFile className="text-primary" />
                                 {doc.file_name || 'Documento sin nombre'}
                               </td>
                               <td>{doc.category || 'No especificada'}</td>
+                              <td>{doc.application_id ? 'Solicitud' : 'General'}</td>
                               <td>{formatDate(doc.created_at)}</td>
                               <td>{formatFileSize(doc.file_size || 0)}</td>
                               <td>

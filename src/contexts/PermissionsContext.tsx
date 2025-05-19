@@ -82,13 +82,16 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       return null;
     }
     
-    // Filtro para asesores: solicitudes donde advisor_id = user.entityId
+    // STRICT FILTER for advisors: ONLY clients with advisor_id = user.entityId
+    // Never include company_id for advisors to prevent seeing other advisors' clients
     if (user.role === USER_ROLES.ADVISOR) {
+      console.log(`[getEntityFilter] Enforcing STRICT advisor filter: advisor_id=${user.entityId}`);
       return { advisor_id: user.entityId };
     }
     
     // Filtro para administradores de empresa: solicitudes donde company_id = user.entityId
     if (user.role === USER_ROLES.COMPANY_ADMIN) {
+      console.log(`[getEntityFilter] Company admin filter: company_id=${user.entityId}`);
       return { company_id: user.entityId };
     }
     

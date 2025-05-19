@@ -231,4 +231,30 @@ export const getCompanyApplications = async (companyId: string, limit?: number) 
   }
 
   return data;
+};
+
+// Get companies for a specific advisor
+export const getCompaniesForAdvisor = async (advisorId: string) => {
+  try {
+    console.log(`Fetching companies for advisor ID: ${advisorId}`);
+    
+    // Query companies where advisor_id matches the provided ID
+    const { data, error } = await supabase
+      .from(COMPANIES_TABLE)
+      .select('*')
+      .eq('advisor_id', advisorId)
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error(`Error fetching companies for advisor ${advisorId}:`, error);
+      throw error;
+    }
+
+    console.log(`Found ${data?.length || 0} companies for advisor ${advisorId}`);
+    return data as Company[];
+  } catch (err) {
+    console.error('Error in getCompaniesForAdvisor:', err);
+    // Return empty array in case of error to avoid breaking the UI
+    return [] as Company[];
+  }
 }; 

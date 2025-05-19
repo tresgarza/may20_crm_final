@@ -5,26 +5,64 @@ import { usePermissions } from '../contexts/PermissionsContext';
 import { useAuth } from '../contexts/AuthContext';
 import MainLayout from '../components/layout/MainLayout';
 import { getClients, Client, ClientFilter } from '../services/clientService';
+import { getCompanies, getCompaniesForAdvisor, Company } from '../services/companyService';
 
 const Clients: React.FC = () => {
-  const { userCan } = usePermissions();
+  const { userCan, isCompanyAdmin, isAdvisor } = usePermissions();
   const { user } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number>(0);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [sortField, setSortField] = useState<string>("created_at");
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [filters, setFilters] = useState<ClientFilter>({
     searchQuery: '',
     page: 0,
     pageSize: 10
   });
 
-  // Add advisor_id filter if user is an advisor
+  // Add strict advisor_id filter if user is an advisor
   useEffect(() => {
     if (user && user.role === 'ADVISOR') {
-      setFilters(prev => ({ ...prev, advisor_id: user.id }));
+      console.log('Setting strict advisor filter: advisor_id =', user.id);
+      setFilters(prev => ({
+        ...prev,
+        advisor_id: user.id,
+        // Explicitly remove company_id to prevent company-wide access
+        company_id: undefined
+      }));
     } else if (user && user.role === 'COMPANY_ADMIN') {
+      console.log('Setting company admin filter:', { company_id: user.entityId });
       setFilters(prev => ({ ...prev, company_id: user.entityId }));
+    }
+  }, [user]);
+
+  // Load companies based on user role
+  useEffect(() => {
+    const loadCompanies = async () => {
+      try {
+        let companiesData: Company[] = [];
+        
+        if (user && user.role === 'ADVISOR') {
+          // For advisors, only load companies related to this advisor
+          console.log('Loading companies for advisor ID:', user.id);
+          companiesData = await getCompaniesForAdvisor(user.id);
+          console.log('Companies for advisor:', companiesData);
+        } else if (user && (user.role === 'SUPERADMIN' || user.role === 'COMPANY_ADMIN')) {
+          // For admins, load all companies
+          companiesData = await getCompanies();
+        }
+        
+        setCompanies(companiesData);
+      } catch (error) {
+        console.error('Error loading companies:', error);
+      }
+    };
+    
+    if (user) {
+      loadCompanies();
     }
   }, [user]);
 
@@ -49,7 +87,18 @@ const Clients: React.FC = () => {
   const fetchClients = async () => {
     try {
       setLoading(true);
-      const result = await getClients(filters);
+      
+      // Ensure advisor_id filter is always applied for advisors
+      let currentFilters = {...filters};
+      if (isAdvisor() && user && !currentFilters.advisor_id) {
+        console.log('Adding missing advisor_id filter for advisor role');
+        currentFilters.advisor_id = user.id;
+      }
+      
+      // Debug log to verify filters sent to API
+      console.log('Fetching clients with filters:', currentFilters);
+      
+      const result = await getClients(currentFilters);
       // Handle potential undefined values with default empty array and zero
       setClients(result.clients || []);
       setTotalCount(result.totalCount || 0);
@@ -78,8 +127,46 @@ const Clients: React.FC = () => {
     setFilters(prev => ({ ...prev, [name]: value }));
   };
 
+  // Handle sorting
+  const handleSort = (field: string) => {
+    if (field === sortField) {
+      // If clicking on the same field, toggle direction
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // If clicking on a new field, set it as sort field with default direction
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Apply sorting to clients list
+  const getSortedClients = () => {
+    if (!sortField) return clients;
+    
+    return [...clients].sort((a, b) => {
+      let aValue: any = a[sortField as keyof Client];
+      let bValue: any = b[sortField as keyof Client];
+      
+      // Handle null or undefined values
+      if (aValue === null || aValue === undefined) aValue = '';
+      if (bValue === null || bValue === undefined) bValue = '';
+      
+      // Format for comparison
+      if (typeof aValue === 'string') aValue = aValue.toLowerCase();
+      if (typeof bValue === 'string') bValue = bValue.toLowerCase();
+      
+      if (sortDirection === 'asc') {
+        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+      } else {
+        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+      }
+    });
+  };
+
   const handleNextPage = () => {
-    if ((filters.page! + 1) * filters.pageSize! < totalCount) {
+    // If we have clients and the number of clients equals the page size, 
+    // there's likely more content to show on the next page
+    if (clients.length > 0 && clients.length === filters.pageSize) {
       setFilters(prev => ({ ...prev, page: prev.page! + 1 }));
     }
   };
@@ -92,26 +179,45 @@ const Clients: React.FC = () => {
 
   const handlePageSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newPageSize = parseInt(e.target.value);
-    setFilters(prev => ({ ...prev, pageSize: newPageSize, page: 0 }));
+    // When changing page size, we want to reset to page 0 and fetch new data
+    setFilters(prev => {
+      console.log(`Changing page size from ${prev.pageSize} to ${newPageSize}, resetting page to 0`);
+      return { ...prev, pageSize: newPageSize, page: 0 };
+    });
   };
 
   // Calculate pagination info
   const startIndex = filters.page! * filters.pageSize! + 1;
-  const endIndex = Math.min(startIndex + clients.length - 1, totalCount);
-  const totalPages = Math.ceil(totalCount / filters.pageSize!);
+  // If we're showing a full page of clients, we display the exact range
+  // If totalCount is accurate, use it; otherwise show based on current page data
+  const endIndex = Math.min(startIndex + clients.length - 1, totalCount || (startIndex + clients.length - 1));
+  // Calculate total pages - if we can't rely on totalCount, show at least current page + 1 if we have a full page
+  const totalPages = totalCount 
+    ? Math.ceil(totalCount / filters.pageSize!) 
+    : (clients.length === filters.pageSize! ? filters.page! + 2 : filters.page! + 1);
+
+  // Show company selector dropdown only if there are companies available to select
+  const showCompanySelector = companies.length > 0 && (isAdvisor() || user?.role === 'SUPERADMIN' || isCompanyAdmin());
 
   return (
     <MainLayout>
       <div className="p-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-          <h1 className="text-2xl font-bold mb-4 md:mb-0">Clientes</h1>
+          <h1 className="text-2xl font-bold mb-4 md:mb-0">
+            {isCompanyAdmin() ? 'Empleados' : 'Clientes'}
+            {isAdvisor() && (
+              <span className="text-sm font-normal ml-2 text-gray-500">
+                (Solo tus clientes asignados)
+              </span>
+            )}
+          </h1>
           
           {userCan(PERMISSIONS.CREATE_CLIENT) && (
             <Link to="/clients/new" className="btn btn-primary">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
               </svg>
-              Nuevo Cliente
+              {isCompanyAdmin() ? 'Nuevo Empleado' : 'Nuevo Cliente'}
             </Link>
           )}
         </div>
@@ -139,6 +245,36 @@ const Clients: React.FC = () => {
                   </button>
                 </div>
               </div>
+              
+              {/* Show company selector only if there are companies available to select */}
+              {showCompanySelector && companies.length > 0 && (
+                <div className="form-control w-full md:w-1/2">
+                  <label className="label">
+                    <span className="label-text">Empresa</span>
+                  </label>
+                  <select
+                    className="select select-bordered w-full"
+                    value={filters.company_id || ''}
+                    onChange={(e) => {
+                      const value = e.target.value || undefined;
+                      setFilters(prev => ({ 
+                        ...prev, 
+                        company_id: value,
+                        // For advisors, always keep advisor_id filter even when company changes
+                        ...(isAdvisor() && { advisor_id: user?.id }),
+                        page: 0 
+                      }));
+                    }}
+                  >
+                    <option value="">Todas mis empresas</option>
+                    {companies.map(company => (
+                      <option key={company.id} value={company.id}>
+                        {company.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col md:flex-row gap-4 mt-4">
@@ -187,6 +323,27 @@ const Clients: React.FC = () => {
               <div>
                 <p className="text-center py-8 text-gray-500">No se encontraron clientes con los filtros aplicados.</p>
                 
+                {/* Show special message for empty pages beyond the first page */}
+                {filters.page! > 0 && (
+                  <div className="alert alert-warning mt-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div>
+                      <h3 className="font-bold">No hay resultados en esta página</h3>
+                      <div className="text-sm">
+                        No se encontraron clientes en la página {filters.page! + 1}.
+                        <button 
+                          className="btn btn-sm btn-outline ml-4"
+                          onClick={() => setFilters(prev => ({ ...prev, page: 0 }))}
+                        >
+                          Volver a la primera página
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 {/* Only show this if there's no search query or date filters */}
                 {!filters.searchQuery && !filters.dateFrom && !filters.dateTo && (
                   <div className="alert alert-info mt-4">
@@ -194,12 +351,22 @@ const Clients: React.FC = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
                     <div>
-                      <h3 className="font-bold">No hay clientes registrados</h3>
+                      <h3 className="font-bold">
+                        {isCompanyAdmin() ? 'No hay empleados registrados' : 'No hay clientes registrados'}
+                      </h3>
                       <div className="text-sm">
                         {userCan(PERMISSIONS.CREATE_CLIENT) ? (
-                          <span>Puede crear un nuevo cliente utilizando el botón "Nuevo Cliente" en la parte superior.</span>
+                          <span>
+                            {isCompanyAdmin() 
+                              ? 'Puede crear un nuevo empleado utilizando el botón "Nuevo Empleado" en la parte superior.' 
+                              : 'Puede crear un nuevo cliente utilizando el botón "Nuevo Cliente" en la parte superior.'}
+                          </span>
                         ) : (
-                          <span>Contacte al administrador para registrar clientes en el sistema.</span>
+                          <span>
+                            {isCompanyAdmin() 
+                              ? 'Contacte al administrador para registrar empleados en el sistema.' 
+                              : 'Contacte al administrador para registrar clientes en el sistema.'}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -212,16 +379,62 @@ const Clients: React.FC = () => {
                   <table className="table w-full">
                     <thead>
                       <tr>
-                        <th>Nombre</th>
-                        <th>Correo</th>
-                        <th>Teléfono</th>
-                        <th>RFC</th>
-                        <th>Fecha Registro</th>
+                        <th onClick={() => handleSort('name')} className="cursor-pointer">
+                          <div className="flex items-center">
+                            Nombre
+                            {sortField === 'name' && (
+                              <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                            )}
+                          </div>
+                        </th>
+                        <th onClick={() => handleSort('email')} className="cursor-pointer">
+                          <div className="flex items-center">
+                            Correo
+                            {sortField === 'email' && (
+                              <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                            )}
+                          </div>
+                        </th>
+                        <th onClick={() => handleSort('phone')} className="cursor-pointer">
+                          <div className="flex items-center">
+                            Teléfono
+                            {sortField === 'phone' && (
+                              <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                            )}
+                          </div>
+                        </th>
+                        {/* Show company column if not company admin */}
+                        {!isCompanyAdmin() && (
+                          <th onClick={() => handleSort('company_name')} className="cursor-pointer">
+                            <div className="flex items-center">
+                              Empresa
+                              {sortField === 'company_name' && (
+                                <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </div>
+                          </th>
+                        )}
+                        <th onClick={() => handleSort('rfc')} className="cursor-pointer">
+                          <div className="flex items-center">
+                            RFC
+                            {sortField === 'rfc' && (
+                              <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                            )}
+                          </div>
+                        </th>
+                        <th onClick={() => handleSort('created_at')} className="cursor-pointer">
+                          <div className="flex items-center">
+                            Fecha Registro
+                            {sortField === 'created_at' && (
+                              <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                            )}
+                          </div>
+                        </th>
                         <th>Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {clients.map(client => (
+                      {getSortedClients().map(client => (
                         <tr key={client.id} className="hover">
                           <td>
                             {/* Construct full name from name components */}
@@ -233,6 +446,10 @@ const Clients: React.FC = () => {
                           </td>
                           <td>{client.email}</td>
                           <td>{client.phone}</td>
+                          {/* Show company column if not company admin */}
+                          {!isCompanyAdmin() && (
+                            <td>{client.company_name || 'N/A'}</td>
+                          )}
                           <td>{client.rfc || '-'}</td>
                           <td>{new Date(client.created_at).toLocaleDateString()}</td>
                           <td className="flex gap-2">
@@ -287,7 +504,7 @@ const Clients: React.FC = () => {
                       <button 
                         className="join-item btn btn-sm" 
                         onClick={handleNextPage}
-                        disabled={(filters.page! + 1) * filters.pageSize! >= totalCount}
+                        disabled={clients.length === 0 || clients.length < filters.pageSize!}
                       >
                         »
                       </button>

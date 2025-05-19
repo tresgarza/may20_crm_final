@@ -33,6 +33,7 @@ export interface DocumentUpload {
   description?: string;
   category?: string;
   authClient?: SupabaseClient;
+  contentType?: string;
 }
 
 // Renombramos la interfaz para que coincida con el uso en uploadDocument
@@ -43,34 +44,35 @@ const STORAGE_BUCKET = 'client-documents';
 
 // Ensure storage bucket exists
 export const ensureStorageBucketExists = async (client?: SupabaseClient) => {
-  const supabaseClient = client || supabase;
+  const supabaseClient = client || getServiceClient();
   
   try {
-    // Attempt to list files in the bucket instead of checking if bucket exists
-    // This is more reliable as it tests both existence and permissions
-    const { error } = await supabaseClient.storage
-      .from(STORAGE_BUCKET)
-      .list();
+    // Check if bucket exists
+    const { data: buckets, error } = await supabaseClient.storage.listBuckets();
     
     if (error) {
-      // If there's an error, it could be because the bucket doesn't exist
-      // or because of permissions issues
-      const errorMessage = error.message || 'Error desconocido';
-      if (errorMessage.includes('not found') || 
-          errorMessage.includes('does not exist') || 
-          errorMessage.includes('404')) {
-        console.log(`Storage bucket '${STORAGE_BUCKET}' does not exist`);
-        throw new Error(`El bucket de almacenamiento '${STORAGE_BUCKET}' no existe. Contacte al administrador.`);
-      } else {
-        console.error(`Error accessing storage bucket '${STORAGE_BUCKET}':`, error);
-        throw new Error(`Error al acceder al bucket de almacenamiento: ${errorMessage}`);
-      }
+      throw error;
     }
     
-    console.log(`Storage bucket '${STORAGE_BUCKET}' exists and is accessible`);
-    return true;
+    const bucketExists = buckets.some(bucket => bucket.name === STORAGE_BUCKET);
+    
+    if (!bucketExists) {
+      console.log(`Storage bucket '${STORAGE_BUCKET}' does not exist, creating it...`);
+      const { error: createError } = await supabaseClient.storage.createBucket(STORAGE_BUCKET, {
+        public: true, // Make bucket publicly accessible
+        fileSizeLimit: 1024 * 1024 * 10 // 10MB file size limit
+      });
+      
+      if (createError) {
+        throw createError;
+      }
+      
+      console.log(`Storage bucket '${STORAGE_BUCKET}' created successfully.`);
+    } else {
+      console.log(`Storage bucket '${STORAGE_BUCKET}' exists and is accessible`);
+    }
   } catch (error) {
-    console.error('Error in ensureStorageBucketExists:', error);
+    console.error(`Error checking/creating storage bucket: ${error instanceof Error ? error.message : 'Unknown error'}`);
     throw error;
   }
 };
@@ -144,174 +146,118 @@ export const uploadDocument = async ({
   file,
   category,
   userId,
-  documentName
+  documentName,
+  contentType
 }: DocumentUpload): Promise<Document> => {
-  const supabaseClient = getServiceClient();
-  
   try {
-    // Verificar si la tabla existe antes de intentar operaciones
-    const tableExists = await checkTableExists(DOCUMENTS_TABLE);
-    if (!tableExists) {
-      logError(
-        `La tabla ${DOCUMENTS_TABLE} no existe. Por favor, ejecute el script de creación de tablas.`,
-        'documentService.uploadDocument',
-        { table: DOCUMENTS_TABLE }
-      );
-      throw createAppError(
-        ErrorType.DATABASE,
-        `Error de configuración: La tabla de documentos no está correctamente configurada.`,
-        { table: DOCUMENTS_TABLE }
-      );
+    // Validar que exista al menos id de aplicación o cliente
+    if (!application_id && !client_id) {
+      throw new Error('Se requiere al menos un ID de aplicación o cliente');
     }
     
-    // Verificar si el bucket de storage existe
-    try {
-      await ensureStorageBucketExists(supabaseClient);
-    } catch (error) {
-      // Intentar crear el bucket si no existe
-      try {
-        const { data, error: createError } = await supabaseClient.storage.createBucket(STORAGE_BUCKET, {
-          public: true
-        });
-        
-        if (createError) {
-          throw createError;
-        }
-        
-        console.log('Bucket creado exitosamente:', data);
-      } catch (bucketError) {
-        logError(
-          `Error al crear el bucket ${STORAGE_BUCKET}: ${bucketError instanceof Error ? bucketError.message : 'Error desconocido'}`,
-          'documentService.uploadDocument',
-          { bucket: STORAGE_BUCKET, error: bucketError }
-        );
-        throw createAppError(
-          ErrorType.UPLOAD,
-          `Error al configurar el almacenamiento de documentos.`,
-          { bucket: STORAGE_BUCKET }
-        );
-      }
+    // Validar que el archivo exista
+    if (!file) {
+      throw new Error('No se proporcionó un archivo');
     }
     
-    // Generar información del archivo
-    const fileName = file.name;
-    const fileType = file.type;
-    const fileSize = file.size;
+    // Asegurar que el bucket de almacenamiento exista
+    await ensureStorageBucketExists();
     
-    // Construir nombre único para el archivo
-    const uniqueId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    const fileExtension = fileName.split('.').pop();
-    const uniqueFileName = `${uniqueId}.${fileExtension}`;
-    const filePath = `${client_id || application_id || 'general'}/${uniqueFileName}`;
+    // Determinar el tipo de contenido correcto, usando el proporcionado o el del archivo
+    const fileContentType = contentType || file.type || 'application/octet-stream';
     
-    // Subir el archivo al storage primero
-    const { data: uploadData, error: uploadError } = await supabaseClient.storage
+    // Generar un nombre de archivo único basado en el ID de la aplicación o cliente
+    // y usar un ID aleatorio para evitar conflictos
+    const randomId = Math.random().toString(36).substring(2, 15);
+    const fileExtension = file.name.split('.').pop() || '';
+    const filePath = `${client_id || application_id || 'general'}/${randomId}.${fileExtension}`;
+    
+    // Subir el archivo al bucket de storage
+    console.log(`Subiendo archivo: ${file.name} (${fileContentType}) a ${filePath}`);
+    
+    const supabaseClient = getServiceClient();
+    
+    const result = await supabaseClient.storage
       .from(STORAGE_BUCKET)
       .upload(filePath, file, {
         cacheControl: '3600',
-        upsert: false
+        upsert: true,
+        contentType: fileContentType  // Usar el tipo de contenido determinado
       });
-      
-    if (uploadError) {
-      logError(
-        `Error al subir archivo al storage: ${uploadError.message}`,
-        'documentService.uploadDocument',
-        { error: uploadError }
-      );
-      throw createAppError(
-        ErrorType.UPLOAD,
-        'Error al subir el archivo',
-        { error: uploadError.message }
-      );
+    
+    if (result.error) {
+      console.error('Error subiendo archivo:', result.error);
+      throw result.error;
     }
     
-    // Crear el documento en la base de datos con gestión de errores específica para columnas faltantes
+    // Crear el registro del documento en la base de datos
+    const documentData: Partial<Document> = {
+      file_name: documentName || file.name,
+      file_path: filePath,
+      file_type: fileContentType,
+      file_size: file.size,
+      category,
+      uploaded_by_user_id: userId,
+      application_id,
+      client_id
+    };
+    
+    const { data, error } = await supabase
+      .from(TABLES.DOCUMENTS)
+      .insert(documentData)
+      .select()
+      .single();
+    
+    if (error) {
+      throw error;
+    }
+    
+    return data;
+  } catch (dbError: any) {
+    // Si hay un error al crear el documento, eliminar el archivo del storage
     try {
-      // Intentar insertar con todas las columnas
-      const { data, error } = await supabaseClient
-        .from(DOCUMENTS_TABLE)
-        .insert({
-          file_name: documentName || fileName,
-          file_path: filePath,
-          file_type: fileType,
-          file_size: fileSize,
-          category,
-          application_id,
-          client_id,
-          uploaded_by_user_id: userId,
-          is_verified: false
-        })
-        .select('*')
-        .single();
-
-      if (error) {
-        // Si hay un error relacionado con la columna is_verified, intentar sin ella
-        if (error.message && error.message.includes('is_verified')) {
-          console.warn('Columna is_verified no encontrada, intentando sin ella');
-          
-          const { data: dataWithoutVerified, error: errorWithoutVerified } = await supabaseClient
-            .from(DOCUMENTS_TABLE)
-            .insert({
-              file_name: documentName || fileName,
-              file_path: filePath,
-              file_type: fileType,
-              file_size: fileSize,
-              category,
-              application_id,
-              client_id,
-              uploaded_by_user_id: userId
-            })
-            .select('*')
-            .single();
-            
-          if (errorWithoutVerified) {
-            throw errorWithoutVerified;
-          }
-          
-          return {
-            ...dataWithoutVerified,
-            is_verified: false // Añadir manualmente para la interfaz
-          } as Document;
-        } else {
-          throw error;
-        }
-      }
+      const supabaseClient = getServiceClient();
+      const filePath = `${client_id || application_id || 'general'}/${file.name}`;
       
-      return data as Document;
-    } catch (dbError: any) {
-      // Si hay un error al crear el documento, eliminar el archivo del storage
-      if (uploadData && uploadData.path) {
-        await supabaseClient.storage
-          .from(STORAGE_BUCKET)
-          .remove([filePath]);
-      }
-      
-      // Verificar si es un error de RLS
-      if (dbError.message && dbError.message.includes('policy')) {
-        logError(
-          `Violación de política RLS al crear documento: ${dbError.message}`,
-          'documentService.uploadDocument',
-          { error: dbError }
-        );
-        throw createAppError(
-          ErrorType.AUTHORIZATION,
-          'No tienes permisos para crear documentos para este cliente o aplicación',
-          { error: dbError.message }
-        );
-      }
-      
+      await supabaseClient.storage
+        .from(STORAGE_BUCKET)
+        .remove([filePath]);
+    } catch (cleanupError) {
+      console.error('Error during cleanup after failed upload:', cleanupError);
+    }
+    
+    // Verificar si es un error de RLS
+    if (dbError.message && dbError.message.includes('policy')) {
       logError(
-        `Error al crear documento en la base de datos: ${dbError.message}`,
+        `Violación de política RLS al crear documento: ${dbError.message}`,
         'documentService.uploadDocument',
         { error: dbError }
       );
       throw createAppError(
-        ErrorType.DATABASE,
-        'Error al crear documento en la base de datos',
+        ErrorType.AUTHORIZATION,
+        'No tienes permisos para crear documentos para este cliente o aplicación',
         { error: dbError.message }
       );
     }
-  } catch (error: any) {
+    
+    logError(
+      `Error al crear documento en la base de datos: ${dbError.message}`,
+      'documentService.uploadDocument',
+      { error: dbError }
+    );
+    throw createAppError(
+      ErrorType.DATABASE,
+      'Error al crear documento en la base de datos',
+      { error: dbError.message }
+    );
+  } 
+
+  // Restructure the function to avoid the syntax issue
+  return {} as Document; // Default return to avoid unreachable code error
+
+  // This catch block will never be reached due to the above return
+  // It's included only for structure completion
+  /* catch (error: any) {
     logError(
       `Error inesperado en uploadDocument: ${error.message || 'Error desconocido'}`,
       'documentService.uploadDocument',
@@ -322,7 +268,7 @@ export const uploadDocument = async ({
       error.message || 'Error inesperado al subir el documento',
       { originalError: error }
     );
-  }
+  } */
 };
 
 // Delete a document
@@ -379,20 +325,38 @@ export const deleteDocument = async (documentId: string) => {
 };
 
 // Get document download URL
-export const getDocumentUrl = async (filePath: string) => {
+export const getDocumentUrl = async (filePath: string, forceDownload: boolean = false) => {
   try {
     // Ensure bucket exists before attempting to get URL
     await ensureStorageBucketExists();
     
+    // Determine content type from file extension to improve URL handling
+    const fileExtension = filePath.split('.').pop()?.toLowerCase();
+    const isImage = fileExtension && ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(fileExtension);
+    const isPdf = fileExtension === 'pdf';
+    
+    console.log(`Generando URL para archivo: ${filePath}, tipo: ${isImage ? 'imagen' : isPdf ? 'PDF' : 'otro'}`);
+    
+    // Create a signed URL with appropriate options based on file type and purpose
     const { data, error } = await supabase.storage
       .from(STORAGE_BUCKET)
-      .createSignedUrl(filePath, 60 * 60); // 1 hour expiry
+      .createSignedUrl(filePath, 60 * 60, { 
+        // Only set download=true if explicitly requested or for non-viewable files
+        download: forceDownload || (!isImage && !isPdf),
+        // For images, apply transformations to optimize for viewing
+        transform: isImage ? {
+          width: 1200,   // Reasonable max width for viewing
+          height: 1200,  // Reasonable max height for viewing
+          quality: 80    // Good quality, smaller file size
+        } : undefined
+      });
 
     if (error) {
       console.error(`Error getting URL for document ${filePath}:`, error);
       throw error;
     }
-
+    
+    console.log(`URL generada exitosamente para ${filePath}: ${data.signedUrl.substring(0, 100)}...`);
     return data.signedUrl;
   } catch (error) {
     console.error(`Error in getDocumentUrl for ${filePath}:`, error);
@@ -433,4 +397,92 @@ export const getRequiredDocuments = async (applicationType: string) => {
   }
 
   return data;
+};
+
+// Get all documents related to a client (both direct and through applications)
+export const getAllClientDocuments = async (clientId: string) => {
+  try {
+    console.log(`[getAllClientDocuments] Buscando documentos para cliente ${clientId}`);
+
+    const serviceClient = getServiceClient();
+
+    // Verificar que exista la tabla
+    const tableExists = await checkTableExists(DOCUMENTS_TABLE);
+    if (!tableExists) {
+      console.warn(`Documents table ${DOCUMENTS_TABLE} does not exist.`);
+      return [];
+    }
+
+    // 1. Documentos ligados directamente al cliente
+    const { data: directDocs, error: directErr } = await serviceClient
+      .from(DOCUMENTS_TABLE)
+      .select('*')
+      .eq('client_id', clientId);
+    if (directErr) {
+      console.error(`[getAllClientDocuments] Error direct docs:`, directErr);
+    }
+
+    // 2. Obtener IDs de aplicaciones relacionadas
+    let applicationIds: string[] = [];
+
+    // 2a. Aplicaciones que tengan client_id
+    const { data: appsById, error: appsByIdErr } = await serviceClient
+      .from(TABLES.APPLICATIONS)
+      .select('id')
+      .eq('client_id', clientId);
+    if (appsByIdErr) {
+      console.error(`[getAllClientDocuments] Error fetching apps by client_id:`, appsByIdErr);
+    } else if (appsById && appsById.length > 0) {
+      applicationIds.push(...appsById.map(a => a.id));
+    }
+
+    // 2b. Fallback: buscar aplicaciones cuyo client_name coincida con el nombre completo del usuario (para datos antiguos)
+    if (applicationIds.length === 0) {
+      const { data: clientRow, error: clientErr } = await serviceClient
+        .from('users')
+        .select('first_name, paternal_surname, maternal_surname')
+        .eq('id', clientId)
+        .single();
+      if (clientErr) {
+        console.error(`[getAllClientDocuments] Error fetching client name:`, clientErr);
+      }
+      if (clientRow) {
+        const fullName = [clientRow.first_name, clientRow.paternal_surname, clientRow.maternal_surname]
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+        console.log(`[getAllClientDocuments] Buscando aplicaciones por nombre: "${fullName}"`);
+        const { data: appsByName, error: appsByNameErr } = await serviceClient
+          .from(TABLES.APPLICATIONS)
+          .select('id')
+          .ilike('client_name', `%${fullName}%`);
+        if (appsByNameErr) {
+          console.error(`[getAllClientDocuments] Error apps by name:`, appsByNameErr);
+        } else if (appsByName && appsByName.length > 0) {
+          applicationIds.push(...appsByName.map(a => a.id));
+        }
+      }
+    }
+
+    let appDocs: any[] = [];
+    if (applicationIds.length > 0) {
+      const { data: docsByApps, error: docsByAppsErr } = await serviceClient
+        .from(DOCUMENTS_TABLE)
+        .select('*')
+        .in('application_id', applicationIds);
+      if (docsByAppsErr) {
+        console.error(`[getAllClientDocuments] Error fetching docs by applications:`, docsByAppsErr);
+      } else {
+        appDocs = docsByApps || [];
+      }
+    }
+
+    const allDocs = [...(directDocs || []), ...appDocs];
+    const uniqueDocs = allDocs.filter((doc, idx, self) => idx === self.findIndex(d => d.id === doc.id));
+    console.log(`[getAllClientDocuments] Total documentos retornados: ${uniqueDocs.length}`);
+    return uniqueDocs;
+  } catch (error) {
+    console.error(`[getAllClientDocuments] Error inesperado:`, error);
+    return [];
+  }
 }; 
