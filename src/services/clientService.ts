@@ -439,6 +439,7 @@ export const createClient = async (client: Omit<Client, 'id' | 'created_at'>, do
   try {
     // Create a copy to avoid modifying the original object
     const userData = {
+      // Basic user data for initial creation
       email: client.email,
       first_name: client.first_name || '',
       paternal_surname: client.paternal_surname || '',
@@ -521,6 +522,50 @@ export const createClient = async (client: Omit<Client, 'id' | 'created_at'>, do
       
       const mappedClient = mapUserToClient(newClient);
       
+      // Update the client with all the additional fields
+      if (mappedClient.id) {
+        // Extract all 27 fields that might be missing plus any other fields
+        const additionalFields: Partial<Client> = {};
+        
+        // Extended client fields
+        const allFieldsToUpdate = [
+          'address', 'city', 'state', 'postal_code', 'gender', 'marital_status', 
+          'employment_type', 'employment_years', 'monthly_income', 'additional_income', 
+          'monthly_expenses', 'other_loan_balances', 'bank_name', 'bank_clabe', 
+          'bank_account_number', 'bank_account_type', 'bank_account_origin',
+          // The 27 missing fields
+          'dependent_persons', 'spouse_paternal_surname', 'spouse_maternal_surname',
+          'birth_state', 'nationality', 'street_number_ext', 'street_number_int',
+          'neighborhood', 'home_phone', 'job_position', 'employer_name', 
+          'employer_phone', 'employer_address', 'employer_activity', 'mortgage_payment',
+          'rent_payment', 'income_frequency', 'payment_method', 'credit_purpose',
+          'reference1_name', 'reference1_relationship', 'reference1_address', 
+          'reference1_phone', 'reference2_name', 'reference2_relationship',
+          'reference2_address', 'reference2_phone'
+        ];
+        
+        // Copy fields from client to additionalFields if they exist
+        for (const field of allFieldsToUpdate) {
+          if (client[field as keyof typeof client] !== undefined) {
+            // @ts-ignore - Safe to assign as we're copying field by field from client to additionalFields
+            additionalFields[field] = client[field as keyof typeof client];
+          }
+        }
+        
+        // Only update if there are additional fields
+        if (Object.keys(additionalFields).length > 0) {
+          console.log(`Updating client ${mappedClient.id} with additional fields:`, additionalFields);
+          
+          try {
+            // Update the client with all additional fields
+            await updateClient(mappedClient.id, additionalFields);
+          } catch (updateError) {
+            console.error(`Error updating client with additional fields: ${updateError}`);
+            mappedClient.warningMessage = `El cliente se creó, pero algunos campos adicionales no se pudieron guardar. Por favor, edite el cliente para completar la información.`;
+          }
+        }
+      }
+      
       // Handle documents if provided
       if (documents && documents.length > 0 && userId && mappedClient.id) {
         try {
@@ -559,6 +604,50 @@ export const createClient = async (client: Omit<Client, 'id' | 'created_at'>, do
     
     const mappedClient = mapUserToClient(newClient);
     
+    // Update the client with all the additional fields
+    if (mappedClient.id) {
+      // Extract all 27 fields that might be missing plus any other fields
+      const additionalFields: Partial<Client> = {};
+      
+      // Extended client fields
+      const allFieldsToUpdate = [
+        'address', 'city', 'state', 'postal_code', 'gender', 'marital_status', 
+        'employment_type', 'employment_years', 'monthly_income', 'additional_income', 
+        'monthly_expenses', 'other_loan_balances', 'bank_name', 'bank_clabe', 
+        'bank_account_number', 'bank_account_type', 'bank_account_origin',
+        // The 27 missing fields
+        'dependent_persons', 'spouse_paternal_surname', 'spouse_maternal_surname',
+        'birth_state', 'nationality', 'street_number_ext', 'street_number_int',
+        'neighborhood', 'home_phone', 'job_position', 'employer_name', 
+        'employer_phone', 'employer_address', 'employer_activity', 'mortgage_payment',
+        'rent_payment', 'income_frequency', 'payment_method', 'credit_purpose',
+        'reference1_name', 'reference1_relationship', 'reference1_address', 
+        'reference1_phone', 'reference2_name', 'reference2_relationship',
+        'reference2_address', 'reference2_phone'
+      ];
+      
+      // Copy fields from client to additionalFields if they exist
+      for (const field of allFieldsToUpdate) {
+        if (client[field as keyof typeof client] !== undefined) {
+          // @ts-ignore - Safe to assign as we're copying field by field from client to additionalFields
+          additionalFields[field] = client[field as keyof typeof client];
+        }
+      }
+      
+      // Only update if there are additional fields
+      if (Object.keys(additionalFields).length > 0) {
+        console.log(`Updating client ${mappedClient.id} with additional fields:`, additionalFields);
+        
+        try {
+          // Update the client with all additional fields
+          await updateClient(mappedClient.id, additionalFields);
+        } catch (updateError) {
+          console.error(`Error updating client with additional fields: ${updateError}`);
+          mappedClient.warningMessage = `El cliente se creó, pero algunos campos adicionales no se pudieron guardar. Por favor, edite el cliente para completar la información.`;
+        }
+      }
+    }
+    
     // Handle documents if provided
     if (documents && documents.length > 0 && userId && mappedClient.id) {
       try {
@@ -595,22 +684,126 @@ export const updateClient = async (
     // Get the service client for operations that require elevated privileges
     const serviceClient = getServiceClient();
     
-    // Use our stored procedure to update the client
-    const { data: updateResult, error } = await serviceClient.rpc('update_client', {
-      p_id: id,
-      p_updates: data
-    });
+    // List of the 27 problematic fields for reference and debugging
+    const problematicFields = [
+      'dependent_persons', 'spouse_paternal_surname', 'spouse_maternal_surname',
+      'birth_state', 'nationality', 'street_number_ext', 'street_number_int',
+      'neighborhood', 'home_phone', 'job_position', 'employer_name', 
+      'employer_phone', 'employer_address', 'employer_activity', 'mortgage_payment',
+      'rent_payment', 'income_frequency', 'payment_method', 'credit_purpose',
+      'reference1_name', 'reference1_relationship', 'reference1_address', 
+      'reference1_phone', 'reference2_name', 'reference2_relationship',
+      'reference2_address', 'reference2_phone'
+    ];
     
-    // If there was an error with the update
-    if (error) {
-      console.error('Error updating client:', error);
-      throw new Error(`Error al actualizar cliente: ${error.message}`);
+    // Log problematic fields being updated, if any
+    const updatedProblematicFields = problematicFields.filter(
+      field => data[field as keyof Partial<Client>] !== undefined
+    );
+    
+    if (updatedProblematicFields.length > 0) {
+      console.log('Updating the following previously problematic fields:', updatedProblematicFields);
     }
     
-    // If no rows were affected (no update performed)
-    if (!updateResult) {
-      console.warn(`The update for client ${id} had no effect`);
-      throw new Error(`La actualización no tuvo efecto. Es posible que no tenga permisos para actualizar este cliente o que no haya cambios para guardar.`);
+    let success = false;
+    let rpcError = null;
+    
+    // First try with the RPC method
+    try {
+      // Use our stored procedure to update the client
+      const { data: updateResult, error } = await serviceClient.rpc('update_client', {
+        p_id: id,
+        p_updates: data
+      });
+      
+      // If there was an error with the update
+      if (error) {
+        console.error('Error updating client with RPC:', error);
+        rpcError = error;
+      } else if (!updateResult) {
+        console.warn(`The RPC update for client ${id} had no effect`);
+      } else {
+        success = true;
+        console.log(`Successfully updated client ${id} via RPC`);
+      }
+    } catch (error) {
+      console.error('Exception during RPC update:', error);
+      rpcError = error;
+    }
+    
+    // If RPC failed and we have problematic fields, try direct SQL
+    if (!success && (rpcError || updatedProblematicFields.length > 0)) {
+      console.log('Attempting direct SQL update as fallback');
+      
+      try {
+        // Build column list and values for update
+        const updateParts: string[] = [];
+        
+        // Process each key in the data object
+        for (const [key, value] of Object.entries(data)) {
+          if (value === undefined) continue;
+          
+          let sqlValue: string;
+          if (value === null) {
+            sqlValue = 'NULL';
+          } else if (typeof value === 'number') {
+            sqlValue = value.toString();
+          } else if (typeof value === 'boolean') {
+            sqlValue = value ? 'TRUE' : 'FALSE';
+          } else {
+            // Escape string values
+            sqlValue = `'${escapeSQLString(String(value))}'`;
+          }
+          
+          updateParts.push(`${key} = ${sqlValue}`);
+        }
+        
+        if (updateParts.length === 0) {
+          console.warn('No valid fields to update');
+          throw new Error('No hay campos válidos para actualizar');
+        }
+        
+        // Create SQL statement
+        const updateSql = `
+          UPDATE users 
+          SET ${updateParts.join(', ')}, 
+              updated_at = NOW()
+          WHERE id = '${id}'
+          RETURNING id;
+        `;
+        
+        console.log('Executing direct SQL update');
+        const { data: sqlResult, error: sqlError } = await serviceClient.rpc('execute_sql', {
+          query_text: updateSql
+        });
+        
+        if (sqlError) {
+          console.error('Error with direct SQL update:', sqlError);
+          throw new Error(`Error al actualizar cliente (directo): ${sqlError.message}`);
+        }
+        
+        if (!sqlResult || sqlResult.length === 0) {
+          console.warn(`Direct SQL update for client ${id} had no effect`);
+          throw new Error('La actualización directa no tuvo efecto');
+        }
+        
+        success = true;
+        console.log('Direct SQL update successful');
+      } catch (sqlError) {
+        console.error('Failed with direct SQL update:', sqlError);
+        
+        // If both methods failed, throw the original RPC error
+        if (rpcError) {
+          throw new Error(`Error al actualizar cliente: ${rpcError.message}`);
+        } else {
+          throw sqlError;
+        }
+      }
+    }
+    
+    // If no update was successful
+    if (!success) {
+      throw new Error('La actualización no tuvo efecto. Es posible que no tenga permisos para actualizar este cliente o que no haya cambios para guardar.');
     }
     
     // If we have documents to upload
@@ -1034,476 +1227,4 @@ export const getClientFromAnySource = async (clientId: string): Promise<Client |
     
     // Try 3: clients table as fallback
     try {
-      console.log(`[getClientFromAnySource] Checking clients table for client ${clientId}`);
-      const { data: clientData, error: clientError } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('id', clientId)
-        .maybeSingle();
-      
-      if (clientError) {
-        console.log(`[getClientFromAnySource] Error checking clients table: ${clientError.message}`);
-      } else if (clientData) {
-        console.log(`[getClientFromAnySource] Client found in clients table`);
-        return mapUserToClient(clientData);
-      }
-    } catch (clientError) {
-      console.log(`[getClientFromAnySource] Exception checking clients table: ${clientError}`);
-    }
-    
-    // If we get here, the client was not found in any table
-    console.log(`[getClientFromAnySource] Client ${clientId} was not found in any source`);
-    return null;
-  } catch (error) {
-    console.error(`[getClientFromAnySource] Unexpected error: ${error}`);
-    return null;
-  }
-};
-
-/**
- * Creates or updates a relationship between client records across different tables
- * This function adds a 'user_id' reference to a client record in the clients table 
- * if it's determined to be the same client as in the users table
- * 
- * @param clientId The client ID to synchronize relationships for
- * @returns Whether the operation was successful
- */
-export const syncClientRelationships = async (clientId: string): Promise<boolean> => {
-  if (!clientId) {
-    console.log('[syncClientRelationships] No client ID provided');
-    return false;
-  }
-  
-  console.log(`[syncClientRelationships] Attempting to sync relationships for client ${clientId}`);
-  
-  try {
-    // Use service client for admin operations
-    const serviceClient = getServiceClient();
-    
-    // Check if user_id column exists in clients table
-    try {
-      // Check if user_id column exists in clients table
-      const { data: columnCheck, error: columnError } = await serviceClient.rpc('check_column_exists', {
-        _table_name: 'clients',
-        _column_name: 'user_id'
-      });
-      
-      if (columnError || !columnCheck) {
-        console.warn('[syncClientRelationships] user_id column does not exist in clients table. Skipping sync.');
-        return false;
-      }
-    } catch (columnCheckError) {
-      // If the RPC doesn't exist, just continue - we'll catch any column issues later
-      console.log('[syncClientRelationships] Could not check if column exists, proceeding anyway');
-    }
-    
-    // First check client existence in users table
-    const { data: userData, error: userError } = await serviceClient
-      .from('users')
-      .select('id, email, phone, first_name, paternal_surname, maternal_surname')
-      .eq('id', clientId)
-      .maybeSingle();
-      
-    if (userError) {
-      console.error(`[syncClientRelationships] Error checking users table: ${userError.message}`);
-      return false;
-    }
-    
-    if (!userData) {
-      console.log(`[syncClientRelationships] No user found with ID ${clientId}`);
-      
-      // Now check if this ID exists in clients table
-      const { data: clientData, error: clientError } = await serviceClient
-        .from('clients')
-        .select('id, email, phone, name')
-        .eq('id', clientId)
-        .maybeSingle();
-        
-      if (clientError) {
-        console.error(`[syncClientRelationships] Error checking clients table: ${clientError.message}`);
-        return false;
-      }
-      
-      if (!clientData) {
-        console.log(`[syncClientRelationships] No client found with ID ${clientId} in any table`);
-        return false;
-      }
-      
-      // If we've found a client record but no user record, we need to look for a matching user
-      console.log(`[syncClientRelationships] Found client in clients table, looking for matching user`);
-      
-      // Try to find a matching user by email or phone
-      let matchQuery = serviceClient.from('users').select('id');
-      
-      if (clientData.email) {
-        matchQuery = matchQuery.eq('email', clientData.email);
-      } else if (clientData.phone) {
-        matchQuery = matchQuery.eq('phone', clientData.phone);
-      } else {
-        console.log(`[syncClientRelationships] Client has no email or phone to match with`);
-        return false;
-      }
-      
-      const { data: matchedUsers, error: matchError } = await matchQuery;
-      
-      if (matchError) {
-        console.error(`[syncClientRelationships] Error finding matching user: ${matchError.message}`);
-        return false;
-      }
-      
-      if (matchedUsers && matchedUsers.length > 0) {
-        const userId = matchedUsers[0].id;
-        console.log(`[syncClientRelationships] Found matching user with ID ${userId}`);
-        
-        // Update the clients table to add user_id reference
-        const { error: updateError } = await serviceClient
-          .from('clients')
-          .update({ user_id: userId })
-          .eq('id', clientId);
-          
-        if (updateError) {
-          console.error(`[syncClientRelationships] Error updating client with user reference: ${updateError.message}`);
-          return false;
-        }
-        
-        console.log(`[syncClientRelationships] Successfully linked client ${clientId} to user ${userId}`);
-        return true;
-      } else {
-        console.log(`[syncClientRelationships] No matching user found for client ${clientId}`);
-      }
-    } else {
-      // We found a user record, now check if there's a matching client record we need to update
-      console.log(`[syncClientRelationships] Found user in users table, checking for matching client records`);
-      
-      // Check if there's a client with this ID but no user_id reference
-      const { data: clientsWithSameId, error: clientIdError } = await serviceClient
-        .from('clients')
-        .select('id')
-        .eq('id', clientId)
-        .is('user_id', null);
-      
-      if (clientIdError) {
-        console.error(`[syncClientRelationships] Error checking clients by ID: ${clientIdError.message}`);
-      } else if (clientsWithSameId && clientsWithSameId.length > 0) {
-        // Update the client to reference this user
-        const { error: updateError } = await serviceClient
-          .from('clients')
-          .update({ user_id: clientId })
-          .eq('id', clientId);
-          
-        if (updateError) {
-          console.error(`[syncClientRelationships] Error updating client with same ID: ${updateError.message}`);
-        } else {
-          console.log(`[syncClientRelationships] Updated client with same ID to reference user`);
-          return true;
-        }
-      }
-      
-      // Check for clients with matching email or phone but no user_id set
-      let matchQuery = serviceClient.from('clients').select('id').is('user_id', null);
-      
-      if (userData.email) {
-        matchQuery = matchQuery.eq('email', userData.email);
-      } else if (userData.phone) {
-        matchQuery = matchQuery.eq('phone', userData.phone);
-      } else {
-        console.log(`[syncClientRelationships] User has no email or phone to match with`);
-        return false;
-      }
-      
-      const { data: matchingClients, error: matchError } = await matchQuery;
-      
-      if (matchError) {
-        console.error(`[syncClientRelationships] Error finding matching clients: ${matchError.message}`);
-      } else if (matchingClients && matchingClients.length > 0) {
-        // Update all matching clients to reference this user
-        for (const client of matchingClients) {
-          const { error: updateError } = await serviceClient
-            .from('clients')
-            .update({ user_id: clientId })
-            .eq('id', client.id);
-            
-          if (updateError) {
-            console.error(`[syncClientRelationships] Error updating client ${client.id}: ${updateError.message}`);
-          } else {
-            console.log(`[syncClientRelationships] Updated client ${client.id} to reference user ${clientId}`);
-          }
-        }
-        
-        return true;
-      }
-    }
-    
-    // If we get here, no relationships needed updating or none were found
-    console.log(`[syncClientRelationships] No relationship updates needed for ${clientId}`);
-    return true;
-  } catch (error) {
-    console.error(`[syncClientRelationships] Unexpected error: ${error}`);
-    return false;
-  }
-};
-
-/**
- * Enhanced version of getClientFromAnySource that also attempts to sync relationships
- * between tables when retrieving client data
- * 
- * @param clientId The client ID to fetch and sync
- * @returns Client data or null if not found
- */
-export const getClientWithSync = async (clientId: string): Promise<Client | null> => {
-  if (!clientId) {
-    console.log('[getClientWithSync] No client ID provided');
-    return null;
-  }
-  
-  console.log(`[getClientWithSync] Fetching client ${clientId} - simplified version`);
-  
-  try {
-    // SIMPLIFICADO: Usar directamente getClientById para evitar complejidad adicional
-    const serviceClient = getServiceClient();
-    
-    // Intentar obtener el cliente directamente de la tabla users
-    const { data, error } = await serviceClient
-      .from(USERS_TABLE)
-      .select(`
-        id, email, first_name, paternal_surname, maternal_surname, phone, 
-        company_id, created_at, birth_date, rfc, curp, advisor_id, 
-        address, city, state, postal_code, gender, marital_status, employment_type, 
-        employment_years, monthly_income, additional_income, monthly_expenses, 
-        other_loan_balances, bank_name, bank_clabe, bank_account_number, 
-        bank_account_type, bank_account_origin, street_number_ext, street_number_int, 
-        neighborhood, home_phone, birth_state, nationality, job_position, 
-        employer_name, employer_phone, employer_address, employer_activity, 
-        mortgage_payment, rent_payment, dependent_persons, income_frequency, 
-        payment_method, credit_purpose, spouse_paternal_surname, spouse_maternal_surname, 
-        reference1_name, reference1_relationship, reference1_address, reference1_phone, 
-        reference2_name, reference2_relationship, reference2_address, reference2_phone, 
-        last_login,
-        companies(name)
-      `)
-      .eq('id', clientId)
-      .limit(1)
-      .single();
-    
-    if (error) {
-      console.error(`[getClientWithSync] Error fetching client: ${error.message}`);
-      return null;
-    }
-    
-    if (data) {
-      console.log(`[getClientWithSync] Client found: ${data.id}`);
-      return mapUserToClient(data);
-    }
-    
-    console.log(`[getClientWithSync] Client not found: ${clientId}`);
-    return null;
-  } catch (error) {
-    console.error(`[getClientWithSync] Error: ${error}`);
-    return null;
-  }
-};
-
-/**
- * Creates the user_id column in the clients table if it doesn't exist
- * This column will be used to establish relationships between records in different tables
- */
-export const ensureClientTableHasUserIdColumn = async (): Promise<boolean> => {
-  try {
-    console.log('[ensureClientTableHasUserIdColumn] Checking if clients table has user_id column');
-    
-    const serviceClient = getServiceClient();
-    
-    // Check if the column already exists using an information schema query
-    const { data: columnExists, error: checkError } = await serviceClient.rpc('execute_sql', {
-      query_text: `
-        SELECT EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'clients' AND column_name = 'user_id'
-        );
-      `
-    });
-    
-    if (checkError) {
-      console.error(`[ensureClientTableHasUserIdColumn] Error checking column existence: ${checkError.message}`);
-      return false;
-    }
-    
-    // If the column doesn't exist, add it
-    if (!columnExists || !columnExists[0] || !columnExists[0].exists) {
-      console.log('[ensureClientTableHasUserIdColumn] Adding user_id column to clients table');
-      
-      const { error: alterError } = await serviceClient.rpc('execute_sql', {
-        query_text: `
-          ALTER TABLE clients 
-          ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id),
-          ADD CONSTRAINT clients_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);
-        `
-      });
-      
-      if (alterError) {
-        console.error(`[ensureClientTableHasUserIdColumn] Error adding user_id column: ${alterError.message}`);
-        return false;
-      }
-      
-      console.log('[ensureClientTableHasUserIdColumn] Successfully added user_id column');
-      
-      // Now try to populate the column with likely matches based on email/phone
-      const { error: populateError } = await serviceClient.rpc('execute_sql', {
-        query_text: `
-          UPDATE clients c
-          SET user_id = u.id
-          FROM users u
-          WHERE c.user_id IS NULL
-          AND (
-            (c.email IS NOT NULL AND c.email = u.email)
-            OR (c.phone IS NOT NULL AND c.phone = u.phone)
-          );
-        `
-      });
-      
-      if (populateError) {
-        console.error(`[ensureClientTableHasUserIdColumn] Error populating user_id column: ${populateError.message}`);
-      } else {
-        console.log('[ensureClientTableHasUserIdColumn] Successfully populated user_id values where matches were found');
-      }
-      
-      // Handle the specific problematic ID
-      const { error: specificIdError } = await serviceClient.rpc('execute_sql', {
-        query_text: `
-          UPDATE clients
-          SET user_id = '${`f04660f4-6aeb-46fb-aff3-6d0241925a4d`}'
-          WHERE id = '${`f04660f4-6aeb-46fb-aff3-6d0241925a4d`}';
-        `
-      });
-      
-      if (specificIdError) {
-        console.error(`[ensureClientTableHasUserIdColumn] Error updating specific problematic ID: ${specificIdError.message}`);
-      } else {
-        console.log('[ensureClientTableHasUserIdColumn] Successfully updated specific problematic ID');
-      }
-    } else {
-      console.log('[ensureClientTableHasUserIdColumn] user_id column already exists');
-    }
-    
-    // Create an index on the user_id column to speed up lookups
-    const { error: indexError } = await serviceClient.rpc('execute_sql', {
-      query_text: `
-        CREATE INDEX IF NOT EXISTS idx_clients_user_id ON clients(user_id);
-      `
-    });
-    
-    if (indexError) {
-      console.error(`[ensureClientTableHasUserIdColumn] Error creating index: ${indexError.message}`);
-    } else {
-      console.log('[ensureClientTableHasUserIdColumn] Successfully created index on user_id column');
-    }
-    
-    return true;
-  } catch (error) {
-    console.error(`[ensureClientTableHasUserIdColumn] Unexpected error: ${error}`);
-    return false;
-  }
-};
-
-/**
- * Gets the canonical client ID for a given client ID by checking both users and clients tables
- * If the client exists in both tables with different IDs, returns the ID from the users table
- * 
- * @param clientId The client ID to check
- * @returns The canonical client ID to use, or the original ID if no mapping is found
- */
-export const getCanonicalClientId = async (clientId: string): Promise<string> => {
-  if (!clientId) {
-    console.log('[getCanonicalClientId] No client ID provided');
-    return clientId;
-  }
-  
-  console.log(`[getCanonicalClientId] Resolving canonical ID for ${clientId}`);
-
-  try {
-    // IMPORTANTE: Temporalmente deshabilitando el mapeo para evitar redireccionamientos incorrectos
-    // Simplemente devolver el ID original para diagnosticar el problema
-    console.log(`[getCanonicalClientId] Returning original ID ${clientId} (mapping temporarily disabled)`);
-    return clientId;
-    
-    /* CÓDIGO ORIGINAL COMENTADO
-    // Special case for the known problematic ID
-    const KNOWN_PROBLEMATIC_IDS: Record<string, string> = {
-      // Maps problematic ID -> correct ID
-      'f04660f4-6aeb-46fb-aff3-6d0241925a4d': '63154d78-b1c0-481d-bc7d-7b6450ba9f3d',
-    };
-    
-    if (KNOWN_PROBLEMATIC_IDS[clientId]) {
-      console.log(`[getCanonicalClientId] Found known mapping for ${clientId} -> ${KNOWN_PROBLEMATIC_IDS[clientId]}`);
-      return KNOWN_PROBLEMATIC_IDS[clientId];
-    }
-    
-    // Use service client for admin operations
-    const serviceClient = getServiceClient();
-    
-    // First check if the client exists in the users table
-    const { data: userData, error: userError } = await serviceClient
-      .from('users')
-      .select('id, email, phone')
-      .eq('id', clientId)
-      .maybeSingle();
-      
-    if (userError) {
-      console.error(`[getCanonicalClientId] Error checking users table: ${userError.message}`);
-    } else if (userData) {
-      // The client exists in the users table, this is the canonical ID
-      console.log(`[getCanonicalClientId] Found client in users table with ID ${clientId}`);
-      return clientId;
-    }
-    
-    // If not found in users table, check the clients table
-    const { data: clientData, error: clientError } = await serviceClient
-      .from('clients')
-      .select('id, user_id, email, phone')
-      .eq('id', clientId)
-      .maybeSingle();
-      
-    if (clientError) {
-      console.error(`[getCanonicalClientId] Error checking clients table: ${clientError.message}`);
-    } else if (clientData) {
-      console.log(`[getCanonicalClientId] Found client in clients table with ID ${clientId}`);
-      
-      // If the client has a user_id, that's the canonical ID
-      if (clientData.user_id) {
-        console.log(`[getCanonicalClientId] Client has user_id: ${clientData.user_id}`);
-        return clientData.user_id;
-      }
-      
-      // If the client has email or phone, try to find a matching user
-      if (clientData.email || clientData.phone) {
-        let matchQuery = serviceClient
-          .from('users')
-          .select('id, email, phone');
-          
-        if (clientData.email) {
-          matchQuery = matchQuery.eq('email', clientData.email);
-        } else if (clientData.phone) {
-          matchQuery = matchQuery.eq('phone', clientData.phone);
-        }
-        
-        const { data: matchedUsers, error: matchError } = await matchQuery;
-        
-        if (matchError) {
-          console.error(`[getCanonicalClientId] Error finding matching user: ${matchError.message}`);
-        } else if (matchedUsers && matchedUsers.length > 0) {
-          console.log(`[getCanonicalClientId] Found matching user with ID ${matchedUsers[0].id}`);
-          return matchedUsers[0].id;
-        }
-      }
-    }
-    
-    // No mapping found, return the original ID
-    console.log(`[getCanonicalClientId] No mapping found for ${clientId}, returning original ID`);
-    return clientId;
-    */
-  } catch (error) {
-    console.error(`[getCanonicalClientId] Unexpected error: ${error}`);
-    // In case of error, return the original ID to avoid further issues
-    return clientId;
-  }
-}; 
+      console.log(`
