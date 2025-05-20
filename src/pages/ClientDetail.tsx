@@ -10,7 +10,7 @@ import { FiFile, FiDownload } from 'react-icons/fi';
 import { supabase, getServiceClient } from '../lib/supabaseClient';
 import { APPLICATION_STATUS, STATUS_LABELS } from '../utils/constants/statuses';
 import { APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
-import { Document } from '../types/document';
+import { Document as DocumentType } from '../types/document';
 import { TABLES } from '../utils/constants/tables';
 
 // Constantes para mapear valores de códigos a nombres legibles
@@ -125,22 +125,19 @@ const getStatusBadgeClass = (status: string) => {
 };
 
 // Document interface that matches what's coming from the backend
-interface Document {
+interface ClientDocument {
   id: string;
-  client_id?: string;
-  application_id?: string;
-  file_name: string;
-  file_path: string;
+  client_id: string;
+  file_name?: string;
+  file_path?: string;
   file_type?: string;
-  file_size?: number;
-  category?: string;
+  category: string;
   created_at?: string;
   updated_at?: string;
-  origin?: string;
 }
 
 // Document viewer component adapted from ApplicationDetail
-const DocumentViewer = ({ document, onClose }: { document: Document, onClose: () => void }) => {
+const DocumentViewer = ({ document, onClose }: { document: ClientDocument, onClose: () => void }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
@@ -432,7 +429,7 @@ const ClientDetail: React.FC = () => {
   
   const [client, setClient] = useState<Client | null>(null);
   const [applications, setApplications] = useState<any[]>([]);
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const [documents, setDocuments] = useState<ClientDocument[]>([]);
   const [loadingClient, setLoadingClient] = useState(true);
   const [loadingApplications, setLoadingApplications] = useState(true);
   const [loadingDocuments, setLoadingDocuments] = useState(true);
@@ -447,7 +444,7 @@ const ClientDetail: React.FC = () => {
   const [docSortDirection, setDocSortDirection] = useState<'asc' | 'desc'>('desc');
   
   // Estado para el visor de documentos
-  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<ClientDocument | null>(null);
   
   // Unique categories for filter dropdown
   const documentCategories = useMemo(() => {
