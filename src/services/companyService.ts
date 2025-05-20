@@ -19,6 +19,7 @@ export interface Company {
   max_loan_amount?: number;
   interest_rate?: number;
   max_loan_term?: number;
+  commission_rate?: number; // Commission rate (e.g., 0.05 for 5%)
 }
 
 export interface CompanyFilter {

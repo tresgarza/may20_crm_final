@@ -78,6 +78,9 @@ export interface Client {
   // Relaciones
   company_id?: string;
   advisor_id?: string;
+  
+  // Campos adicionales (generalmente obtenidos por JOIN)
+  company_name?: string; // Nombre de la empresa a la que pertenece el cliente
 }
 
 // Documento para subir al sistema

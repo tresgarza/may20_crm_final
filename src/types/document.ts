@@ -9,6 +9,7 @@ export interface DocumentUpload {
   documentName: string;
   description?: string;
   category: string;
+  contentType?: string;
 }
 
 /**

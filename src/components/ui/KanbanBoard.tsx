@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { formatCurrency } from '../../utils/formatters';
 import { APPLICATION_TYPE_LABELS } from '../../utils/constants/applications';
 import { USER_ROLES } from '../../utils/constants/roles';
+import { statusEquals, asStatusKey, asStatusValue, ensureAmount } from '../../utils/types/adapter';
 
 // NOTA: La funcionalidad de tiempo real ha sido desactivada 
 // debido a problemas de compatibilidad
@@ -111,7 +112,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
             global_status: app.global_status || app.status,
             client_name: app.client_name || 'Cliente sin nombre',
             company_name: app.company_name,
-            amount: app.amount || app.requested_amount || 0,
+            amount: app.amount || 0,
             application_type: app.application_type,
             financing_type: app.financing_type || null, // Asegurarse de incluir financing_type
             updated_at: app.updated_at || null, // Include the updated_at field
@@ -1223,15 +1224,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
     <div className="kanban-board-container bg-base-100 p-2">
       <style dangerouslySetInnerHTML={{ __html: customStyles }} />
       
-      {/* Indicador permanente de filtro de Planes Seleccionados */}
-      <div className="flex justify-center mb-4">
-        <div className="badge badge-lg badge-accent gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="inline-block w-4 h-4 stroke-current">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-          Solo Planes Seleccionados
-        </div>
-      </div>
+      {/* Remove the Indicador permanente de filtro de Planes Seleccionados section */}
       
       {/* Messages display area */}
       {errorMessage && (
@@ -1311,10 +1304,10 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center">
-                      <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
+                    <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
                     </div>
                     <div className="flex items-center">
-                      {getApplicationTag(app.application_type, app.financing_type)}
+                    {getApplicationTag(app.application_type, app.financing_type)}
                       {requiresAttention(app) && (
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 ml-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
                           <title>Requiere atención: Sin cambios en 48+ horas</title>
@@ -1322,7 +1315,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         </svg>
                       )}
                     </div>
-                  </div>
+          </div>
                   <div className="text-sm text-gray-600 mb-2">
                     {app.company_name && <p>{app.company_name}</p>}
                   </div>
@@ -1392,10 +1385,10 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center">
-                      <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
+                    <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
                     </div>
                     <div className="flex items-center">
-                      {getApplicationTag(app.application_type, app.financing_type)}
+                    {getApplicationTag(app.application_type, app.financing_type)}
                       {requiresAttention(app) && (
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 ml-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
                           <title>Requiere atención: Sin cambios en 48+ horas</title>
@@ -1473,10 +1466,10 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center">
-                      <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
+                    <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
                     </div>
                     <div className="flex items-center">
-                      {getApplicationTag(app.application_type, app.financing_type)}
+                    {getApplicationTag(app.application_type, app.financing_type)}
                       {requiresAttention(app) && (
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 ml-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
                           <title>Requiere atención: Sin cambios en 48+ horas</title>
@@ -1484,10 +1477,10 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         </svg>
                       )}
                     </div>
-                  </div>
+                </div>
                   <div className="text-sm text-gray-600 mb-2">
                     {app.company_name && <p>{app.company_name}</p>}
-                  </div>
+              </div>
                   <div className="text-sm font-medium text-gray-900 mb-1">
                     {formatCurrency(app.amount)}
                   </div>
@@ -1554,10 +1547,10 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center">
-                      <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
+                    <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
                     </div>
                     <div className="flex items-center">
-                      {getApplicationTag(app.application_type, app.financing_type)}
+                    {getApplicationTag(app.application_type, app.financing_type)}
                       {requiresAttention(app) && (
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 ml-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
                           <title>Requiere atención: Sin cambios en 48+ horas</title>
@@ -1565,7 +1558,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         </svg>
                       )}
                     </div>
-                  </div>
+              </div>
                   <div className="text-sm text-gray-600 mb-2">
                     {app.company_name && <p>{app.company_name}</p>}
                     </div>
@@ -1635,10 +1628,10 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 >
                           <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center">
-                      <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
+                    <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
                     </div>
                     <div className="flex items-center">
-                      {getApplicationTag(app.application_type, app.financing_type)}
+                    {getApplicationTag(app.application_type, app.financing_type)}
                       {requiresAttention(app) && (
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 ml-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
                           <title>Requiere atención: Sin cambios en 48+ horas</title>
@@ -1716,10 +1709,10 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center">
-                      <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
+                    <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
                     </div>
                     <div className="flex items-center">
-                      {getApplicationTag(app.application_type, app.financing_type)}
+                    {getApplicationTag(app.application_type, app.financing_type)}
                       {requiresAttention(app) && (
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 ml-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
                           <title>Requiere atención: Sin cambios en 48+ horas</title>

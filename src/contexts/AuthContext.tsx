@@ -9,6 +9,7 @@ interface User {
   name?: string;
   role: string;
   entityId?: string; // ID del asesor o empresa asociada
+  companyId?: string; // ID de la empresa asociada (si aplica)
 }
 
 interface AuthContextType {
@@ -254,6 +255,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         name: userData.name,
         role: userType,
         entityId: userType === USER_ROLES.COMPANY_ADMIN ? userData.company_id : userData.id,
+        companyId: userData.company_id || null,
       };
       
       // Generar y guardar token de sesión

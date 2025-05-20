@@ -1,7 +1,15 @@
 import { supabase } from '../services/supabaseService';
 import { ErrorType, createAppError, logError, safeAsync } from './errorHandling';
 import { v4 as uuidv4 } from 'uuid';
-import { ClientDocument } from '../types/client';
+// Define our own interface instead of importing
+export interface ClientDocument {
+  file: File;
+  documentName: string;
+  category?: string;
+  description?: string;
+  required?: boolean;
+  tags?: string[];
+}
 
 // Nombre del bucket por defecto para documentos
 const DEFAULT_BUCKET_NAME = 'client-documents';
@@ -72,25 +80,74 @@ export const uploadDocumentToStorage = async (
     );
   }
   
+  // Validate that file.type is present
+  if (!file.type) {
+    throw createAppError(
+      ErrorType.VALIDATION,
+      'El tipo de archivo es requerido para una visualización correcta',
+      { fileName: file.name }
+    );
+  }
+  
+  // Determine content type from file extension as fallback
+  const fileExtension = file.name.split('.').pop()?.toLowerCase();
+  let contentType = file.type;
+  
+  // If type is generic, try to be more specific based on extension
+  if (contentType === 'application/octet-stream' && fileExtension) {
+    const mimeTypes: Record<string, string> = {
+      'png': 'image/png',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'gif': 'image/gif',
+      'pdf': 'application/pdf',
+      'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'xls': 'application/vnd.ms-excel',
+      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    };
+    
+    if (fileExtension in mimeTypes) {
+      contentType = mimeTypes[fileExtension];
+      console.log(`Adjusting content type based on extension: ${contentType}`);
+    }
+  }
+  
   try {
     // Generate unique file id and name
     const fileId = uuidv4();
-    const fileExtension = file.name.split('.').pop();
     const fileName = `${fileId}.${fileExtension}`;
     const filePath = `${folder}/${fileName}`;
+    
+    console.log(`Uploading document: ${file.name} (${contentType}) to ${filePath}`);
     
     // Upload the file
     const { error: uploadError } = await supabase.storage
       .from(DEFAULT_BUCKET_NAME)
-      .upload(filePath, file);
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        contentType: contentType,
+        upsert: true
+      });
     
     if (uploadError) {
       throw createAppError(
         ErrorType.UPLOAD,
         `Error uploading document: ${uploadError.message}`,
-        { filePath, attempt },
+        { filePath, attempt, contentType },
         uploadError
       );
+    }
+    
+    // Verify the content type was set correctly
+    try {
+      const { data: metadata } = await supabase.storage
+        .from(DEFAULT_BUCKET_NAME)
+        .getPublicUrl(filePath);
+        
+      console.log(`Upload successful. Public URL: ${metadata.publicUrl}`);
+    } catch (metadataError) {
+      console.warn('Could not verify upload metadata:', metadataError);
     }
     
     // Get public URL for the uploaded file
@@ -179,6 +236,48 @@ export const ensureClientBucketExists = async (bucketName: string = DEFAULT_BUCK
       
     if (!error) {
       console.log(`El bucket ${bucketName} existe y es accesible.`);
+      
+      // Verificar y configurar opciones CORS para permitir la visualización de documentos
+      try {
+        // Nota: Esto requiere permisos de servicio o admin que pueden
+        // no estar disponibles. Si falla, no interrumpimos el flujo.
+        const corsOptions = {
+          allowedOrigins: ['*'],  // Idealmente, restringe a dominios específicos
+          allowedMethods: ['GET', 'HEAD'],
+          allowedHeaders: ['*'],
+          exposedHeaders: ['Content-Disposition', 'Content-Type'],
+          maxAgeSeconds: 3600
+        };
+        
+        // Esta operación puede fallar si el usuario no tiene permisos suficientes
+        // Es informativa, no bloqueante
+        const { error: corsError } = await supabase.storage.updateBucket(
+          bucketName,
+          {
+            public: true,
+            allowedMimeTypes: [
+              'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+              'application/pdf', 'application/msword', 
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'application/vnd.ms-excel',
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'text/plain', 'text/csv'
+            ],
+            fileSizeLimit: 10485760 // 10MB
+          }
+        );
+        
+        if (corsError) {
+          console.log(`No se pudieron actualizar las opciones CORS para ${bucketName}`, corsError);
+          // No interrumpir el flujo, esto es solo para mejorar la experiencia
+        } else {
+          console.log(`Opciones CORS actualizadas correctamente para ${bucketName}`);
+        }
+      } catch (corsConfigError) {
+        console.log(`Error al configurar CORS para ${bucketName}:`, corsConfigError);
+        // No interrumpir el flujo principal
+      }
+      
       return true;
     }
     
@@ -194,7 +293,10 @@ export const ensureClientBucketExists = async (bucketName: string = DEFAULT_BUCK
       console.log(`Intentando escribir archivo de prueba en ${bucketName}/${testFilePath} para verificar acceso...`);
       const { error: uploadError } = await supabase.storage
         .from(bucketName)
-        .upload(testFilePath, testContent);
+        .upload(testFilePath, testContent, {
+          contentType: 'text/plain',
+          cacheControl: '3600'
+        });
       
       if (!uploadError) {
         console.log(`¡Éxito! El bucket ${bucketName} existe y permite escritura.`);
@@ -230,10 +332,9 @@ export const uploadClientDocuments = async (
   documents: ClientDocument[],
   maxRetries = 2
 ): Promise<Omit<ClientDocument & { url: string }, 'file'>[]> => {
-  // Ensure the storage bucket exists
+  // Ensure storage bucket exists
   await ensureClientBucketExists();
   
-  const folder = `clients/${clientId}`;
   const processedDocs: Omit<ClientDocument & { url: string }, 'file'>[] = [];
   
   // Process each document
@@ -248,63 +349,81 @@ export const uploadClientDocuments = async (
         attempt++;
         
         if (!doc.file) {
-          console.warn(`Skipping document without file: ${doc.category || 'unknown category'}`);
+          console.warn(`Skipping document with missing file object: ${doc.documentName}`);
           continue;
         }
         
-        // Generate unique filename
-        const fileId = uuidv4();
-        const fileExtension = doc.file.name.split('.').pop() || '';
-        const fileName = `${fileId}.${fileExtension}`;
-        const filePath = `${folder}/${fileName}`;
+        // Determine content type
+        const contentType = doc.file.type || getMimeTypeFromFileName(doc.file.name);
         
-        console.log(`Uploading ${doc.category || 'document'}: ${filePath} (attempt ${attempt}/${maxRetries})`);
+        // Upload file to storage
+        const filePath = `clients/${clientId}/${doc.documentName}`;
         
-        // Upload the file
-        const { error } = await supabase.storage
+        const { data, error } = await supabase.storage
           .from(DEFAULT_BUCKET_NAME)
           .upload(filePath, doc.file, {
             cacheControl: '3600',
-            upsert: true // Cambiar a true para sobrescribir si existe
+            upsert: true,
+            contentType  // Add content type here
           });
         
         if (error) throw error;
         
-        // Get the public URL
-        const { data: urlData } = supabase.storage
+        // Get public URL for the file
+        const { data: urlData } = await supabase.storage
           .from(DEFAULT_BUCKET_NAME)
           .getPublicUrl(filePath);
-
+        
         fileUrl = urlData.publicUrl;
         success = true;
-      } catch (error) {
-        lastError = error;
-        console.error(`Error uploading document (attempt ${attempt}/${maxRetries}):`, error);
         
-        // Wait before retrying (exponential backoff)
+        // Remove file property and add URL
+        const { file, ...docWithoutFile } = doc;
+        processedDocs.push({
+          ...docWithoutFile,
+          url: fileUrl
+        });
+        
+      } catch (err) {
+        lastError = err;
+        console.error(`Upload attempt ${attempt} failed for ${doc.documentName}:`, err);
+        
+        // Wait before retry
         if (attempt < maxRetries) {
-          const delay = Math.pow(2, attempt) * 500;
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await new Promise(r => setTimeout(r, 1000 * attempt));
         }
       }
     }
     
-    if (success) {
-      // Add successfully uploaded doc to the processed list without file property
-      const { file, ...docWithoutFile } = doc;
-      processedDocs.push({
-        ...docWithoutFile,
-        url: fileUrl
-      });
-    } else {
-      // Log failure for this document
-      logError(lastError, 'uploadClientDocuments', {
-        clientId,
-        category: doc.category || 'unknown',
-        attempts: maxRetries
-      });
+    if (!success) {
+      console.error(`Failed to upload ${doc.documentName} after ${maxRetries} attempts`);
+      throw lastError || new Error(`Failed to upload ${doc.documentName}`);
     }
   }
   
   return processedDocs;
-}; 
+};
+
+// Helper function to get MIME type from filename
+function getMimeTypeFromFileName(fileName: string): string {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  
+  if (!extension) return 'application/octet-stream';
+  
+  const mimeTypes: Record<string, string> = {
+    'pdf': 'application/pdf',
+    'doc': 'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xls': 'application/vnd.ms-excel',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'png': 'image/png',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'txt': 'text/plain',
+    'csv': 'text/csv',
+  };
+  
+  return mimeTypes[extension] || 'application/octet-stream';
+} 

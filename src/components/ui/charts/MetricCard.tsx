@@ -13,6 +13,7 @@ interface MetricCardProps {
   className?: string;
   tooltip?: string;
   onClick?: () => void;
+  children?: React.ReactNode;
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -27,6 +28,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
   className = '',
   tooltip,
   onClick,
+  children,
 }) => {
   // Calcular la variación porcentual si hay un valor previo
   const calculateChange = () => {
@@ -102,6 +104,8 @@ const MetricCard: React.FC<MetricCardProps> = ({
             )}
           </div>
         )}
+        
+        {children}
       </div>
     </div>
   );

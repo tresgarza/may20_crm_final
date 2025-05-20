@@ -23,12 +23,34 @@ import NotFound from './pages/NotFound';
 import Companies from './pages/Companies';
 import Notifications from './pages/Notifications';
 import Messages from './pages/Messages';
+import Admin from './pages/Admin';
 import { initDbStructureCheck } from './utils/dbStructureCheck';
+import { runAdvisorIdMigration } from './utils/runMigrations';
 
 const App: React.FC = () => {
-  // Verificar estructura de BD al iniciar la aplicación
+  // Check and set up required database structure
   React.useEffect(() => {
-    initDbStructureCheck();
+    const checkDbStructure = async () => {
+      try {
+        await initDbStructureCheck();
+        console.log('Database structure check completed successfully');
+        
+        // Run advisor ID migration in the background (won't affect app startup)
+        runAdvisorIdMigration().then(success => {
+          if (success) {
+            console.log('Advisor ID migration completed successfully');
+          } else {
+            console.warn('Advisor ID migration failed or was skipped');
+          }
+        }).catch(error => {
+          console.error('Error running advisor ID migration:', error);
+        });
+      } catch (error) {
+        console.error('Error checking database structure:', error);
+      }
+    };
+
+    checkDbStructure();
   }, []);
 
   // Add event listener to track if user has interacted with the page
@@ -232,6 +254,15 @@ const App: React.FC = () => {
                 element={
                   <ProtectedRoute>
                     <Messages />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute>
+                    <Admin />
                   </ProtectedRoute>
                 }
               />

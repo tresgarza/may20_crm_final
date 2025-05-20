@@ -1,5 +1,5 @@
 import { TABLES } from '../utils/constants/tables';
-import { APPLICATION_STATUS } from '../utils/constants/statuses';
+import { APPLICATION_STATUS, STATUS_LABELS } from '../utils/constants/statuses';
 import { supabase, getServiceClient } from '../services/supabaseService';
 import { executeQuery, escapeSqlString } from '../utils/databaseUtils';
 import { v4 as uuidv4 } from 'uuid';
@@ -21,8 +21,8 @@ export interface Application {
   company_id: string;
   assigned_to: string;
   application_type: string;
+  source_id: string; // Identificador de la fuente (por ejemplo, ID del cliente o campaña que originó la solicitud)
   product_type?: string;  // Tipo de producto (préstamo personal, auto, etc.)
-  requested_amount: number;
   status: ApplicationStatus;
   status_previous?: string;
   
@@ -65,6 +65,7 @@ export interface Application {
   product_url?: string;
   product_title?: string;
   product_image?: string;
+  product_price?: number;  // Precio del producto (para financing_type='producto')
 }
 
 export interface ApplicationFilter {
@@ -190,7 +191,7 @@ export const getApplications = async (filters?: ApplicationFilter, entityFilter?
         company_id: app.company_id || "",
         assigned_to: app.assigned_to || "",
         application_type: app.application_type || "",
-        requested_amount: parseFloat(app.amount) || 0,
+        source_id: app.source_id || "",
         status: mappedStatus,
         
         // Añadir los estados específicos para cada rol
@@ -225,6 +226,7 @@ export const getApplications = async (filters?: ApplicationFilter, entityFilter?
         product_url: app.product_url || null,
         product_title: app.product_title || null,
         product_image: app.product_image || null,
+        product_price: app.product_price ? parseFloat(app.product_price.toString()) : undefined,
       };
     }) as Application[];
   } catch (error) {
@@ -358,9 +360,121 @@ export const getApplicationById = async (id: string, entityFilter?: Record<strin
 
 // Create a new application
 export const createApplication = async (application: Omit<Application, 'id' | 'created_at' | 'updated_at'>) => {
-  const fields = Object.keys(application).join(', ');
-  const values = Object.values(application)
-    .map(val => (typeof val === 'string' ? `'${val}'` : val))
+  try {
+    console.log('[createApplication] Creating new application:', application);
+    
+    /*
+     * ---------------------------------------------------------------------
+     * Ensure client_id provided in the payload actually exists in the
+     * `clients` table (which keeps a 1-to-1 relation with `users`).
+     * ---------------------------------------------------------------------
+     * The form currently sends the selected user\'s ID (coming from `users`)
+     * inside the `client_id` field.  Before inserting the application we
+     * must translate this value into a valid record in the `clients` table,
+     * creating the record (and the related user) if they do not yet exist.
+     */
+
+    let incomingUserId: string | undefined = application.client_id?.trim() || undefined;
+
+    // If we don\'t have a user id at all, generate one and create a minimal
+    // user record so we can satisfy the FK chain (users -> clients -> applications)
+    if (!incomingUserId) {
+      incomingUserId = uuidv4();
+      await supabase.from('users').insert({ id: incomingUserId });
+      console.log(`[createApplication] Generated new user with id ${incomingUserId}`);
+    }
+
+    // Try to find an existing client linked to this user_id
+    let resolvedClientId = incomingUserId;
+    const { data: existingClient, error: clientLookupError } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('user_id', incomingUserId)
+      .single();
+
+    if (clientLookupError && clientLookupError.code !== 'PGRST116') {
+      // Real DB error – stop the flow
+      console.error('[createApplication] Error looking up client:', clientLookupError);
+      throw clientLookupError;
+    }
+
+    if (existingClient) {
+      resolvedClientId = existingClient.id;
+      console.log(`[createApplication] Found existing client ${resolvedClientId} for user_id ${incomingUserId}`);
+    } else {
+      // Create the client record – use the same UUID for id/user_id to respect the trigger constraint
+      console.log(`[createApplication] Creating new client for user_id ${incomingUserId}`);
+      resolvedClientId = incomingUserId;
+      const { error: createClientError } = await supabase.from('clients').insert({
+        id: resolvedClientId,
+        user_id: incomingUserId,
+        name: application.client_name,
+        email: application.client_email,
+        phone: application.client_phone,
+        address: application.client_address,
+        company_id: application.company_id,
+        advisor_id: application.assigned_to,
+      });
+      if (createClientError) {
+        console.error('[createApplication] Error creating new client:', createClientError);
+        throw createClientError;
+      }
+    }
+
+    // Overwrite the client_id in the payload with the verified value
+    application.client_id = resolvedClientId;
+    // ------------------------------------------------------------------
+
+    // Remove undefined values and convert data types
+    const cleanApplication = Object.fromEntries(
+      Object.entries(application)
+        .filter(([_, value]) => value !== undefined)
+        .map(([key, value]) => {
+          // Ensure numeric fields are actually numbers
+          if (['amount', 'term', 'interest_rate', 'monthly_payment', 'product_price'].includes(key) && value !== undefined) {
+            return [key, typeof value === 'string' ? parseFloat(value) : value];
+          }
+          
+          // Ensure boolean fields are actually booleans
+          if (['approved_by_advisor', 'approved_by_company', 'rejected_by_advisor', 'rejected_by_company'].includes(key)) {
+            return [key, typeof value === 'string' ? value === 'true' : Boolean(value)];
+          }
+          
+          return [key, value];
+        })
+    );
+    
+    // Si la aplicación no tiene source_id, generamos uno automáticamente usando uuidv4
+    if (!cleanApplication.source_id || cleanApplication.source_id === '') {
+      cleanApplication.source_id = uuidv4();
+    }
+    
+    // Directly use Supabase client for better reliability
+    const { data, error } = await supabase
+      .from(TABLES.APPLICATIONS)
+      .insert([cleanApplication])
+      .select();
+    
+    if (error) {
+      console.error('[createApplication] Error creating application via Supabase client:', error);
+      
+      // Fall back to SQL query if Supabase client fails
+      console.log('[createApplication] Falling back to SQL query method');
+      const fields = Object.keys(cleanApplication).join(', ');
+      const values = Object.values(cleanApplication)
+        .map(val => {
+          if (val === null || val === undefined) {
+            return 'NULL';
+          } else if (typeof val === 'string') {
+            return `'${val.replace(/'/g, "''")}'`; // Escape single quotes
+          } else if (typeof val === 'number') {
+            return val;
+          } else if (typeof val === 'boolean') {
+            return val ? 'true' : 'false';
+          } else {
+            return 'NULL';
+          }
+        })
     .join(', ');
   
   const query = `
@@ -369,11 +483,15 @@ export const createApplication = async (application: Omit<Application, 'id' | 'c
     RETURNING *
   `;
   
-  try {
-    const data = await executeQuery(query);
+      const sqlData = await executeQuery(query);
+      console.log('[createApplication] SQL method returned:', sqlData[0]);
+      return sqlData[0] as Application;
+    }
+    
+    console.log('[createApplication] Successfully created application via Supabase client:', data);
     return data[0] as Application;
   } catch (error) {
-    console.error('Error creating application:', error);
+    console.error('[createApplication] Error creating application:', error);
     throw error;
   }
 };
@@ -429,7 +547,7 @@ export const updateApplicationStatus = async (
     // Use Supabase client directly instead of SQL query for better reliability
     let query = supabase
       .from(TABLES.APPLICATIONS)
-      .select('status, assigned_to, company_id')
+      .select('status, assigned_to, company_id, advisor_name, company_name')
       .eq('id', id);
     
     // Apply entity filter if needed
@@ -495,17 +613,55 @@ export const updateApplicationStatus = async (
       throw new Error('Application not found or you do not have permission to update it');
     }
     
-    // 3. Add to history
-    const historyComment = currentStatus !== status 
-      ? `${comment} (Cambio de estado: ${currentStatus} → ${status})`
-      : comment;
+    // Obtener información del usuario que realiza el cambio
+    let userQuery = supabase
+      .from('users')
+      .select('id, name, email, role')
+      .eq('id', user_id);
+    
+    const { data: userData, error: userError } = await userQuery;
+    let userName = 'Usuario desconocido';
+    let userRole = 'Sin rol';
+    
+    if (!userError && userData && userData.length > 0) {
+      userName = userData[0].name || 'Usuario desconocido';
+      userRole = userData[0].role || 'Sin rol';
+    }
+    
+    // Determinar si es asesor o empresa
+    let userType = 'usuario';
+    if (userRole.toLowerCase().includes('advisor') || 
+        userRole.toLowerCase().includes('asesor')) {
+      userType = 'asesor';
+    } else if (userRole.toLowerCase().includes('company') || 
+               userRole.toLowerCase().includes('empresa')) {
+      userType = 'administrador de empresa';
+    }
+    
+    // 3. Add to history with better description
+    let historyComment = '';
+    
+    if (currentStatus !== status) {
+      const statusFrom = STATUS_LABELS[currentStatus as keyof typeof STATUS_LABELS] || currentStatus;
+      const statusTo = STATUS_LABELS[status as keyof typeof STATUS_LABELS] || status;
+      
+      if (comment.includes('Cambio de estado')) {
+        historyComment = `Estado cambiado a ${status} por ${userType}`;
+      } else {
+        historyComment = `${comment} (Estado cambiado: ${statusFrom} → ${statusTo} por ${userName})`;
+      }
+    } else {
+      historyComment = comment;
+    }
       
     try {
       const historyEntry = {
         application_id: id,
         status: status,
         comment: historyComment,
-        created_by: user_id ? user_id : null
+        created_by: user_id ? user_id : null,
+        old_status: currentStatus,
+        user_type: userType
       };
 
       const { error: historyError } = await supabase
@@ -889,7 +1045,14 @@ export const deleteApplication = async (id: string, entityFilter?: Record<string
 };
 
 // Get application history
-export const getApplicationHistory = async (applicationId: string, entityFilter?: Record<string, any> | null) => {
+export const getApplicationHistory = async (
+  applicationId: string, 
+  entityFilter?: Record<string, any> | null,
+  page: number = 1,
+  limit: number = 50
+) => {
+  console.log(`[getApplicationHistory] Fetching history for application: ${applicationId}, page: ${page}, limit: ${limit}`);
+  
   // Verificar primero si el usuario tiene permiso para ver esta aplicación
   if (entityFilter) {
     let appQuery = `
@@ -904,24 +1067,38 @@ export const getApplicationHistory = async (applicationId: string, entityFilter?
       appQuery += ` AND company_id = '${entityFilter.company_id}'`;
     }
     
+    try {
     const app = await executeQuery(appQuery);
     if (!app || app.length === 0) {
+        console.log(`[getApplicationHistory] No permission to view application ${applicationId} with filter:`, entityFilter);
       throw new Error('Application not found or you do not have permission to view it');
+      }
+    } catch (error) {
+      console.error(`[getApplicationHistory] Error checking permission:`, error);
+      throw error;
     }
   }
   
+  // Calcular offset para paginación
+  const offset = (page - 1) * limit;
+  
   const query = `
-    SELECT h.*, u.id as user_id, u.name as user_name, u.email as user_email
+    SELECT h.*, u.id as user_id, u.name as user_name, u.email as user_email, u.role as user_role
     FROM ${APPLICATION_HISTORY_TABLE} h
     LEFT JOIN users u ON h.created_by = u.id
     WHERE h.application_id = '${applicationId}'
     ORDER BY h.created_at DESC
+    LIMIT ${limit} OFFSET ${offset}
   `;
   
   try {
-    return await executeQuery(query);
+    const result = await executeQuery(query);
+    console.log(`[getApplicationHistory] Found ${result.length} history items for application ${applicationId}`);
+    
+    // Verificación adicional para confirmar que todas las entradas pertenecen a esta aplicación
+    return result.filter(item => item.application_id === applicationId);
   } catch (error) {
-    console.error(`Error fetching history for application ${applicationId}:`, error);
+    console.error(`[getApplicationHistory] Error fetching history:`, error);
     throw error;
   }
 };
@@ -1012,29 +1189,63 @@ export interface ApplicationWithClient {
 }
 
 /**
- * Calcula el pago mensual de un préstamo basado en el monto, tasa de interés y plazo
- * @param loanAmount - Monto del préstamo 
- * @param interestRate - Tasa de interés anual (en decimales, ej: 0.12 para 12%)
- * @param termMonths - Plazo en meses
- * @returns Pago mensual calculado
+ * Calculadora de pago mensual para créditos con comisiones y tasas de interés
+ * 
+ * @param loanAmount El monto solicitado por el cliente (neto)
+ * @param interestRate La tasa de interés anual en formato decimal (ej: 0.45 para 45%)
+ * @param termMonths Número de meses del plazo
+ * @param commissionRate Tasa de comisión en formato decimal (ej: 0.05 para 5%)
+ * @param ivaTax Tasa de IVA en formato decimal (ej: 0.16 para 16%)
+ * @returns El pago mensual calculado, redondeado a 2 decimales
  */
-export const calculateMonthlyPayment = (loanAmount: number, interestRate: number, termMonths: number): number => {
-  // Convertir tasa de interés anual a mensual
-  const monthlyInterestRate = interestRate / 12;
+export const calculateMonthlyPayment = (loanAmount: number, interestRate: number, termMonths: number, commissionRate: number = 0.05, ivaTax: number = 0.16): number => {
+  // Si los valores no son válidos, devolver 0
+  if (loanAmount <= 0 || termMonths <= 0) {
+    return 0;
+  }
+  
+  // Para debugging
+  console.log("Calculando pago mensual con los siguientes parámetros:");
+  console.log(`- Monto solicitado: ${loanAmount}`);
+  console.log(`- Tasa anual: ${interestRate * 100}%`);
+  console.log(`- Plazo (meses): ${termMonths}`);
+  console.log(`- Comisión: ${commissionRate * 100}%`);
+  console.log(`- IVA: ${ivaTax * 100}%`);
+  
+  // 1. Expandir el monto para incluir la comisión
+  // La fórmula es: montoExpandido = montoSolicitado / (1 - comisión)
+  const expandedAmount = commissionRate > 0 ? loanAmount / (1 - commissionRate) : loanAmount;
+  console.log(`- Monto expandido (incluye comisión): ${expandedAmount.toFixed(2)}`);
+  
+  // 2. Calcular la tasa mensual bruta (incluyendo IVA)
+  // Tasa mensual = (tasa anual * (1 + IVA)) / 12
+  const annualRateWithTax = interestRate * (1 + ivaTax);
+  const monthlyInterestRate = annualRateWithTax / 12;
+  console.log(`- Tasa anual con IVA: ${(annualRateWithTax * 100).toFixed(4)}%`);
+  console.log(`- Tasa mensual efectiva: ${(monthlyInterestRate * 100).toFixed(4)}%`);
   
   // Si la tasa es 0, simplemente dividir el monto entre los meses
   if (interestRate === 0) {
-    return loanAmount / termMonths;
+    return Math.round((expandedAmount / termMonths) * 100) / 100;
   }
   
-  // Fórmula para calcular pago mensual: P = L[r(1+r)^n]/[(1+r)^n-1]
-  // Donde: P = pago mensual, L = monto del préstamo, r = tasa mensual, n = número de pagos
+  // 3. Fórmula para calcular pago mensual: P = L[r(1+r)^n]/[(1+r)^n-1]
+  // Donde: P = pago mensual, L = monto expandido, r = tasa mensual, n = número de pagos
   const numerator = monthlyInterestRate * Math.pow(1 + monthlyInterestRate, termMonths);
   const denominator = Math.pow(1 + monthlyInterestRate, termMonths) - 1;
   
-  const monthlyPayment = loanAmount * (numerator / denominator);
+  const monthlyPayment = expandedAmount * (numerator / denominator);
+  console.log(`- Pago mensual calculado: ${monthlyPayment.toFixed(2)}`);
   
-  // Redondear a 2 decimales y devolver
+  // Calcular el total a pagar
+  const totalPayment = monthlyPayment * termMonths;
+  console.log(`- Total a pagar: ${totalPayment.toFixed(2)}`);
+  
+  // Calcular la comisión en pesos
+  const commissionAmount = expandedAmount - loanAmount;
+  console.log(`- Comisión en pesos: ${commissionAmount.toFixed(2)}`);
+  
+  // 4. Redondear a 2 decimales y devolver
   return Math.round(monthlyPayment * 100) / 100;
 };
 

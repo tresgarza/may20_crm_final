@@ -46,12 +46,12 @@ export function statusEquals(statusKey: ApplicationStatusKey, enumValue: Applica
 }
 
 /**
- * Add requested_amount property to any Application object
+ * Ensure amount property exists on any Application object
  * This is a utility to handle missing properties in type definitions
  */
-export function withRequestedAmount<T extends object>(app: T): T & { requested_amount: number } {
+export function ensureAmount<T extends object>(app: T): T & { amount: number } {
   return {
     ...app,
-    requested_amount: (app as any).amount || (app as any).requested_amount || 0
+    amount: (app as any).amount || 0
   };
 } 

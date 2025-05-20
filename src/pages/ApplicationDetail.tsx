@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import { 
@@ -10,7 +10,8 @@ import {
   cancelCompanyApproval,
   updateApplicationStatus,
   ApplicationStatus,
-  markAsDispersed
+  markAsDispersed,
+  getApplicationHistory
 } from '../services/applicationService';
 import { usePermissions } from '../contexts/PermissionsContext';
 import { PERMISSIONS } from '../utils/constants/permissions';
@@ -23,6 +24,9 @@ import { TABLES } from '../utils/constants/tables';
 import { useNotifications, NotificationType } from '../contexts/NotificationContext';
 import { formatDate } from '../utils/formatters';
 import ClientProfileButton from '../components/ClientProfileButton';
+import { Document, getApplicationDocuments, uploadDocument } from '../services/documentService';
+import DocumentUploader from '../components/documents/DocumentUploader';
+import { supabase, getServiceClient } from '../lib/supabaseClient';
 
 // Helper function for status badge styling - moved outside component so it's accessible to all components
 const getStatusBadgeClass = (status: string) => {
@@ -48,6 +52,19 @@ const getStatusBadgeClass = (status: string) => {
   }
 };
 
+// Helper function to check if an application is for product financing
+const isProductFinancing = (application: ApplicationType | null): boolean => {
+  if (!application) return false;
+  
+  // Check if financing_type is specifically 'producto'
+  if (application.financing_type === 'producto') return true;
+  
+  // Additional checks for product-related fields
+  if (application.product_url || application.product_title || application.product_image) return true;
+  
+  return false;
+};
+
 // Interfaces para estados de aprobación
 interface ApprovalStatus {
   isFullyApproved: boolean;
@@ -59,6 +76,369 @@ interface ApprovalStatus {
   companyStatus?: string;
   globalStatus?: string;
 }
+
+// Define interface for history items
+interface HistoryItem {
+  id: string;
+  application_id: string;
+  status: string;
+  comment: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  user_id?: string;
+  user_name?: string;
+  user_email?: string;
+  user_role?: string;
+}
+
+// Define interfaces for document handling
+interface DocumentFile {
+  id?: string;
+  file: File;
+  category: string;
+  name: string;
+}
+
+// Helper function for formatting file sizes
+const formatFileSize = (bytes: number = 0): string => {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
+// Document viewer component for ApplicationDetail
+const DocumentViewer = ({ document, onClose }: { document: Document, onClose: () => void }) => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [url, setUrl] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
+  // const { addNotification } = useNotifications(); // Not used currently
+
+  useEffect(() => {
+    const loadDocument = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        setImageError(false);
+        setUrl(null); // Reset URL on new document
+
+        if (!document.file_path) {
+          throw new Error('El documento no tiene una ruta de archivo válida');
+        }
+
+        const fileExtension = document.file_path.split('.').pop()?.toLowerCase();
+        console.log(`[DocViewer] Loading document. Extension: ${fileExtension}, Original file_type: ${document.file_type}, Path: ${document.file_path}`);
+
+        const isImage = fileExtension && ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(fileExtension);
+        const isPdf = fileExtension === 'pdf';
+
+        const serviceClient = getServiceClient();
+        
+        let objectUrlToSet: string | null = null;
+
+        if (isImage) {
+          console.log(`[DocViewer] Document is an image. Attempting direct download and blob URL creation.`);
+          const { data, error: downloadError } = await serviceClient.storage
+            .from('client-documents')
+            .download(document.file_path);
+
+          if (downloadError || !data) {
+            console.error('[DocViewer] Error downloading image data:', downloadError);
+            throw new Error(`Error al descargar los datos de la imagen: ${downloadError?.message || 'Error desconocido'}`);
+          }
+          console.log(`[DocViewer] Image data downloaded successfully: ${data.size} bytes`);
+
+          const mimeTypes: Record<string, string> = {
+            'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
+            'gif': 'image/gif', 'webp': 'image/webp', 'bmp': 'image/bmp', 'svg': 'image/svg+xml'
+          };
+          const contentType = (fileExtension && mimeTypes[fileExtension]) || 'application/octet-stream';
+          
+          // Clean potential multipart boundaries by locating the PNG/JPEG header
+          let cleanBlob: Blob;
+          try {
+            const arrBuffer = await data.arrayBuffer();
+            const uint8 = new Uint8Array(arrBuffer);
+            let startIndex = 0;
+            // PNG signature
+            const pngSig = [0x89, 0x50, 0x4E, 0x47];
+            // JPG signature 0xFF,0xD8,0xFF
+            const jpgSig = [0xFF, 0xD8, 0xFF];
+            const checkSig = (sig:number[], offset:number) => sig.every((v,idx)=>uint8[offset+idx]===v);
+            for(let i=0;i<uint8.length-4;i++){
+              if(checkSig(pngSig,i) || checkSig(jpgSig,i)){
+                startIndex=i;break;
+              }
+            }
+            if(startIndex>0){
+              console.log(`[DocViewer] Detected binary header at index ${startIndex}. Stripping multipart preamble.`);
+              const slice = uint8.slice(startIndex);
+              cleanBlob = new Blob([slice], {type: contentType});
+            } else {
+              cleanBlob = new Blob([uint8], {type: contentType});
+            }
+          } catch(cleanErr){
+            console.error('[DocViewer] Error sanitizing image data, falling back to original blob', cleanErr);
+            cleanBlob = new Blob([data], {type: contentType});
+          }
+          objectUrlToSet = URL.createObjectURL(cleanBlob);
+          console.log(`[DocViewer] Sanitized Blob URL for image created: ${objectUrlToSet.substring(0, 50)}...`);
+
+        } else if (isPdf) {
+          console.log(`[DocViewer] Document is a PDF. Downloading for sanitation.`);
+          const { data, error: downloadError } = await serviceClient.storage
+            .from('client-documents')
+            .download(document.file_path);
+
+          if (downloadError || !data) {
+            console.error('[DocViewer] Error downloading PDF data:', downloadError);
+            throw new Error(`Error al descargar los datos del PDF: ${downloadError?.message || 'Error desconocido'}`);
+          }
+          console.log(`[DocViewer] PDF data downloaded successfully: ${data.size} bytes`);
+
+          // Sanitize multipart preamble by finding '%PDF-'
+          let cleanPdfBlob: Blob;
+          try {
+            const arrBuffer = await data.arrayBuffer();
+            const uint8 = new Uint8Array(arrBuffer);
+            let startIndex = 0;
+            const pdfSig = [0x25, 0x50, 0x44, 0x46, 0x2D]; // '%PDF-'
+            const checkSig = (offset:number) => pdfSig.every((v,idx)=>uint8[offset+idx]===v);
+            for(let i=0;i<uint8.length-5;i++){
+              if(checkSig(i)){startIndex=i;break;}
+            }
+            if(startIndex>0){
+              console.log(`[DocViewer] Detected PDF header at index ${startIndex}. Stripping multipart preamble.`);
+              const slice = uint8.slice(startIndex);
+              cleanPdfBlob = new Blob([slice], { type: 'application/pdf' });
+            } else {
+              cleanPdfBlob = new Blob([uint8], { type: 'application/pdf' });
+            }
+          } catch(pdfSanErr){
+            console.error('[DocViewer] Error sanitizing PDF, using original data', pdfSanErr);
+            cleanPdfBlob = new Blob([data], { type: 'application/pdf' });
+          }
+
+          objectUrlToSet = URL.createObjectURL(cleanPdfBlob);
+          console.log(`[DocViewer] Sanitized Blob URL for PDF created: ${objectUrlToSet.substring(0,50)}...`);
+        } else {
+          // For other file types, primarily for download. Try public URL.
+          console.log(`[DocViewer] Document is other type. Trying public URL for download purposes.`);
+           const { data: publicUrlData } = await serviceClient.storage
+            .from('client-documents')
+            .getPublicUrl(document.file_path);
+          if (publicUrlData?.publicUrl) {
+            objectUrlToSet = publicUrlData.publicUrl;
+             console.log(`[DocViewer] Public URL for other file type: ${objectUrlToSet}`);
+          } else {
+            // Fallback for other types if needed for direct download link, though less common for viewing
+            console.log(`[DocViewer] Public URL for other type not available. Downloading for blob URL (for download attribute).`);
+            const { data, error: downloadError } = await serviceClient.storage
+              .from('client-documents')
+              .download(document.file_path);
+            if (downloadError || !data) {
+               console.error('[DocViewer] Error downloading other file data:', downloadError);
+               throw new Error(`Error al descargar el archivo: ${downloadError?.message || 'Error desconocido'}`);
+            }
+            const contentType = document.file_type || 'application/octet-stream';
+            const blob = new Blob([data], { type: contentType });
+            objectUrlToSet = URL.createObjectURL(blob);
+            console.log(`[DocViewer] Blob URL for other file type created: ${objectUrlToSet.substring(0,50)}...`);
+          }
+        }
+        
+        setUrl(objectUrlToSet);
+
+      } catch (err) {
+        console.error('[DocViewer] General error in loadDocument:', err);
+        setError(err instanceof Error ? err.message : 'Error al cargar el documento');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDocument();
+
+    return () => {
+      if (url && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+        console.log('[DocViewer] Blob URL revoked:', url.substring(0,50));
+      }
+    };
+  // IMPORTANT: Add document.id to dependencies to reload when a NEW document is selected,
+  // not just when the file_path of the *same* document object changes (which is less likely).
+  }, [document.id, document.file_path]); // Ensuring reload for new documents
+
+  const fileExtension = document.file_path?.split('.').pop()?.toLowerCase();
+  const isImage = fileExtension && ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(fileExtension);
+  const isPdf = fileExtension === 'pdf';
+
+  const handleDownload = () => {
+    if (!url) return;
+    const a = window.document.createElement('a');
+    a.href = url;
+    a.download = document.file_name || 'documento';
+    // Forcing download, even for public URLs that might try to render inline
+    // For blob URLs, this is standard. For public image URLs, this ensures download.
+    if (isImage && url.startsWith('http')) { // If it's a public URL for an image
+        // To ensure download for images from public URLs that might render inline
+        // We can fetch it and convert to blob, then download, or rely on 'download' attribute
+        // The 'download' attribute should be sufficient for modern browsers
+    }
+    window.document.body.appendChild(a);
+    a.click();
+    window.document.body.removeChild(a);
+    console.log(`[DocViewer] Download initiated for: ${document.file_name}, URL: ${url.substring(0,50)}`);
+  };
+
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    console.error(`[DocViewer] Error loading image in <img> tag. SRC: ${e.currentTarget.src.substring(0,100)}...`);
+    setImageError(true);
+    // Potentially set an error message here if needed, or rely on the generic error state
+    setError("No se pudo mostrar la imagen. Intente descargarla.");
+  };
+  
+  // Debug: Log current URL and imageError state
+  console.log(`[DocViewer] Rendering. URL: ${url ? url.substring(0,50) : 'null'}, ImageError: ${imageError}, Loading: ${loading}, Error: ${error}`);
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg w-full max-w-4xl flex flex-col h-[90vh]">
+        <div className="p-4 border-b flex justify-between items-center">
+          <h3 className="text-lg font-semibold">{document.file_name || 'Documento'}</h3>
+          <div className="flex gap-2">
+            <button 
+              className="btn btn-sm btn-outline"
+              onClick={handleDownload}
+              disabled={!url || loading} // Disable if no URL or still loading
+            >
+              Descargar
+            </button>
+            <button 
+              className="btn btn-sm btn-circle"
+              onClick={onClose}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        
+        <div className="flex-1 overflow-auto p-4 bg-gray-100">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center h-full">
+              <span className="loading loading-spinner loading-lg"></span>
+              <p className="mt-4 text-gray-600">Cargando documento...</p>
+            </div>
+          ) : error ? ( // This 'error' is the general loading error or image specific if set by handleImageError
+            <div className="flex flex-col items-center justify-center h-full bg-red-50 rounded-lg p-6">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <h3 className="text-lg font-medium text-red-800 mt-4">Error al Cargar Documento</h3>
+              <p className="text-red-600 mt-2 text-center">{error}</p>
+              {url && ( // Offer download if a URL (even problematic) was generated
+                <button 
+                  className="btn btn-sm btn-outline btn-error mt-4"
+                  onClick={handleDownload}
+                >
+                  Intentar Descargar
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              {isImage && url && !imageError ? (
+                <div className="flex items-center justify-center h-full bg-gray-800 rounded">
+                  <img 
+                    src={url} 
+                    alt={document.file_name || 'Imagen'} 
+                    className="max-w-full max-h-full object-contain"
+                    onError={handleImageError} // This will set imageError and trigger re-render
+                  />
+                </div>
+              ) : isImage && imageError ? ( // Specific UI for when <img> onError was triggered
+                 <div className="flex flex-col items-center justify-center h-full bg-yellow-50 rounded-lg p-6">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <h3 className="text-lg font-medium text-yellow-800 mt-4">Error al Visualizar la Imagen</h3>
+                  <p className="text-yellow-600 mt-2 text-center">No se pudo mostrar la imagen directamente.</p>
+                  <div className="flex gap-2 mt-4">
+                    <button 
+                      className="btn btn-sm btn-warning"
+                      onClick={handleDownload} // Universal download should work
+                    >
+                      Descargar Imagen
+                    </button>
+                     {url && url.startsWith('http') && ( // Offer to open public URL if it was one
+                        <a 
+                          className="btn btn-sm btn-outline"
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Abrir URL Directa
+                        </a>
+                      )}
+                  </div>
+                </div>
+              ) : isPdf && url ? (
+                <iframe 
+                  src={url} 
+                  className="w-full h-full border-0"
+                  title={document.file_name || 'PDF'}
+                ></iframe>
+              ) : url ? ( // Other file types or fallback if not image/pdf but URL exists
+                <div className="flex flex-col items-center justify-center h-full bg-gray-50 rounded-lg p-6">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-800 mt-4">Documento No Previsualizable</h3>
+                  <p className="text-gray-600 mt-2 text-center">Este tipo de documento no se puede mostrar aquí.</p>
+                  <div className="flex gap-2 mt-4">
+                    <button 
+                      className="btn btn-sm btn-primary"
+                      onClick={handleDownload}
+                    >
+                      Descargar Documento
+                    </button>
+                     {url && url.startsWith('http') && (
+                        <a 
+                          className="btn btn-sm btn-outline"
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Abrir URL Directa
+                        </a>
+                      )}
+                  </div>
+                </div>
+              ) : ( // Fallback if no URL could be generated at all
+                <div className="flex flex-col items-center justify-center h-full">
+                  <p className="text-gray-600">No se pudo generar una vista previa del documento.</p>
+                   {document.file_path && // Offer direct download using Supabase path if all else fails
+                    <a 
+                      href={`https://ydnygntfkrleiseuciwq.supabase.co/storage/v1/object/public/client-documents/${document.file_path}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-sm btn-outline mt-2"
+                    >
+                      Intentar Abrir Directo (Supabase)
+                    </a>
+                  }
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const ApplicationDetail = () => {
   console.log('React at start', React); // Diagnostic log to check for shadowing
@@ -75,6 +455,34 @@ const ApplicationDetail = () => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const { shouldFilterByEntity, getEntityFilter, userCan, isAdvisor, isCompanyAdmin } = usePermissions();
   
+  // Add state for history
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  
+  // Agregar estado para paginación de historial
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const HISTORY_ITEMS_PER_PAGE = 10; // Mostrar 10 ítems por página
+  
+  // Agregar estado para filtrado de historial
+  const [historyFilter, setHistoryFilter] = useState('all');
+  const [filteredHistory, setFilteredHistory] = useState<HistoryItem[]>([]);
+  
+  // Agregar estado para filtro de usuario
+  const [userFilter, setUserFilter] = useState('all');
+  
+  // Estado para manejo de documentos
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
+  const [documentError, setDocumentError] = useState<string | null>(null);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<DocumentFile | null>(null);
+  
+  // State for document viewer
+  const [viewingDocument, setViewingDocument] = useState<Document | null>(null);
+  
   // Función auxiliar para construir el estado de aprobación localmente si es necesario
   const buildApprovalStatus = (app: ApplicationType): ApprovalStatus => {
     return {
@@ -89,7 +497,197 @@ const ApplicationDetail = () => {
     };
   };
   
-  // Función para cargar/recargar datos de la aplicación
+  // Function to load application history
+  const loadApplicationHistory = async (page = 1) => {
+    if (!id) return;
+    
+    try {
+      setLoadingHistory(true);
+      setHistoryError(null);
+      
+      const entityFilter = shouldFilterByEntity() ? getEntityFilter() : null;
+      console.log(`[ApplicationDetail] Loading history page ${page} for application ${id}`);
+      const historyData = await getApplicationHistory(id, entityFilter, page, HISTORY_ITEMS_PER_PAGE);
+      
+      if (historyData && Array.isArray(historyData)) {
+        // Los datos ya vienen filtrados por ID de aplicación desde el servicio
+        console.log(`[ApplicationDetail] Loaded ${historyData.length} history items for application ${id}`);
+        
+        // Ordenar por fecha decreciente (más reciente primero)
+        const sortedHistory = [...historyData].sort((a, b) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        
+        // Si es la primera página, reemplazar la historia; si no, añadir
+        setHistory(page === 1 ? sortedHistory : [...history, ...sortedHistory]);
+        
+        // Hay más páginas si recibimos el número exacto de elementos por página
+        setHistoryHasMore(historyData.length === HISTORY_ITEMS_PER_PAGE);
+        setHistoryPage(page);
+      } else {
+        if (page === 1) {
+          setHistory([]);
+        }
+        setHistoryHasMore(false);
+      }
+    } catch (err) {
+      console.error('Error loading application history:', err);
+      setHistoryError(err instanceof Error ? err.message : 'Error al cargar el historial de la solicitud');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+  
+  // Cargar más entradas del historial
+  const loadMoreHistory = () => {
+    if (historyHasMore && !loadingHistory) {
+      loadApplicationHistory(historyPage + 1);
+    }
+  };
+  
+  // Filtrar historial cuando cambia history, historyFilter o userFilter
+  useEffect(() => {
+    if (history.length > 0) {
+      let filtered = [...history];
+      
+      // Aplicar filtros según el tipo seleccionado
+      if (historyFilter === 'status') {
+        filtered = filtered.filter(item => 
+          item.comment.toLowerCase().includes('estado cambiado') || 
+          item.comment.toLowerCase().includes('cambio de estado')
+        );
+      } else if (historyFilter === 'approval') {
+        filtered = filtered.filter(item => 
+          item.comment.toLowerCase().includes('aprob') || 
+          item.status.toLowerCase() === 'approved' ||
+          item.comment.toLowerCase().includes('por dispersar')
+        );
+      }
+      
+      // Aplicar filtro por tipo de usuario
+      if (userFilter !== 'all') {
+        filtered = filtered.filter(item => {
+          // Detectar el tipo de usuario según el comentario o el rol explícito
+          const userRole = item.user_role?.toLowerCase() || '';
+          const comment = item.comment?.toLowerCase() || '';
+          
+          if (userFilter === 'advisor') {
+            return userRole.includes('advisor') || 
+                  userRole.includes('asesor') ||
+                  comment.includes('por asesor');
+          } else if (userFilter === 'company') {
+            return userRole.includes('company') || 
+                   userRole.includes('empresa') ||
+                   comment.includes('por empresa') ||
+                   comment.includes('por administrador de empresa');
+          } else if (userFilter === 'admin') {
+            return userRole.includes('admin') && 
+                   !userRole.includes('company') ||
+                   comment.includes('por administrador');
+          }
+          return false;
+        });
+      }
+      
+      setFilteredHistory(filtered);
+    } else {
+      setFilteredHistory([]);
+    }
+  }, [history, historyFilter, userFilter]);
+  
+  // Function to load application documents
+  const loadApplicationDocuments = async () => {
+    if (!id) return;
+    
+    try {
+      setLoadingDocuments(true);
+      setDocumentError(null);
+      
+      const docsData = await getApplicationDocuments(id);
+      
+      if (docsData && Array.isArray(docsData)) {
+        console.log(`[ApplicationDetail] Loaded ${docsData.length} documents for application ${id}`);
+        setDocuments(docsData);
+      } else {
+        setDocuments([]);
+      }
+    } catch (err) {
+      console.error('Error loading application documents:', err);
+      setDocumentError(err instanceof Error ? err.message : 'Error al cargar los documentos de la solicitud');
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+  
+  // Function to handle document selection
+  const handleDocumentSelected = (doc: DocumentFile) => {
+    setSelectedDocument(doc);
+    setDocumentError(null);
+  };
+  
+  // Function to handle document upload
+  const handleUploadDocument = async () => {
+    if (!id || !user || !selectedDocument || !selectedDocument.file) {
+      setDocumentError('Información incompleta para subir el documento');
+      return;
+    }
+    
+    try {
+      setUploadingDocument(true);
+      setDocumentError(null);
+      
+      const file = selectedDocument.file;
+      
+      // Get file extension to determine content type
+      const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
+      let contentType = file.type;
+      
+      if (!contentType || contentType === 'application/octet-stream') {
+        const mimeTypes: Record<string, string> = {
+          'pdf': 'application/pdf',
+          'png': 'image/png',
+          'jpg': 'image/jpeg',
+          'jpeg': 'image/jpeg',
+          'gif': 'image/gif',
+          'webp': 'image/webp',
+          'doc': 'application/msword',
+          'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'xls': 'application/vnd.ms-excel',
+          'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'txt': 'text/plain',
+          'csv': 'text/csv'
+        };
+        
+        contentType = fileExtension in mimeTypes ? mimeTypes[fileExtension] : 'application/octet-stream';
+      }
+      
+      console.log(`Subiendo documento: ${file.name}, tipo: ${contentType}, tamaño: ${formatFileSize(file.size)}`);
+      
+      const uploadedDoc = await uploadDocument({
+        file,
+        userId: user.id,
+        documentName: selectedDocument.name || file.name,
+        category: selectedDocument.category,
+        application_id: id,
+        client_id: application?.client_id,
+        contentType
+      });
+      
+      setSelectedDocument(null);
+      setSuccessMessage(`Documento "${uploadedDoc.file_name}" subido exitosamente`);
+      setIsUploadModalOpen(false);
+      
+      // Reload documents
+      await loadApplicationDocuments();
+    } catch (error) {
+      console.error('Error al subir documento:', error);
+      setDocumentError(error instanceof Error ? error.message : 'Error al subir el documento');
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+  
+  // Function to load all data
   const loadApplicationData = async () => {
     try {
       setLoading(true);
@@ -121,6 +719,12 @@ const ApplicationDetail = () => {
       } else {
         setApprovalStatus(buildApprovalStatus(data));
       }
+      
+      // Load application history
+      await loadApplicationHistory();
+      
+      // Load application documents
+      await loadApplicationDocuments();
     } catch (err) {
       console.error('Error al cargar la solicitud:', err);
       setError(err instanceof Error ? err.message : 'Error al cargar los datos de la solicitud');
@@ -141,6 +745,11 @@ const ApplicationDetail = () => {
     } finally {
       setLoading(false);
     }
+  };
+  
+  // Reload history after status changes
+  const reloadHistoryAfterStatusChange = async () => {
+    await loadApplicationHistory();
   };
 
   useEffect(() => {
@@ -382,6 +991,31 @@ const ApplicationDetail = () => {
   // Verificar si la solicitud está totalmente aprobada
   const isFullyApproved = approvalStatus?.approvedByAdvisor && approvalStatus?.approvedByCompany;
   
+  // Helper function to get timeline badge class based on status
+  const getTimelineBadgeClass = (status: string) => {
+    const baseClass = 'w-4 h-4 rounded-full ring-4 ring-white dark:ring-gray-900';
+    
+    switch (status.toLowerCase()) {
+      case 'new':
+      case 'solicitud':
+        return `${baseClass} bg-blue-500`;
+      case 'in_review':
+        return `${baseClass} bg-purple-500`;
+      case 'approved':
+        return `${baseClass} bg-green-500`;
+      case 'rejected':
+        return `${baseClass} bg-red-500`;
+      case 'por_dispersar':
+        return `${baseClass} bg-accent`;
+      case 'completed':
+        return `${baseClass} bg-primary`;
+      case 'cancelled':
+        return `${baseClass} bg-gray-500`;
+      default:
+        return `${baseClass} bg-gray-400`;
+    }
+  };
+  
   if (!userCan(PERMISSIONS.VIEW_APPLICATIONS)) {
     return (
       <MainLayout>
@@ -475,6 +1109,9 @@ const ApplicationDetail = () => {
                             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
                             .join(' ');
                         })()}
+                        {isProductFinancing(application) && (
+                          <span className="badge badge-primary ml-2 text-xs">Producto</span>
+                        )}
                       </p>
                     </div>
                     
@@ -489,7 +1126,7 @@ const ApplicationDetail = () => {
                     
                     <div>
                       <p className="text-sm text-gray-500">Monto Solicitado</p>
-                      <p className="font-medium">{formatCurrency(application.requested_amount || application.amount || 0)}</p>
+                      <p className="font-medium">{formatCurrency(application.amount || 0)}</p>
                     </div>
 
                     {application.term && (
@@ -516,7 +1153,25 @@ const ApplicationDetail = () => {
                     {application.financing_type && (
                       <div>
                         <p className="text-sm text-gray-500">Tipo de Financiamiento</p>
-                        <p className="font-medium">{application.financing_type}</p>
+                        <p className="font-medium flex items-center">
+                          {application.financing_type === 'producto' ? (
+                            <>
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                              </svg>
+                              Financiamiento de Producto
+                            </>
+                          ) : application.financing_type === 'personal' ? (
+                            <>
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                              </svg>
+                              Crédito Personal
+                            </>
+                          ) : (
+                            application.financing_type
+                          )}
+                        </p>
                       </div>
                     )}
 
@@ -536,11 +1191,34 @@ const ApplicationDetail = () => {
                   </div>
 
                   {/* Detalles del producto/artículo si están disponibles */}
-                  {(application.product_title || application.product_image || application.product_url) && (
+                  {isProductFinancing(application) && (
                     <div className="mt-6 pt-4 border-t">
-                      <h3 className="font-semibold mb-4">Detalles del Producto</h3>
+                      <h3 className="font-semibold mb-4 flex items-center">
+                        <span>Detalles del Producto</span>
+                        {application.financing_type === 'producto' && (
+                          <span className="badge badge-primary ml-2 text-xs">Financiamiento de Producto</span>
+                        )}
+                      </h3>
+                      {application.financing_type === 'producto' ? (
+                        (!application.product_title && !application.product_url && !application.product_image) ? (
+                          <div className="p-4 bg-blue-50 rounded-lg">
+                            <div className="flex items-start">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500 mr-2 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <div>
+                                <p className="text-blue-800 font-medium">Información del producto no disponible</p>
+                                <p className="text-blue-600 text-sm mt-1">Esta solicitud está marcada como financiamiento de producto pero no contiene datos específicos del producto.</p>
+                              </div>
+                            </div>
+                            <div className="mt-4">
+                              <p className="text-sm text-gray-700">Monto del Financiamiento</p>
+                              <p className="font-medium text-lg">{formatCurrency(application.amount || 0)}</p>
+                            </div>
+                          </div>
+                        ) : (
                       <div className="flex flex-col md:flex-row gap-4">
-                        {application.product_image && (
+                            {application.product_image ? (
                           <div className="w-full md:w-1/3">
                             <img 
                               src={application.product_image} 
@@ -551,23 +1229,48 @@ const ApplicationDetail = () => {
                               }}
                             />
                           </div>
+                            ) : (
+                              <div className="w-full md:w-1/3">
+                                <div className="bg-gray-200 rounded-lg w-full h-40 flex items-center justify-center text-gray-500">
+                                  Sin imagen disponible
+                                </div>
+                              </div>
                         )}
                         <div className="w-full md:w-2/3">
-                          {application.product_title && (
+                              {application.product_title ? (
                             <p className="font-medium text-lg mb-2">{application.product_title}</p>
+                              ) : (
+                                <p className="text-gray-500 text-lg mb-2">Título del producto no disponible</p>
                           )}
-                          {application.product_url && (
+                              
+                              {application.product_url ? (
                             <a 
                               href={application.product_url} 
                               target="_blank" 
                               rel="noopener noreferrer"
-                              className="text-blue-500 hover:underline text-sm"
+                                  className="text-blue-500 hover:underline text-sm flex items-center"
                             >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
                               Ver producto en sitio web
                             </a>
+                              ) : (
+                                <p className="text-gray-500 text-sm">URL del producto no disponible</p>
                           )}
+                              
+                              <div className="mt-4">
+                                <p className="text-sm text-gray-500">Monto del Financiamiento</p>
+                                <p className="font-medium">{formatCurrency(application.amount || 0)}</p>
                         </div>
                       </div>
+                          </div>
+                        )
+                      ) : (
+                        <div className="p-4 bg-gray-100 rounded-lg text-center">
+                          <p className="text-gray-500">No aplica - Esta solicitud no es de financiamiento de producto</p>
+                        </div>
+                      )}
                     </div>
                   )}
                   
@@ -685,11 +1388,64 @@ const ApplicationDetail = () => {
               
               {/* Información del cliente */}
               <div className="card bg-base-100 shadow-md p-4 mb-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-semibold mb-2">
+                {/* Buttons for approval - now at the top of the card */}
+                {(application && approvalStatus && 
+                  ((isAdvisor() && !approvalStatus.approvedByAdvisor) || 
+                   (isCompanyAdmin() && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS)))) && (
+                  <div className="flex justify-center space-x-3 mb-4 pb-3 border-b">
+                    {application && approvalStatus && isAdvisor() && !approvalStatus.approvedByAdvisor && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && (
+                      <button 
+                        onClick={handleAdvisorApproval} 
+                        disabled={approving}
+                        className="btn btn-primary"
+                      >
+                        {approving ? (
+                          <>
+                            <span className="loading loading-spinner loading-xs mr-1"></span>
+                            Procesando...
+                          </>
+                        ) : 'Aprobar como Asesor'}
+                      </button>
+                    )}
+                    
+                    {application && approvalStatus && isCompanyAdmin() && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && !approvalStatus.approvedByCompany && (
+                      <button 
+                        onClick={handleCompanyApproval} 
+                        disabled={approving}
+                        className="btn btn-primary"
+                      >
+                        {approving ? (
+                          <>
+                            <span className="loading loading-spinner loading-xs mr-1"></span>
+                            Procesando...
+                          </>
+                        ) : 'Aprobar como Empresa'}
+                      </button>
+                    )}
+                    
+                    {application && approvalStatus && isCompanyAdmin() && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && approvalStatus.approvedByCompany && (
+                      <button 
+                        onClick={handleCancelCompanyApproval} 
+                        disabled={approving}
+                        className="btn btn-outline btn-error"
+                      >
+                        {approving ? (
+                          <>
+                            <span className="loading loading-spinner loading-xs mr-1"></span>
+                            Procesando...
+                          </>
+                        ) : 'Cancelar Aprobación'}
+                      </button>
+                    )}
+                  </div>
+                )}
+                
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">
                     Información del Cliente
                   </h3>
                 </div>
+                
                 <div className="mb-4">
                   <div className="flex flex-col space-y-2">
                     <div className="flex justify-between items-center">
@@ -808,24 +1564,71 @@ const ApplicationDetail = () => {
             <div className="mt-8">
               <div className="card bg-base-100 shadow-xl">
                 <div className="card-body">
-                  <h2 className="card-title text-lg border-b pb-2 mb-4 flex justify-between">
-                    <span>Documentos de la Solicitud</span>
+                  <h2 className="card-title text-lg mb-4 border-b pb-2 flex justify-between items-center">
+                    <span>
+                      Documentos de la Solicitud
+                      {documents.length > 0 && (
+                        <span className="text-sm font-normal badge badge-outline ml-2">
+                          {documents.length} {documents.length === 1 ? 'documento' : 'documentos'}
+                        </span>
+                      )}
+                    </span>
+                    
                     {userCan(PERMISSIONS.UPLOAD_DOCUMENTS) && (
                       <button 
                         className="btn btn-sm btn-primary"
-                        onClick={() => {
-                          /* Aquí iría la lógica para subir nuevos documentos */
-                          console.log("Función para subir documentos - pendiente de implementar");
-                        }}
+                        onClick={() => setIsUploadModalOpen(true)}
                       >
                         Subir Documento
                       </button>
                     )}
                   </h2>
                   
-                  <div className="p-4 bg-base-200 text-center rounded-lg">
-                    <p>La lista de documentos no está disponible en este momento.</p>
-                  </div>
+                  {loadingDocuments ? (
+                    <div className="flex justify-center items-center h-48">
+                      <span className="loading loading-spinner loading-lg"></span>
+                    </div>
+                  ) : documentError ? (
+                    <div className="p-4 bg-error text-white text-center rounded-lg">
+                      <p>{documentError}</p>
+                    </div>
+                  ) : documents.length === 0 ? (
+                    <div className="p-4 bg-base-200 text-center rounded-lg">
+                      <p>No hay documentos disponibles para esta solicitud.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="table w-full">
+                        <thead>
+                          <tr>
+                            <th>Nombre</th>
+                            <th>Categoría</th>
+                            <th>Tamaño</th>
+                            <th>Fecha</th>
+                            <th>Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {documents.map((doc) => (
+                            <tr key={doc.id}>
+                              <td>{doc.file_name}</td>
+                              <td>{doc.category || 'Sin categoría'}</td>
+                              <td>{formatFileSize(doc.file_size)}</td>
+                              <td>{formatDate(doc.created_at, 'short')}</td>
+                              <td>
+                                <button 
+                                  className="btn btn-sm btn-primary"
+                                  onClick={() => setViewingDocument(doc)}
+                                >
+                                  Ver
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -834,86 +1637,152 @@ const ApplicationDetail = () => {
             <div className="mt-8">
               <div className="card bg-base-100 shadow-xl">
                 <div className="card-body">
-                  <h2 className="card-title text-lg border-b pb-2 mb-4">Historial de la Solicitud</h2>
-                  
-                  <div className="p-4 bg-base-200 text-center rounded-lg">
-                    <p>El historial de la solicitud no está disponible en este momento.</p>
+                  <div className="flex items-center justify-between border-b pb-2 mb-4">
+                    <h2 className="card-title text-lg">
+                      Historial de la Solicitud
+                      {filteredHistory.length > 0 && (
+                        <span className="text-sm font-normal badge badge-outline ml-2">
+                          {filteredHistory.length} {filteredHistory.length === 1 ? 'entrada' : 'entradas'}
+                        </span>
+                      )}
+                    </h2>
+                    
+                    {/* Filtros para el historial */}
+                    {history.length > 0 && (
+                      <div className="flex gap-2">
+                        {/* Filtro por tipo de evento */}
+                        <select 
+                          className="select select-sm select-bordered w-auto"
+                          value={historyFilter}
+                          onChange={(e) => setHistoryFilter(e.target.value)}
+                        >
+                          <option value="all">Todos los eventos</option>
+                          <option value="status">Cambios de estado</option>
+                          <option value="approval">Aprobaciones</option>
+                        </select>
+                        
+                        {/* Filtro por tipo de usuario */}
+                        <select 
+                          className="select select-sm select-bordered w-auto"
+                          value={userFilter}
+                          onChange={(e) => setUserFilter(e.target.value)}
+                        >
+                          <option value="all">Todos los usuarios</option>
+                          <option value="advisor">Asesores</option>
+                          <option value="company">Empresa</option>
+                          <option value="admin">Admin</option>
+                        </select>
                   </div>
+                    )}
                 </div>
+                  
+                  {loadingHistory && historyPage === 1 ? (
+                    <div className="flex justify-center items-center h-48">
+                      <span className="loading loading-spinner loading-lg"></span>
               </div>
+                  ) : historyError ? (
+                    <div className="p-4 bg-error text-white text-center rounded-lg">
+                      <p>{historyError}</p>
             </div>
+                  ) : filteredHistory.length === 0 ? (
+                    <div className="p-4 bg-base-200 text-center rounded-lg">
+                      <p>No hay historial disponible para esta solicitud específica.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <ol className="relative border-s border-gray-200 dark:border-gray-700 ms-3 mt-4">
+                        {filteredHistory.map((item, index) => {
+                          // Determinar el tipo de usuario basado en rol o comentario
+                          let userType = 'Sistema';
+                          let userBadgeClass = 'badge-ghost';
+                          
+                          if (item.user_role) {
+                            const role = item.user_role.toLowerCase();
+                            if (role.includes('advisor') || role.includes('asesor')) {
+                              userType = 'Asesor';
+                              userBadgeClass = 'badge-info';
+                            } else if (role.includes('company') || role.includes('empresa')) {
+                              userType = 'Empresa';
+                              userBadgeClass = 'badge-secondary';
+                            } else if (role.includes('admin')) {
+                              userType = 'Admin';
+                              userBadgeClass = 'badge-accent';
+                            }
+                          } else if (item.comment) {
+                            const comment = item.comment.toLowerCase();
+                            if (comment.includes('por asesor')) {
+                              userType = 'Asesor';
+                              userBadgeClass = 'badge-info';
+                            } else if (comment.includes('por empresa') || comment.includes('por administrador de empresa')) {
+                              userType = 'Empresa';
+                              userBadgeClass = 'badge-secondary';
+                            } else if (comment.includes('por admin')) {
+                              userType = 'Admin';
+                              userBadgeClass = 'badge-accent';
+                            }
+                          }
+                          
+                          return (
+                            <li className="mb-4 ms-6" key={item.id || `history-${id}-${index}`}>
+                              <span className={getTimelineBadgeClass(item.status)} />
+                              <div className="bg-base-200 rounded-lg shadow-sm p-3">
+                                <div className="flex justify-between mb-1">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex flex-col">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium">
+                                          {item.user_name || 'Sistema'}
+                                        </span>
+          </div>
+                                      {item.user_email && (
+                                        <span className="text-xs text-gray-500">{item.user_email}</span>
+                                      )}
+                                    </div>
+                                    <span className={`badge ${getStatusBadgeClass(item.status)} ml-2`}>
+                                      {STATUS_LABELS[item.status as keyof typeof STATUS_LABELS] || item.status}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col items-end">
+                                    <time className="text-xs text-gray-500">
+                                      {formatDate(item.created_at, 'long')}
+                                    </time>
+                                    <span className={`badge badge-sm ${userBadgeClass} mt-1`}>
+                                      {userType}
+                                    </span>
+                                  </div>
+                                </div>
+                                <p className="text-sm mt-1">{item.comment}</p>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                      
+                      {historyHasMore && (
+                        <div className="text-center mt-4">
+                <button 
+                            className="btn btn-outline btn-sm"
+                            onClick={loadMoreHistory}
+                            disabled={loadingHistory}
+                >
+                            {loadingHistory ? (
+                    <>
+                                <span className="loading loading-spinner loading-xs"></span>
+                                Cargando...
+                    </>
+                            ) : 'Cargar más historial'}
+                </button>
+              </div>
+            )}
+                    </>
+                  )}
+                    </div>
+                  </div>
+              </div>
           </>
         ) : (
           <div className="text-center p-10">
             <h3 className="text-xl text-gray-500">No se encontró la solicitud</h3>
-          </div>
-        )}
-        
-        {/* Acciones de aprobación */}
-        {application && approvalStatus && (
-          <div className="mt-6 space-y-4">
-            {/* Botones de aprobación para asesores */}
-            {isAdvisor() && !approvalStatus.approvedByAdvisor && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && (
-              <div className="p-4 bg-base-200 rounded-lg">
-                <h3 className="text-lg font-semibold mb-2">Aprobación del Asesor</h3>
-                <p className="mb-4 text-gray-600">Como asesor, puedes aprobar esta solicitud para avanzar en el proceso.</p>
-                <button 
-                  onClick={handleAdvisorApproval} 
-                  disabled={approving}
-                  className="btn btn-primary"
-                >
-                  {approving ? (
-                    <>
-                      <span className="loading loading-spinner loading-xs mr-2"></span>
-                      Procesando...
-                    </>
-                  ) : 'Aprobar como Asesor'}
-                </button>
-              </div>
-            )}
-            
-            {/* Botones de aprobación para administradores de empresa */}
-            {isCompanyAdmin() && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && (
-              <div className="p-4 bg-base-200 rounded-lg">
-                <h3 className="text-lg font-semibold mb-2">Aprobación de la Empresa</h3>
-                <p className="mb-4 text-gray-600">Como administrador de empresa, puedes aprobar esta solicitud.</p>
-                
-                {!approvalStatus.approvedByCompany ? (
-                  <button 
-                    onClick={handleCompanyApproval} 
-                    disabled={approving}
-                    className="btn btn-primary"
-                  >
-                    {approving ? (
-                      <>
-                        <span className="loading loading-spinner loading-xs mr-2"></span>
-                        Procesando...
-                      </>
-                    ) : 'Aprobar como Empresa'}
-                  </button>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="alert alert-success">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                      <span>Esta solicitud ya ha sido aprobada por la empresa</span>
-                    </div>
-                    
-                    <button 
-                      onClick={handleCancelCompanyApproval} 
-                      disabled={approving}
-                      className="btn btn-outline btn-error"
-                    >
-                      {approving ? (
-                        <>
-                          <span className="loading loading-spinner loading-xs mr-2"></span>
-                          Procesando...
-                        </>
-                      ) : 'Cancelar Aprobación'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         )}
         
@@ -986,6 +1855,78 @@ const ApplicationDetail = () => {
               </div>
             )}
           </>
+        )}
+        
+        {/* Modal para subir documentos */}
+        {isUploadModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg w-full max-w-2xl">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold">Subir Documento</h3>
+                  <button 
+                    className="btn btn-sm btn-circle"
+                    onClick={() => setIsUploadModalOpen(false)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                
+                {documentError && (
+                  <div className="alert alert-error mb-4">
+                    <p>{documentError}</p>
+                  </div>
+                )}
+                
+                <div className="mb-4">
+                  <DocumentUploader
+                    categories={[
+                      { value: 'identificacion', label: 'Identificación' },
+                      { value: 'comprobante_ingresos', label: 'Comprobante de Ingresos' },
+                      { value: 'comprobante_domicilio', label: 'Comprobante de Domicilio' },
+                      { value: 'estado_cuenta', label: 'Estado de Cuenta' },
+                      { value: 'contrato', label: 'Contrato' },
+                      { value: 'otros', label: 'Otros Documentos' }
+                    ]}
+                    onDocumentAdded={handleDocumentSelected}
+                    onDocumentRemoved={() => setSelectedDocument(null)}
+                    existingDocuments={selectedDocument ? [selectedDocument] : []}
+                    clientId={application?.client_id}
+                    existingServerDocuments={[]}
+                  />
+                </div>
+                
+                <div className="flex justify-end gap-2 mt-4">
+                  <button 
+                    className="btn btn-outline"
+                    onClick={() => setIsUploadModalOpen(false)}
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={handleUploadDocument}
+                    disabled={!selectedDocument || uploadingDocument}
+                  >
+                    {uploadingDocument ? (
+                      <>
+                        <span className="loading loading-spinner loading-xs mr-1"></span>
+                        Subiendo...
+                      </>
+                    ) : 'Subir Documento'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Document viewer */}
+        {viewingDocument && (
+          <DocumentViewer 
+            document={viewingDocument}
+            onClose={() => setViewingDocument(null)} 
+          />
         )}
       </div>
     </MainLayout>

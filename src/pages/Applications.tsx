@@ -322,8 +322,12 @@ const Applications: React.FC = () => {
                 <td>{application.client_name || 'N/A'}</td>
                 <td>{application.company_name || 'N/A'}</td>
                 <td>
-                  <span className="badge badge-primary badge-outline">
-                  {application.application_type === 'selected_plans' && application.product_type
+                  <span className={`badge ${application.financing_type === 'producto' ? 'badge-primary' : application.financing_type === 'personal' ? 'badge-secondary' : 'badge-primary'} badge-outline`}>
+                  {application.financing_type === 'producto' ? (
+                    'Financiamiento de Producto'
+                  ) : application.financing_type === 'personal' ? (
+                    'Crédito Personal'
+                  ) : application.application_type === 'selected_plans' && application.product_type
                     ? getApplicationTypeLabel(application.product_type)
                     : getApplicationTypeLabel(application.application_type)}
                   </span>
@@ -390,8 +394,6 @@ const Applications: React.FC = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
           <div>
             <h1 className="text-2xl font-bold mb-1">Solicitudes de Crédito</h1>
-            <div className="badge badge-primary mb-3">Planes Seleccionados</div>
-            <p className="text-sm text-gray-600">Esta vista muestra exclusivamente solicitudes de tipo "Planes Seleccionados"</p>
           </div>
           
           <div className="flex gap-2">
@@ -470,15 +472,11 @@ const Applications: React.FC = () => {
                   <div className="form-control">
                     <label className="label">
                       <span className="label-text">Tipo de Aplicación</span>
-                      <span className="label-text-alt text-primary">Enfocado en Planes Seleccionados</span>
                     </label>
                     <div className="border border-primary rounded-md p-2 bg-primary bg-opacity-10 flex items-center justify-between">
                       <span className="font-medium text-primary">Planes Seleccionados</span>
                       <span className="badge badge-primary">Predeterminado</span>
                     </div>
-                    <label className="label">
-                      <span className="label-text-alt text-info">Esta vista solo muestra Planes Seleccionados</span>
-                    </label>
                   </div>
                   
                   <div className="form-control">
@@ -577,16 +575,6 @@ const Applications: React.FC = () => {
                 </button>
               </div>
             </div>
-          </div>
-          
-          {/* Información sobre el filtro de Planes Seleccionados */}
-          <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded-md">
-            <p className="text-blue-700 text-sm flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Esta vista muestra exclusivamente solicitudes de tipo "Planes Seleccionados". Para ver otros tipos de solicitudes, contacte al administrador del sistema.
-            </p>
           </div>
           
           {viewMode === 'kanban' ? renderKanbanBoard() : renderListView()}
