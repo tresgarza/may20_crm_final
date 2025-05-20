@@ -124,6 +124,306 @@ const getStatusBadgeClass = (status: string) => {
   }
 };
 
+// Document interface that matches what's coming from the backend
+interface Document {
+  id: string;
+  client_id?: string;
+  application_id?: string;
+  file_name: string;
+  file_path: string;
+  file_type?: string;
+  file_size?: number;
+  category?: string;
+  created_at?: string;
+  updated_at?: string;
+  origin?: string;
+}
+
+// Document viewer component adapted from ApplicationDetail
+const DocumentViewer = ({ document, onClose }: { document: Document, onClose: () => void }) => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [url, setUrl] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    const loadDocument = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        setImageError(false);
+        setUrl(null); // Reset URL on new document
+
+        if (!document.file_path) {
+          throw new Error('El documento no tiene una ruta de archivo válida');
+        }
+
+        const fileExtension = document.file_path.split('.').pop()?.toLowerCase();
+        console.log(`[DocViewer] Loading document. Extension: ${fileExtension}, Original file_type: ${document.file_type}, Path: ${document.file_path}`);
+
+        const isImage = fileExtension && ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(fileExtension);
+        const isPdf = fileExtension === 'pdf';
+
+        const serviceClient = getServiceClient();
+        
+        let objectUrlToSet: string | null = null;
+
+        if (isImage) {
+          console.log(`[DocViewer] Document is an image. Attempting direct download and blob URL creation.`);
+          const { data, error: downloadError } = await serviceClient.storage
+            .from('client-documents')
+            .download(document.file_path);
+
+          if (downloadError || !data) {
+            console.error('[DocViewer] Error downloading image data:', downloadError);
+            throw new Error(`Error al descargar los datos de la imagen: ${downloadError?.message || 'Error desconocido'}`);
+          }
+          console.log(`[DocViewer] Image data downloaded successfully: ${data.size} bytes`);
+
+          const mimeTypes: Record<string, string> = {
+            'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
+            'gif': 'image/gif', 'webp': 'image/webp', 'bmp': 'image/bmp', 'svg': 'image/svg+xml'
+          };
+          const contentType = (fileExtension && mimeTypes[fileExtension]) || 'application/octet-stream';
+          
+          // Clean potential multipart boundaries by locating the PNG/JPEG header
+          let cleanBlob: Blob;
+          try {
+            const arrBuffer = await data.arrayBuffer();
+            const uint8 = new Uint8Array(arrBuffer);
+            let startIndex = 0;
+            // PNG signature
+            const pngSig = [0x89, 0x50, 0x4E, 0x47];
+            // JPG signature 0xFF,0xD8,0xFF
+            const jpgSig = [0xFF, 0xD8, 0xFF];
+            const checkSig = (sig:number[], offset:number) => sig.every((v,idx)=>uint8[offset+idx]===v);
+            for(let i=0;i<uint8.length-4;i++){
+              if(checkSig(pngSig,i) || checkSig(jpgSig,i)){
+                startIndex=i;break;
+              }
+            }
+            if(startIndex>0){
+              console.log(`[DocViewer] Detected binary header at index ${startIndex}. Stripping multipart preamble.`);
+              const slice = uint8.slice(startIndex);
+              cleanBlob = new Blob([slice], {type: contentType});
+            } else {
+              cleanBlob = new Blob([uint8], {type: contentType});
+            }
+          } catch(cleanErr){
+            console.error('[DocViewer] Error sanitizing image data, falling back to original blob', cleanErr);
+            cleanBlob = new Blob([data], {type: contentType});
+          }
+          objectUrlToSet = URL.createObjectURL(cleanBlob);
+          console.log(`[DocViewer] Sanitized Blob URL for image created: ${objectUrlToSet.substring(0, 50)}...`);
+
+        } else if (isPdf) {
+          console.log(`[DocViewer] Document is a PDF. Downloading for sanitation.`);
+          const { data, error: downloadError } = await serviceClient.storage
+            .from('client-documents')
+            .download(document.file_path);
+
+          if (downloadError || !data) {
+            console.error('[DocViewer] Error downloading PDF data:', downloadError);
+            throw new Error(`Error al descargar los datos del PDF: ${downloadError?.message || 'Error desconocido'}`);
+          }
+          console.log(`[DocViewer] PDF data downloaded successfully: ${data.size} bytes`);
+
+          // Sanitize multipart preamble by finding '%PDF-'
+          let cleanPdfBlob: Blob;
+          try {
+            const arrBuffer = await data.arrayBuffer();
+            const uint8 = new Uint8Array(arrBuffer);
+            let startIndex = 0;
+            const pdfSig = [0x25, 0x50, 0x44, 0x46, 0x2D]; // '%PDF-'
+            const checkSig = (offset:number) => pdfSig.every((v,idx)=>uint8[offset+idx]===v);
+            for(let i=0;i<uint8.length-5;i++){
+              if(checkSig(i)){startIndex=i;break;}
+            }
+            if(startIndex>0){
+              console.log(`[DocViewer] Detected PDF header at index ${startIndex}. Stripping multipart preamble.`);
+              const slice = uint8.slice(startIndex);
+              cleanPdfBlob = new Blob([slice], { type: 'application/pdf' });
+            } else {
+              cleanPdfBlob = new Blob([uint8], { type: 'application/pdf' });
+            }
+          } catch(pdfSanErr){
+            console.error('[DocViewer] Error sanitizing PDF, using original data', pdfSanErr);
+            cleanPdfBlob = new Blob([data], { type: 'application/pdf' });
+          }
+
+          objectUrlToSet = URL.createObjectURL(cleanPdfBlob);
+          console.log(`[DocViewer] Sanitized Blob URL for PDF created: ${objectUrlToSet.substring(0,50)}...`);
+        } else {
+          // For other file types, primarily for download. Try public URL.
+          console.log(`[DocViewer] Document is other type. Trying public URL for download purposes.`);
+           const { data: publicUrlData } = await serviceClient.storage
+            .from('client-documents')
+            .getPublicUrl(document.file_path);
+          if (publicUrlData?.publicUrl) {
+            objectUrlToSet = publicUrlData.publicUrl;
+             console.log(`[DocViewer] Public URL for other file type: ${objectUrlToSet}`);
+          } else {
+            // Fallback for other types if needed for direct download link, though less common for viewing
+            console.log(`[DocViewer] Public URL for other type not available. Downloading for blob URL (for download attribute).`);
+            const { data, error: downloadError } = await serviceClient.storage
+              .from('client-documents')
+              .download(document.file_path);
+            if (downloadError || !data) {
+               console.error('[DocViewer] Error downloading other file data:', downloadError);
+               throw new Error(`Error al descargar el archivo: ${downloadError?.message || 'Error desconocido'}`);
+            }
+            const contentType = document.file_type || 'application/octet-stream';
+            const blob = new Blob([data], { type: contentType });
+            objectUrlToSet = URL.createObjectURL(blob);
+            console.log(`[DocViewer] Blob URL for other file type created: ${objectUrlToSet.substring(0,50)}...`);
+          }
+        }
+        
+        setUrl(objectUrlToSet);
+
+      } catch (err) {
+        console.error('[DocViewer] General error in loadDocument:', err);
+        setError(err instanceof Error ? err.message : 'Error al cargar el documento');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDocument();
+
+    return () => {
+      if (url && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+        console.log('[DocViewer] Blob URL revoked:', url.substring(0,50));
+      }
+    };
+  // IMPORTANT: Add document.id to dependencies to reload when a NEW document is selected,
+  // not just when the file_path of the *same* document object changes (which is less likely).
+  }, [document.id, document.file_path]); // Ensuring reload for new documents
+
+  const fileExtension = document.file_path?.split('.').pop()?.toLowerCase();
+  const isImage = fileExtension && ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(fileExtension);
+  const isPdf = fileExtension === 'pdf';
+
+  const handleDownload = () => {
+    if (!url) return;
+    const a = window.document.createElement('a');
+    a.href = url;
+    a.download = document.file_name || 'documento';
+    // Forcing download, even for public URLs that might try to render inline
+    // For blob URLs, this is standard. For public image URLs, this ensures download.
+    window.document.body.appendChild(a);
+    a.click();
+    window.document.body.removeChild(a);
+    console.log(`[DocViewer] Download initiated for: ${document.file_name}, URL: ${url.substring(0,50)}`);
+  };
+
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    console.error(`[DocViewer] Error loading image in <img> tag. SRC: ${e.currentTarget.src.substring(0,100)}...`);
+    setImageError(true);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        {/* Background overlay */}
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+
+        {/* Modal panel */}
+        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+            <div className="sm:flex sm:items-start">
+              <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                    {document.file_name}
+                  </h3>
+                  <div className="flex gap-2">
+                    {/* Download button */}
+                    <button 
+                      onClick={handleDownload} 
+                      className="p-2 rounded-full hover:bg-gray-100"
+                      disabled={!url || url === '#'}
+                      title="Descargar documento"
+                    >
+                      <FiDownload className="text-gray-600" />
+                    </button>
+                    {/* Close button */}
+                    <button 
+                      onClick={onClose} 
+                      className="p-2 rounded-full hover:bg-gray-100"
+                      title="Cerrar"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Content area */}
+                <div className="w-full">
+                  {loading ? (
+                    <div className="flex justify-center items-center py-16">
+                      <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary"></div>
+                    </div>
+                  ) : error ? (
+                    <div className="text-center py-16">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-red-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <p className="text-gray-700">{error}</p>
+                      <button 
+                        onClick={handleDownload} 
+                        className="mt-4 px-4 py-2 bg-primary text-white rounded hover:bg-blue-700"
+                        disabled={!url || url === '#'}
+                      >
+                        Intentar descargar de todos modos
+                      </button>
+                    </div>
+                  ) : isImage && url && !imageError ? (
+                    <div className="flex justify-center items-center overflow-auto max-h-[80vh]">
+                      <img 
+                        src={url} 
+                        alt={document.file_name || 'Documento'} 
+                        className="max-w-full h-auto object-contain"
+                        onError={handleImageError} 
+                      />
+                    </div>
+                  ) : isPdf && url ? (
+                    <div className="w-full h-[80vh]">
+                      <iframe 
+                        src={`${url}#toolbar=0`} 
+                        className="w-full h-full" 
+                        title={document.file_name || 'Documento PDF'}
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-center py-16">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <p className="text-gray-700 mb-4">Este tipo de documento no se puede previsualizar.</p>
+                      {url && url !== '#' && (
+                        <button 
+                          onClick={handleDownload} 
+                          className="px-4 py-2 bg-primary text-white rounded hover:bg-blue-700"
+                        >
+                          Descargar documento
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ClientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -145,6 +445,9 @@ const ClientDetail: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [docSortField, setDocSortField] = useState<'file_name' | 'category' | 'origin' | 'created_at' | 'file_size'>('created_at');
   const [docSortDirection, setDocSortDirection] = useState<'asc' | 'desc'>('desc');
+  
+  // Estado para el visor de documentos
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   
   // Unique categories for filter dropdown
   const documentCategories = useMemo(() => {
@@ -331,6 +634,11 @@ const ClientDetail: React.FC = () => {
       {label}
     </button>
   );
+
+  // Función para cerrar el visor de documentos
+  const handleCloseDocumentViewer = () => {
+    setSelectedDocument(null);
+  };
 
   return (
     <MainLayout>
@@ -650,11 +958,6 @@ const ClientDetail: React.FC = () => {
                 <div className="bg-white rounded-lg shadow-md p-6">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold">Documentos del Cliente</h3>
-                    {id && userCan(PERMISSIONS.EDIT_CLIENT) && (
-                      <Link to={`/clients/edit/${id}`} className="btn btn-sm btn-primary">
-                        Gestionar Documentos
-                      </Link>
-                    )}
                   </div>
 
                   {/* Filtro y ordenación */}
@@ -778,18 +1081,17 @@ const ClientDetail: React.FC = () => {
                               <td>{doc.application_id ? 'Solicitud' : 'General'}</td>
                               <td>{formatDate(doc.created_at)}</td>
                               <td>{formatFileSize(doc.file_size || 0)}</td>
-                              <td>
+                              <td className="flex gap-2">
                                 {doc.file_path ? (
-                                  <button 
-                                    onClick={async () => {
-                                      const url = await getDocumentDownloadUrl(doc.file_path);
-                                      window.open(url, '_blank');
-                                    }}
-                                    className="btn btn-sm btn-ghost"
-                                    title="Descargar documento"
-                                  >
-                                    <FiDownload />
-                                  </button>
+                                  <>
+                                    <button 
+                                      onClick={() => setSelectedDocument(doc)}
+                                      className="btn btn-sm btn-primary btn-outline"
+                                      title="Ver documento"
+                                    >
+                                      Ver
+                                    </button>
+                                  </>
                                 ) : (
                                   <span className="text-gray-400" title="Documento sin ruta de archivo">
                                     <FiDownload />
@@ -801,6 +1103,14 @@ const ClientDetail: React.FC = () => {
                         </tbody>
                       </table>
                     </div>
+                  )}
+
+                  {/* Visor de documentos */}
+                  {selectedDocument && (
+                    <DocumentViewer 
+                      document={selectedDocument} 
+                      onClose={handleCloseDocumentViewer} 
+                    />
                   )}
                 </div>
               )}

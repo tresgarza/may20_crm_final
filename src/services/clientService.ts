@@ -153,6 +153,7 @@ export const getClients = async (filters?: ClientFilter) => {
       console.log('[getClients] Filter application details:');
       console.log(`  - advisor_id filter: ${filters.advisor_id || 'not set'}`);
       console.log(`  - company_id filter: ${filters.company_id || 'not set'}`);
+      console.log(`  - searchQuery filter: ${filters.searchQuery || 'not set'}`);
       
       // Advisors ALWAYS filter by advisor_id to ensure data isolation
       if (filters.advisor_id) {
@@ -175,9 +176,20 @@ export const getClients = async (filters?: ClientFilter) => {
       }
 
       if (filters.searchQuery) {
-        query = query.or(
-          `first_name.ilike.%${filters.searchQuery}%,paternal_surname.ilike.%${filters.searchQuery}%,maternal_surname.ilike.%${filters.searchQuery}%,email.ilike.%${filters.searchQuery}%,phone.ilike.%${filters.searchQuery}%,rfc.ilike.%${filters.searchQuery}%,curp.ilike.%${filters.searchQuery}%`
-        );
+        const searchTerm = filters.searchQuery.trim();
+        console.log(`[getClients] Applying search query filter: "${searchTerm}"`);
+        
+        // Build search condition using OR with multiple fields
+        const searchCondition = [
+          `first_name.ilike.%${searchTerm}%`,
+          `paternal_surname.ilike.%${searchTerm}%`,
+          `maternal_surname.ilike.%${searchTerm}%`,
+          `email.ilike.%${searchTerm}%`,
+          `phone.ilike.%${searchTerm}%`
+        ].join(',');
+        
+        console.log(`[getClients] Search condition: ${searchCondition}`);
+        query = query.or(searchCondition);
       }
 
       if (filters.page !== undefined && filters.pageSize) {
@@ -189,7 +201,8 @@ export const getClients = async (filters?: ClientFilter) => {
     }
 
     query = query.order('created_at', { ascending: false });
-
+    
+    console.log('[getClients] Executing final query');
     const { data, error, count } = await query;
 
     if (error) {

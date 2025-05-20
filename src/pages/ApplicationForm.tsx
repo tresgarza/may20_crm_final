@@ -91,6 +91,7 @@ const ApplicationForm: React.FC = () => {
   const { shouldFilterByEntity, getEntityFilter } = usePermissions();
   const { addNotification, showPopup } = useNotifications();
   const location = useLocation();
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
   
   const isEditMode = !!id;
   
@@ -106,6 +107,7 @@ const ApplicationForm: React.FC = () => {
   const [searchLoading, setSearchLoading] = useState(false);
   const [showClientSearch, setShowClientSearch] = useState(false);
   const [clientSelected, setClientSelected] = useState(false);
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   
   // Company filter state
   const [companies, setCompanies] = useState<{id: string, name: string}[]>([]);
@@ -113,6 +115,25 @@ const ApplicationForm: React.FC = () => {
   const [companyClients, setCompanyClients] = useState<ClientSearchResult[]>([]);
   const [loadingCompanies, setLoadingCompanies] = useState(false);
   const [loadingCompanyClients, setLoadingCompanyClients] = useState(false);
+  
+  // Debounce search term
+  useEffect(() => {
+    const timerId = setTimeout(() => {
+      const trimmedTerm = searchTerm.trim();
+      if (trimmedTerm && trimmedTerm !== debouncedSearchTerm) {
+        setDebouncedSearchTerm(trimmedTerm);
+      }
+    }, 500);
+
+    return () => clearTimeout(timerId);
+  }, [searchTerm, debouncedSearchTerm]);
+
+  // Trigger search when debounced term changes
+  useEffect(() => {
+    if (debouncedSearchTerm) {
+      handleClientSearch(debouncedSearchTerm);
+    }
+  }, [debouncedSearchTerm]);
   
   useEffect(() => {
     if (isEditMode && id) {
@@ -381,15 +402,22 @@ const ApplicationForm: React.FC = () => {
   };
 
   // Handler for searching clients
-  const handleClientSearch = async () => {
-    if (!searchTerm.trim()) return;
+  const handleClientSearch = async (manualSearchTerm?: string) => {
+    const trimmedSearchTerm = manualSearchTerm || searchTerm.trim();
+    if (!trimmedSearchTerm) {
+      // If search is empty, just show the companyClients if a company is selected
+      setSearchResults([]);
+      return;
+    }
     
     try {
       setSearchLoading(true);
+      setError(null); // Clear any previous errors
+      
       const entityFilter = shouldFilterByEntity() ? getEntityFilter() : null;
       
       const filters: ClientFilter = {
-        searchQuery: searchTerm
+        searchQuery: trimmedSearchTerm
       };
       
       // Add entity filters if available
@@ -422,7 +450,7 @@ const ApplicationForm: React.FC = () => {
       }
     } catch (error) {
       console.error('Error searching clients:', error);
-      setError('Error al buscar clientes');
+      setError('Error al buscar clientes. Por favor intente nuevamente.');
     } finally {
       setSearchLoading(false);
     }
@@ -671,6 +699,13 @@ const ApplicationForm: React.FC = () => {
     }
   };
   
+  // Effect to focus search input when panel is shown
+  useEffect(() => {
+    if (showClientSearch && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [showClientSearch]);
+  
   if (!userCan(isEditMode ? PERMISSIONS.EDIT_APPLICATION : PERMISSIONS.CREATE_APPLICATION)) {
     return (
       <MainLayout>
@@ -732,11 +767,12 @@ const ApplicationForm: React.FC = () => {
                     className="input input-bordered w-full"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleClientSearch()}
+                    onKeyDown={(e) => e.key === 'Enter' && handleClientSearch()}
+                    ref={searchInputRef}
                   />
                   <button 
                     className="btn btn-primary"
-                    onClick={handleClientSearch}
+                    onClick={() => handleClientSearch()}
                     disabled={searchLoading}
                   >
                     {searchLoading ? (
