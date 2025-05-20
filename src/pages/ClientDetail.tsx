@@ -134,6 +134,8 @@ interface ClientDocument {
   category: string;
   created_at?: string;
   updated_at?: string;
+  application_id?: string;
+  file_size?: number;
 }
 
 // Document viewer component adapted from ApplicationDetail
