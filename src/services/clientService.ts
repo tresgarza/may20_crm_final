@@ -212,7 +212,7 @@ export const getClients = async (filters?: ClientFilter) => {
     }
 
     // Procesar los resultados para incluir company_name
-    const clients = data ? data.map(userData => {
+    const clients = data ? data.map((userData: any) => {
       // Crear el objeto cliente base usando la función existente
       const client = mapUserToClient(userData);
       return client;
