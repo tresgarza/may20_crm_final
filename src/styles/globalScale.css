@@ -1,0 +1,87 @@
+/* Global scaling styles to display UI at 67% when viewed at 100% zoom */
+
+/* 
+ * Primary method: CSS transform scaling
+ * This scales the entire UI without affecting layout calculations
+ */
+#root {
+  transform: scale(0.67);
+  transform-origin: top left;
+  width: 149.25%; /* 100% ÷ 0.67 to compensate */
+  height: 149.25%; 
+  overflow-x: hidden;
+}
+
+/* 
+ * Alternative approach using root font-size (currently disabled)
+ * Uncomment this and disable the transform scale above if needed
+ */
+/*
+:root {
+  font-size: 10.72px; 
+}
+*/
+
+/* Fix for modals and other fixed position elements that might appear at wrong scale */
+.modal,
+.dropdown,
+.tooltip,
+.popover,
+.drawer,
+.toast,
+.fixed,
+[class*="fixed-"],
+[class*="absolute-"] {
+  transform-origin: top left;
+}
+
+/* Fix for any fixed position elements at the root level outside #root */
+body > .fixed,
+body > [class*="fixed-"],
+body > .toast,
+body > .modal,
+body > .drawer,
+body > .dropdown {
+  transform: scale(0.67);
+  transform-origin: top left;
+}
+
+/* Hide horizontal scrollbar */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Additional fixes for any libraries that create portals outside the root */
+body > div:not(#root) {
+  transform-origin: top left;
+}
+
+/* Fix any absolute positioned elements that might be positioned incorrectly */
+.absolute {
+  transform-origin: top left;
+}
+
+/* Ensure the app takes up the full viewport height */
+html, body, #root {
+  min-height: 100vh;
+}
+
+/* Adjustments for specific components if needed */
+.react-datepicker-popper,
+.react-datepicker-wrapper,
+.react-datepicker__portal {
+  transform-origin: top left !important;
+}
+
+/* Handle tooltips that might be positioned incorrectly */
+div[role="tooltip"],
+div[data-tooltip],
+.tooltip {
+  transform-origin: top left !important;
+}
+
+/* Override Tailwind's min-h-screen to compensate for global scale */
+.min-h-screen {
+  min-height: 149.25vh !important; /* 100vh / 0.67 */
+} 

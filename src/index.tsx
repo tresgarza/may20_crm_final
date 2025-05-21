@@ -1,6 +1,7 @@
 import * as React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
+import './styles/globalScale.css'; // Global scaling for UI at 67%
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 import { setupDatabase } from './lib/dbSetup';
