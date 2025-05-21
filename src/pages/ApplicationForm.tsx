@@ -387,7 +387,7 @@ const ApplicationForm: React.FC = () => {
       
       const results = await getClients(filters);
       
-      setCompanyClients(results.clients.map(client => ({
+      setCompanyClients(results.clients.map((client: Client) => ({
         id: client.id,
         name: client.name || 'Sin nombre',
         email: client.email || 'Sin email',
@@ -438,7 +438,7 @@ const ApplicationForm: React.FC = () => {
       console.log("Search results:", results);
       
       if (results && results.clients && results.clients.length > 0) {
-        setSearchResults(results.clients.map(client => ({
+        setSearchResults(results.clients.map((client: Client) => ({
           id: client.id,
           name: client.name || 'Sin nombre',
           email: client.email || 'Sin email',
