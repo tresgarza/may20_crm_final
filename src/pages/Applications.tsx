@@ -12,6 +12,7 @@ import { formatCurrency as formatCurrencyUtil, formatDate } from '../utils/forma
 import KanbanBoardAdvisor from '../components/ui/KanbanBoardAdvisor';
 import KanbanBoardCompany from '../components/ui/KanbanBoardCompany';
 import KanbanBoard from '../components/ui/KanbanBoard';
+import '../styles/kanban.css';
 
 const Applications: React.FC = () => {
   const { userCan } = usePermissions();

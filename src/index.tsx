@@ -1,6 +1,7 @@
 import * as React from 'react';
 import ReactDOM from 'react-dom/client';
-import './styles/main.css'; // Import main CSS file that includes all styles
+import './index.css';
+import './styles/globalScale.css'; // Global scaling for UI at 67%
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 import { setupDatabase } from './lib/dbSetup';

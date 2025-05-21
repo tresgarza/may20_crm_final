@@ -571,8 +571,8 @@ const ClientDetail: React.FC = () => {
         }
       } else {
         setError(`No se encontró el cliente con ID: ${id}`);
-        // Redirect back to clients list after showing error for a moment
-        setTimeout(() => navigate('/clients'), 3000);
+          // Redirect back to clients list after showing error for a moment
+          setTimeout(() => navigate('/clients'), 3000);
       }
     } catch (error: any) {
       console.error(`[ClientDetail] Error fetching client data: ${error.message || error}`);
@@ -937,8 +937,8 @@ const ClientDetail: React.FC = () => {
                               <td>
                                 {app.id ? (
                                   <Link to={`/applications/${String(app.id)}`} className="btn btn-xs btn-info">
-                                    Ver
-                                  </Link>
+                                  Ver
+                                </Link>
                                 ) : (
                                   <span className="text-gray-400">N/D</span>
                                 )}
@@ -1083,13 +1083,13 @@ const ClientDetail: React.FC = () => {
                               <td className="flex gap-2">
                                 {doc.file_path ? (
                                   <>
-                                    <button 
+                                  <button 
                                       onClick={() => setSelectedDocument(doc)}
                                       className="btn btn-sm btn-primary btn-outline"
                                       title="Ver documento"
-                                    >
+                                  >
                                       Ver
-                                    </button>
+                                  </button>
                                   </>
                                 ) : (
                                   <span className="text-gray-400" title="Documento sin ruta de archivo">

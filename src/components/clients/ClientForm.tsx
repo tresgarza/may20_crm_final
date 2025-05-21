@@ -329,8 +329,8 @@ const ClientForm: React.FC<ClientFormProps> = ({ initialData = {}, onSubmit, onS
     else {
       setFormData(prev => ({
         ...prev,
-        [name]: type === 'number' ? (value === '' ? undefined : parseFloat(value)) : value
-      }));
+      [name]: type === 'number' ? (value === '' ? undefined : parseFloat(value)) : value
+    }));
     }
   };
 
@@ -600,7 +600,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ initialData = {}, onSubmit, onS
               <input
                 type="date"
                 name="birth_date"
-                className={`input input-bordered w-full ${errors.birth_date ? 'input-error' : ''}`}
+                  className={`input input-bordered w-full ${errors.birth_date ? 'input-error' : ''}`}
                 value={formData.birth_date || ''}
                 onChange={handleChange}
                 onBlur={(e) => {
@@ -670,7 +670,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ initialData = {}, onSubmit, onS
                 />
                 {errors.dependent_persons && <span className="text-error text-sm mt-1">{errors.dependent_persons}</span>}
                 <small className="text-gray-500 mt-1">Número de personas que dependen económicamente de usted</small>
-              </div>
+          </div>
               
               <div className="form-control">
                 <label className="label">

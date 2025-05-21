@@ -1,0 +1,189 @@
+{
+  "totalApplications": 18,
+  "approvedApplications": 1,
+  "avgAmount": 35914.00611111111,
+  "amounts": [
+    42750,
+    33250,
+    6420,
+    42750,
+    42750,
+    42750,
+    42750,
+    5262.11,
+    42750,
+    42750,
+    3020,
+    42750,
+    42750,
+    42750,
+    42750,
+    42750,
+    42750,
+    42750
+  ],
+  "totalClients": 1,
+  "conversionRate": 5.555555555555555,
+  "applicationsByMonth": [
+    {
+      "month": "2025-04",
+      "count": 14
+    },
+    {
+      "month": "2025-05",
+      "count": 4
+    }
+  ],
+  "applicationsByStatus": [
+    {
+      "status": "Solicitud",
+      "count": 11
+    },
+    {
+      "status": "completed",
+      "count": 1
+    },
+    {
+      "status": "rejected",
+      "count": 5
+    },
+    {
+      "status": "por_dispersar",
+      "count": 1
+    }
+  ],
+  "amountRanges": [
+    {
+      "range": "0-5,000",
+      "count": 1
+    },
+    {
+      "range": "5,001-10,000",
+      "count": 2
+    },
+    {
+      "range": "10,001-50,000",
+      "count": 15
+    },
+    {
+      "range": "50,001-100,000",
+      "count": 0
+    },
+    {
+      "range": "100,001+",
+      "count": 0
+    }
+  ],
+  "recentApplications": [
+    {
+      "id": "57bf64c9-d504-4b54-b590-7740fbe256f6",
+      "created_at": "2025-05-13T17:31:23.308163+00:00",
+      "status": "por_dispersar",
+      "amount": 5262.11,
+      "client_id": "f04660f4-6aeb-46fb-aff3-6d0241925a4d",
+      "company_id": "efc29d61-0153-431c-bedf-cc0c3cedc222",
+      "client_name": "Jorge Alberto Garza González",
+      "company_name": "CADTONER",
+      "application_type": "selected_plans"
+    },
+    {
+      "id": "50ade1ed-7183-459e-a605-9b9e8c3b5b5f",
+      "created_at": "2025-05-13T15:26:48.815484+00:00",
+      "status": "Solicitud",
+      "amount": 3020,
+      "client_id": "f04660f4-6aeb-46fb-aff3-6d0241925a4d",
+      "company_id": "efc29d61-0153-431c-bedf-cc0c3cedc222",
+      "client_name": "Jorge Alberto Garza González",
+      "company_name": "CADTONER",
+      "application_type": "selected_plans"
+    },
+    {
+      "id": "6dee45ee-55b9-4704-b62f-7aabfa264234",
+      "created_at": "2025-05-07T21:12:47.428934+00:00",
+      "status": "Solicitud",
+      "amount": 6420,
+      "client_id": "f04660f4-6aeb-46fb-aff3-6d0241925a4d",
+      "company_id": "efc29d61-0153-431c-bedf-cc0c3cedc222",
+      "client_name": "Jorge Alberto Garza González",
+      "company_name": "CADTONER",
+      "application_type": "selected_plans"
+    },
+    {
+      "id": "f9632760-d1f2-4c11-a411-c5c1abbdd3f7",
+      "created_at": "2025-05-07T18:06:04.099691+00:00",
+      "status": "Solicitud",
+      "amount": 33250,
+      "client_id": "f04660f4-6aeb-46fb-aff3-6d0241925a4d",
+      "company_id": "efc29d61-0153-431c-bedf-cc0c3cedc222",
+      "client_name": "Jorge Alberto Garza González",
+      "company_name": "CADTONER",
+      "application_type": "selected_plans"
+    },
+    {
+      "id": "83ed4979-c81f-4b99-9007-df5c7107bafa",
+      "created_at": "2025-04-30T23:22:39.845135+00:00",
+      "status": "Solicitud",
+      "amount": 42750,
+      "client_id": "f04660f4-6aeb-46fb-aff3-6d0241925a4d",
+      "company_id": "efc29d61-0153-431c-bedf-cc0c3cedc222",
+      "client_name": "Jorge Alberto Garza González",
+      "company_name": "CADTONER",
+      "application_type": "selected_plans"
+    },
+    {
+      "id": "1e8d0836-b9da-4254-a6b7-f52ad6d47ac1",
+      "created_at": "2025-04-30T23:22:39.845135+00:00",
+      "status": "Solicitud",
+      "amount": 42750,
+      "client_id": "f04660f4-6aeb-46fb-aff3-6d0241925a4d",
+      "company_id": "efc29d61-0153-431c-bedf-cc0c3cedc222",
+      "client_name": "Jorge Alberto Garza González",
+      "company_name": "CADTONER",
+      "application_type": "selected_plans"
+    },
+    {
+      "id": "e63b0065-2a77-4e09-9341-184c6efeb03f",
+      "created_at": "2025-04-30T21:50:44.740354+00:00",
+      "status": "Solicitud",
+      "amount": 42750,
+      "client_id": "f04660f4-6aeb-46fb-aff3-6d0241925a4d",
+      "company_id": "efc29d61-0153-431c-bedf-cc0c3cedc222",
+      "client_name": "Jorge Alberto Garza González",
+      "company_name": "CADTONER",
+      "application_type": "selected_plans"
+    },
+    {
+      "id": "de7c1e74-d63b-424b-8275-94907a9f88c7",
+      "created_at": "2025-04-30T21:50:44.740354+00:00",
+      "status": "rejected",
+      "amount": 42750,
+      "client_id": "f04660f4-6aeb-46fb-aff3-6d0241925a4d",
+      "company_id": "efc29d61-0153-431c-bedf-cc0c3cedc222",
+      "client_name": "Jorge Alberto Garza González",
+      "company_name": "CADTONER",
+      "application_type": "selected_plans"
+    },
+    {
+      "id": "bce9a9a9-36b6-4090-853e-4afacab12958",
+      "created_at": "2025-04-30T21:50:28.391074+00:00",
+      "status": "Solicitud",
+      "amount": 42750,
+      "client_id": "f04660f4-6aeb-46fb-aff3-6d0241925a4d",
+      "company_id": "efc29d61-0153-431c-bedf-cc0c3cedc222",
+      "client_name": "Jorge Alberto Garza González",
+      "company_name": "CADTONER",
+      "application_type": "selected_plans"
+    },
+    {
+      "id": "cfaf43b0-8f48-48aa-a82d-8c2a73fe26a2",
+      "created_at": "2025-04-30T21:50:28.391074+00:00",
+      "status": "rejected",
+      "amount": 42750,
+      "client_id": "f04660f4-6aeb-46fb-aff3-6d0241925a4d",
+      "company_id": "efc29d61-0153-431c-bedf-cc0c3cedc222",
+      "client_name": "Jorge Alberto Garza González",
+      "company_name": "CADTONER",
+      "application_type": "selected_plans"
+    }
+  ]
+}

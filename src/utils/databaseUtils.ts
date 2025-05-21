@@ -139,109 +139,127 @@ export const executeSupabaseQuery = async (
       if (error) throw error;
       result = data || [];
     } else if (type === 'insert') {
-      // For INSERT queries, parse the query and use Supabase's insert method directly
-      
-      // Extract data from the SQL INSERT VALUES clause
-      const fieldsMatch = originalQuery.match(/\(([^)]+)\)\s+VALUES/i);
-      const valuesMatch = originalQuery.match(/VALUES\s*\(([^)]+)\)/i);
-      
-      if (fieldsMatch && valuesMatch) {
-        const fields = fieldsMatch[1].split(',').map(f => f.trim());
+      // For INSERT queries, first try to use the MCP server as it's more reliable
+      try {
+        console.log('Attempting to execute INSERT query via MCP server...');
+        result = await executeMcpQuery(originalQuery);
+        console.log('MCP server INSERT successful:', result);
+        return result;
+      } catch (mcpError) {
+        console.error('MCP server error for INSERT query, falling back to Supabase client:', mcpError);
         
-        // Handle quoted values and commas in strings properly
-        const valueString = valuesMatch[1];
-        const values: string[] = [];
-        let currentValue = '';
-        let inQuote = false;
+        // Extract data from the SQL INSERT VALUES clause
+        const fieldsMatch = originalQuery.match(/\(([^)]+)\)\s+VALUES/i);
+        const valuesMatch = originalQuery.match(/VALUES\s*\(([^)]+)\)/i);
         
-        for (let i = 0; i < valueString.length; i++) {
-          const char = valueString[i];
+        if (fieldsMatch && valuesMatch) {
+          const fields = fieldsMatch[1].split(',').map(f => f.trim());
           
-          if (char === "'" && (i === 0 || valueString[i-1] !== '\\')) {
-            inQuote = !inQuote;
-            currentValue += char;
-          } 
-          else if (char === ',' && !inQuote) {
-            values.push(currentValue.trim());
-            currentValue = '';
-          } 
-          else {
-            currentValue += char;
-          }
-        }
-        
-        // Add the last value
-        if (currentValue.trim()) {
-          values.push(currentValue.trim());
-        }
-        
-        // Create an object for insertion
-        const insertData: Record<string, any> = {};
-        
-        fields.forEach((field, i) => {
-          if (i < values.length) {
-            let value: any = values[i];
+          // Handle quoted values and commas in strings properly
+          const valueString = valuesMatch[1];
+          const values: string[] = [];
+          let currentValue = '';
+          let inQuote = false;
+          
+          for (let i = 0; i < valueString.length; i++) {
+            const char = valueString[i];
             
-            // Remove quotes for string values
-            if (value.startsWith("'") && value.endsWith("'")) {
-              value = value.substring(1, value.length - 1);
+            if (char === "'" && (i === 0 || valueString[i-1] !== '\\')) {
+              inQuote = !inQuote;
+              currentValue += char;
             } 
-            // Handle NULL values
-            else if (value.toUpperCase() === 'NULL') {
-              value = null;
-            }
-            // Convert booleans
-            else if (value.toLowerCase() === 'true') {
-              value = true;
-            }
-            else if (value.toLowerCase() === 'false') {
-              value = false;
-            }
-            // Convert numbers
-            else if (!isNaN(Number(value)) && value !== '') {
-              value = Number(value);
-            }
-            
-            // Skip 'product_price' field when inserting into applications table
-            // This fixes the error "Could not find the 'product_price' column of 'applications'"
-            if (table === 'applications' && field.trim() === 'product_price') {
-              console.log(`Skipping product_price field for applications table as it doesn't exist in schema`);
+            else if (char === ',' && !inQuote) {
+              values.push(currentValue.trim());
+              currentValue = '';
             } 
-            // Ensure proper values for status (always 'solicitud') and application_type (always 'selected_plans')
-            else if (table === 'applications' && field.trim() === 'status') {
-              insertData[field] = 'solicitud';
-            }
-            else if (table === 'applications' && field.trim() === 'application_type') {
-              insertData[field] = 'selected_plans';
-            }
             else {
-              insertData[field] = value;
+              currentValue += char;
             }
           }
-        });
-        
-        console.log('Inserting data directly with Supabase client:', insertData);
-        
-        // Use Supabase client to insert the data
-        const { data, error } = await supabase.from(table).insert([insertData]).select();
-        
-        if (error) {
-          console.error('Supabase insert error:', error);
-          throw error;
+          
+          // Add the last value
+          if (currentValue.trim()) {
+            values.push(currentValue.trim());
+          }
+          
+          // Create an object for insertion
+          const insertData: Record<string, any> = {};
+          
+          fields.forEach((field, i) => {
+            if (i < values.length) {
+              let value: any = values[i];
+              
+              // Remove quotes for string values
+              if (value.startsWith("'") && value.endsWith("'")) {
+                value = value.substring(1, value.length - 1);
+              } 
+              // Handle NULL values
+              else if (value.toUpperCase() === 'NULL') {
+                value = null;
+              }
+              // Convert booleans
+              else if (value.toLowerCase() === 'true') {
+                value = true;
+              }
+              else if (value.toLowerCase() === 'false') {
+                value = false;
+              }
+              // Convert numbers
+              else if (!isNaN(Number(value)) && value !== '') {
+                value = Number(value);
+              }
+              
+              // Skip 'product_price' field when inserting into applications table
+              // This fixes the error "Could not find the 'product_price' column of 'applications'"
+              if (table === 'applications' && field.trim() === 'product_price') {
+                console.log(`Skipping product_price field for applications table as it doesn't exist in schema`);
+              } 
+              // Ensure proper values for status (always 'solicitud') and application_type (always 'selected_plans')
+              else if (table === 'applications' && field.trim() === 'status') {
+                insertData[field] = 'solicitud';
+              }
+              else if (table === 'applications' && field.trim() === 'application_type') {
+                insertData[field] = 'selected_plans';
+              }
+              else {
+                insertData[field] = value;
+              }
+            }
+          });
+          
+          console.log('Inserting data directly with Supabase client:', insertData);
+          
+          // Use Supabase client to insert the data
+          const { data, error } = await supabase.from(table).insert([insertData]).select();
+          
+          if (error) {
+            console.error('Supabase insert error:', error);
+            throw error;
+          }
+          
+          console.log('Supabase insert successful:', data);
+          result = data || [];
+        } else {
+          console.error('Could not parse INSERT query:', originalQuery);
+          throw new Error('Could not parse INSERT query for Supabase client execution');
         }
-        
-        console.log('Supabase insert successful:', data);
-        result = data || [];
-      } else {
-        console.error('Could not parse INSERT query:', originalQuery);
-        throw new Error('Could not parse INSERT query for Supabase client execution');
+      }
+    } else if (type === 'update' || type === 'delete') {
+      // For UPDATE and DELETE queries, always use MCP server first
+      console.log(`Executing ${type.toUpperCase()} query via MCP server...`);
+      try {
+        result = await executeMcpQuery(originalQuery);
+        console.log(`MCP server ${type.toUpperCase()} successful:`, result);
+      } catch (mcpError) {
+        console.error(`MCP server error for ${type.toUpperCase()} query:`, mcpError);
+        throw mcpError;
       }
     } else {
-      // For all other queries (UPDATE, DELETE, etc.), fallback to MCP server
+      // For all other query types, use MCP server
       try {
         result = await executeMcpQuery(originalQuery);
       } catch (mcpError) {
-        console.error('MCP server error for non-SELECT/INSERT query:', mcpError);
+        console.error('MCP server error for query:', mcpError);
         throw mcpError;
       }
     }

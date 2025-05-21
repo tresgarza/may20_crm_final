@@ -6,6 +6,7 @@ const HealthCheck: React.FC = () => {
   const [mcpConnected, setMcpConnected] = useState<boolean | null>(null);
   const [checking, setChecking] = useState(true);
   const [retries, setRetries] = useState(0);
+  const [dismissed, setDismissed] = useState(false);
   const [errorDetails, setErrorDetails] = useState<{
     supabase?: string;
     mcp?: string;
@@ -64,7 +65,27 @@ const HealthCheck: React.FC = () => {
     }
   };
 
+  const handleDismiss = () => {
+    setDismissed(true);
+    // Store in session storage so it stays dismissed on page navigations
+    try {
+      sessionStorage.setItem('healthcheck_dismissed', 'true');
+    } catch (e) {
+      console.error('Could not save dismiss state to sessionStorage', e);
+    }
+  };
+
   useEffect(() => {
+    // Check if previously dismissed
+    try {
+      const wasDismissed = sessionStorage.getItem('healthcheck_dismissed') === 'true';
+      if (wasDismissed) {
+        setDismissed(true);
+      }
+    } catch (e) {
+      console.error('Could not read from sessionStorage', e);
+    }
+
     const runChecks = async () => {
       setChecking(true);
       await Promise.all([
@@ -98,12 +119,27 @@ const HealthCheck: React.FC = () => {
     return null; // All connections are good
   }
 
+  if (dismissed) {
+    return null; // User has dismissed the notification
+  }
+
   return (
     <div className="fixed bottom-4 right-4 bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded shadow-lg z-50 max-w-md">
       <div className="flex">
         <div className="py-1"><svg className="fill-current h-6 w-6 text-red-500 mr-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M2.93 17.07A10 10 0 1 1 17.07 2.93 10 10 0 0 1 2.93 17.07zm12.73-1.41A8 8 0 1 0 4.34 4.34a8 8 0 0 0 11.32 11.32zM9 11V9h2v6H9v-4zm0-6h2v2H9V5z"/></svg></div>
         <div className="flex-1">
-          <p className="font-bold">Problemas de conectividad detectados</p>
+          <div className="flex justify-between items-start">
+            <p className="font-bold">Problemas de conectividad detectados</p>
+            <button 
+              onClick={handleDismiss}
+              className="ml-2 text-red-700 hover:text-red-900 focus:outline-none"
+              aria-label="Cerrar notificación"
+            >
+              <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
           <ul className="mt-2 list-disc list-inside text-sm">
             {supabaseConnected === false && (
               <li className="mb-2">

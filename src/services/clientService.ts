@@ -515,7 +515,7 @@ export const createClient = async (client: Omit<Client, 'id' | 'created_at'>, do
         .insert(cleanClientObj)
         .select('id')
         .single();
-
+        
       if (error) {
         console.error('Error inserting client with direct API:', error);
         // We'll fall back to the SQL approach
@@ -532,17 +532,17 @@ export const createClient = async (client: Omit<Client, 'id' | 'created_at'>, do
           try {
             console.log(`Uploading ${documents.length} documents for client ${mappedClient.id}`);
             await uploadClientDocuments(mappedClient.id, documents, userId);
-          } catch (docError) {
+        } catch (docError) {
             console.error('Error uploading documents:', docError);
             // We'll still return the client, but add a warning
             return {
               ...mappedClient,
               warningMessage: `El cliente se creó correctamente, pero hubo un problema al subir documentos: ${docError instanceof Error ? docError.message : 'Error desconocido'}`
             };
-          }
         }
-        
-        return mappedClient;
+      }
+      
+      return mappedClient;
       }
     } catch (apiError) {
       console.error('Exception during client creation with direct API:', apiError);
@@ -585,33 +585,33 @@ export const createClient = async (client: Omit<Client, 'id' | 'created_at'>, do
       
       const clientId = sqlData[0].id;
       console.log(`Client created with ID ${clientId} using SQL fallback`);
+    
+    // Get the newly created client
+    const { data: newClient, error: fetchError } = await serviceClient
+      .from(USERS_TABLE)
+      .select('*')
+      .eq('id', clientId)
+      .single();
       
-      // Get the newly created client
-      const { data: newClient, error: fetchError } = await serviceClient
-        .from(USERS_TABLE)
-        .select('*')
-        .eq('id', clientId)
-        .single();
-        
-      if (fetchError) {
+    if (fetchError) {
         console.error('Error fetching newly created client:', fetchError);
         throw fetchError;
-      }
-      
-      const mappedClient = mapUserToClient(newClient);
-      
-      // Handle documents if provided
-      if (documents && documents.length > 0 && userId && mappedClient.id) {
-        try {
-          console.log(`Uploading ${documents.length} documents for new client ${mappedClient.id}`);
+    }
+    
+    const mappedClient = mapUserToClient(newClient);
+    
+    // Handle documents if provided
+    if (documents && documents.length > 0 && userId && mappedClient.id) {
+      try {
+        console.log(`Uploading ${documents.length} documents for new client ${mappedClient.id}`);
           await uploadClientDocuments(mappedClient.id, documents, userId);
-        } catch (docError) {
-          console.error('Error uploading documents during client creation:', docError);
-          mappedClient.warningMessage = `Se creó el cliente, pero hubo un problema al subir los documentos. Puede intentar agregarlos nuevamente más tarde.`;
-        }
+      } catch (docError) {
+        console.error('Error uploading documents during client creation:', docError);
+        mappedClient.warningMessage = `Se creó el cliente, pero hubo un problema al subir los documentos. Puede intentar agregarlos nuevamente más tarde.`;
       }
-      
-      return mappedClient;
+    }
+
+    return mappedClient;
     } catch (sqlError) {
       logError(sqlError, 'createClient - SQL fallback');
       throw handleApiError(sqlError);
