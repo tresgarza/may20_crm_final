@@ -1221,7 +1221,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   };
   
     return (
-    <div className="kanban-board-container bg-base-100 p-2 applications-kanban">
+    <div className="kanban-board-container bg-base-100 p-2 applications-kanban" data-kanban="board">
       <style dangerouslySetInnerHTML={{ __html: customStyles }} />
       
       {/* Remove the Indicador permanente de filtro de Planes Seleccionados section */}
@@ -1611,7 +1611,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
           <div className="kanban-column bg-base-200 rounded-lg p-4 h-full" data-kanban="column">
             <div className="column-header mb-4">
               <h3 className="text-lg font-bold flex items-center">
-                <span className="w-3 h-3 rounded-full bg-emerald-700 mr-2"></span>
+                <span className="w-3 h-3 rounded-full bg-emerald-600 mr-2"></span>
                 {STATUS_LABELS[APPLICATION_STATUS.COMPLETED]} ({getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length})
               </h3>
             </div>
