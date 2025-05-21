@@ -305,10 +305,33 @@ const ClientForm: React.FC<ClientFormProps> = ({ initialData = {}, onSubmit, onS
   // Event handlers
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target as HTMLInputElement;
+    
+    // Special handling for numeric fields to ensure they're parsed correctly
+    if (name === 'dependent_persons') {
+      console.log(`Field ${name} changed: value=${value}, type=${type}`);
+      const numericValue = value === '' ? undefined : parseInt(value, 10);
+      console.log(`Converted to: ${numericValue} (type: ${typeof numericValue})`);
+      
       setFormData(prev => ({
         ...prev,
-      [name]: type === 'number' ? (value === '' ? undefined : parseFloat(value)) : value
-    }));
+        [name]: numericValue
+      }));
+    }
+    // Special handling for date fields
+    else if (name === 'birth_date') {
+      // If the date is empty, set it to undefined to prevent database errors
+      const dateValue = value === '' ? undefined : value;
+      setFormData(prev => ({
+        ...prev,
+        [name]: dateValue
+      }));
+    } 
+    else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: type === 'number' ? (value === '' ? undefined : parseFloat(value)) : value
+      }));
+    }
   };
 
   const handleDocumentAdded = (document: ClientDocument) => {
@@ -577,9 +600,18 @@ const ClientForm: React.FC<ClientFormProps> = ({ initialData = {}, onSubmit, onS
               <input
                 type="date"
                 name="birth_date"
-                  className={`input input-bordered w-full ${errors.birth_date ? 'input-error' : ''}`}
+                className={`input input-bordered w-full ${errors.birth_date ? 'input-error' : ''}`}
                 value={formData.birth_date || ''}
                 onChange={handleChange}
+                onBlur={(e) => {
+                  // Convert empty string to null/undefined to avoid db errors
+                  if (e.target.value === '') {
+                    setFormData(prev => ({
+                      ...prev,
+                      birth_date: undefined
+                    }));
+                  }
+                }}
               />
                 {errors.birth_date && <span className="text-error text-sm mt-1">{errors.birth_date}</span>}
             </div>
@@ -633,9 +665,12 @@ const ClientForm: React.FC<ClientFormProps> = ({ initialData = {}, onSubmit, onS
                   onChange={handleChange}
                   min="0"
                   placeholder="0"
+                  data-field-type="numeric"
+                  onBlur={() => console.log(`Current dependent_persons value: ${formData.dependent_persons} (type: ${typeof formData.dependent_persons})`)}
                 />
                 {errors.dependent_persons && <span className="text-error text-sm mt-1">{errors.dependent_persons}</span>}
-          </div>
+                <small className="text-gray-500 mt-1">Número de personas que dependen económicamente de usted</small>
+              </div>
               
               <div className="form-control">
                 <label className="label">

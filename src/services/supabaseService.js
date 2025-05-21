@@ -29,13 +29,24 @@ export const getAuthenticatedClient = () => {
   return supabase;
 };
 
+// Cached service client instance
+let _serviceClient = null;
+
 // Get a client with service role permissions for admin operations
 export const getServiceClient = () => {
   if (!serviceRoleKey) {
     console.warn('Service role key not available, falling back to anon client');
     return supabase;
   }
-  return createClient(supabaseUrl, serviceRoleKey, getSupabaseOptions(serviceRoleKey));
+  
+  // Return cached instance if available
+  if (_serviceClient) {
+    return _serviceClient;
+  }
+  
+  // Create and cache a new service client
+  _serviceClient = createClient(supabaseUrl, serviceRoleKey, getSupabaseOptions(serviceRoleKey));
+  return _serviceClient;
 };
 
 // Function to reinitialize the Supabase client (useful after authentication changes)

@@ -293,7 +293,12 @@ const EditClient: React.FC = () => {
         const personalFields = [
           'first_name', 'paternal_surname', 'maternal_surname', 'email', 'phone',
           'rfc', 'curp', 'birth_date', 'gender', 'marital_status', 'address',
-          'city', 'state', 'postal_code'
+          'city', 'state', 'postal_code',
+          // NEW personal/contact fields
+          'spouse_paternal_surname', 'spouse_maternal_surname',
+          'birth_state', 'nationality',
+          'street_number_ext', 'street_number_int', 'neighborhood', 'home_phone',
+          'dependent_persons'
         ];
         personalFields.forEach(field => {
           if (field in data) {
@@ -305,7 +310,13 @@ const EditClient: React.FC = () => {
       case 2: // Financial details
         const financialFields = [
           'employment_type', 'employment_years', 'monthly_income',
-          'additional_income', 'monthly_expenses', 'other_loan_balances'
+          'additional_income', 'monthly_expenses', 'other_loan_balances',
+          // NEW financial/employment fields
+          'job_position',
+          'employer_name', 'employer_phone', 'employer_address', 'employer_activity',
+          'mortgage_payment', 'rent_payment',
+          'income_frequency', 'payment_method', 'credit_purpose',
+          // References were moved to the bank section (step 3)
         ];
         financialFields.forEach(field => {
           if (field in data) {
@@ -317,7 +328,10 @@ const EditClient: React.FC = () => {
       case 3: // Bank details
         const bankFields = [
           'bank_name', 'bank_clabe', 'bank_account_number',
-          'bank_account_type', 'bank_account_origin'
+          'bank_account_type', 'bank_account_origin',
+          // References (moved here because they belong to step 3 in the UI)
+          'reference1_name', 'reference1_relationship', 'reference1_address', 'reference1_phone',
+          'reference2_name', 'reference2_relationship', 'reference2_address', 'reference2_phone'
         ];
         bankFields.forEach(field => {
           if (field in data) {

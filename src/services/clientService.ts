@@ -201,7 +201,7 @@ export const getClients = async (filters?: ClientFilter) => {
     }
 
     query = query.order('created_at', { ascending: false });
-    
+
     console.log('[getClients] Executing final query');
     const { data, error, count } = await query;
 
@@ -219,7 +219,7 @@ export const getClients = async (filters?: ClientFilter) => {
     }) : [];
 
     console.log(`[getClients] Query returned ${clients.length} clients out of total ${count}`);
-    
+
     return {
       clients,
       totalCount: count || 0
@@ -296,9 +296,16 @@ export const getClientById = async (id: string) => {
   }
 };
 
-function escapeSQLString(str: string) {
-  if (!str) return '';
-  return str.replace(/'/g, "''");
+// Improved SQL string escaping function to ensure proper handling of different data types
+function safeEscapeSQLString(value: any): string {
+  if (value === null || value === undefined) return 'NULL';
+  
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+  if (typeof value === 'number') return value.toString();
+  
+  // String values need escaping
+  const str = String(value);
+  return str.replace(/'/g, "''"); // Proper SQL escaping for strings
 }
 
 export const getClientApplications = async (clientId: string) => {
@@ -435,145 +442,169 @@ export const uploadClientDocuments = async (
   }
 };
 
+/**
+ * Creates a new client in the database
+ */
 export const createClient = async (client: Omit<Client, 'id' | 'created_at'>, documents?: ClientDocument[], userId?: string) => {
   try {
-    // Create a copy to avoid modifying the original object
-    const userData = {
-      // Basic user data for initial creation
+    // Log basic client data for debugging
+    console.log(`Creating client with sanitized data:`, JSON.stringify({
       email: client.email,
       first_name: client.first_name || '',
       paternal_surname: client.paternal_surname || '',
       maternal_surname: client.maternal_surname || '',
       phone: client.phone,
-      birth_date: client.birth_date,
+      birth_date: client.birth_date && client.birth_date.trim() !== '' ? client.birth_date : null,
       company_id: client.company_id || "70b2aa97-a5b6-4b5e-91db-be8acbd3701a",
       rfc: client.rfc || '',
       curp: client.curp || '',
-      // Set advisor_id if userId is provided and current user is advisor
-      advisor_id: client.advisor_id || userId
-    };
-
-    // Log sanitized data for debugging
-    console.log(`Creating client with sanitized data:`, JSON.stringify(userData));
+      advisor_id: client.advisor_id || null
+    }));
 
     // Get the service client for this operation
     const serviceClient = getServiceClient();
 
-    // Use our direct SQL function to create the client
-    const { data, error } = await serviceClient.rpc('create_client', {
-      p_first_name: userData.first_name,
-      p_paternal_surname: userData.paternal_surname,
-      p_maternal_surname: userData.maternal_surname,
-      p_email: userData.email,
-      p_phone: userData.phone,
-      p_company_id: userData.company_id,
-      p_birth_date: userData.birth_date,
-      p_rfc: userData.rfc,
-      p_curp: userData.curp,
-      p_advisor_id: userData.advisor_id
-    });
+    // Define fields that are allowed in the users table
+    const insertableFields = [
+      'first_name', 'paternal_surname', 'maternal_surname', 'email', 'phone',
+      'rfc', 'curp', 'birth_date', 'gender', 'marital_status', 'company_id',
+      'address', 'city', 'state', 'postal_code', 'advisor_id',
+      'employment_type', 'employment_years', 'monthly_income',
+      'additional_income', 'monthly_expenses', 'other_loan_balances',
+      'dependent_persons', 'bank_name', 'bank_clabe', 'bank_account_number',
+      'bank_account_type', 'bank_account_origin',
+      'spouse_paternal_surname', 'spouse_maternal_surname',
+      'birth_state', 'nationality', 'street_number_ext', 'street_number_int',
+      'neighborhood', 'home_phone', 'job_position',
+      'employer_name', 'employer_phone', 'employer_address', 'employer_activity',
+      'mortgage_payment', 'rent_payment', 'income_frequency',
+      'payment_method', 'credit_purpose',
+      'reference1_name', 'reference1_relationship', 'reference1_address', 'reference1_phone',
+      'reference2_name', 'reference2_relationship', 'reference2_address', 'reference2_phone'
+    ];
 
-    if (error) {
-      console.error("Error creating client using RPC:", error);
-      // Fallback to direct SQL if RPC fails
+    // Create a clean client object with only valid insertable fields
+    const cleanClientObj: Record<string, any> = {};
+    for (const field of insertableFields) {
+      const key = field as keyof typeof client;
+      if (client[key] !== undefined) {
+        // Handle special cases for field types
+        if (field === 'birth_date' && client[key] === '') {
+          // Skip empty date strings
+          continue;
+        }
+        
+        // Handle dependent_persons as a number if it's a string
+        if (field === 'dependent_persons' && typeof client[key] === 'string') {
+          const numValue = parseInt(client[key] as string, 10);
+          if (!isNaN(numValue)) {
+            cleanClientObj[field] = numValue;
+          }
+        } else {
+          cleanClientObj[field] = client[key];
+        }
+      }
+    }
+
+    // Approach 1: Use direct Supabase API for insertion
+    try {
+      console.log('Inserting client with direct Supabase API');
+      
+      const { data, error } = await serviceClient
+        .from(USERS_TABLE)
+        .insert(cleanClientObj)
+        .select('id')
+        .single();
+
+      if (error) {
+        console.error('Error inserting client with direct API:', error);
+        // We'll fall back to the SQL approach
+      } else if (data && data.id) {
+        console.log(`Client created successfully with ID: ${data.id}`);
+        const mappedClient = {
+          ...cleanClientObj,
+          id: data.id,
+          created_at: new Date().toISOString()
+        };
+        
+        // If we have documents to upload
+        if (documents && documents.length > 0 && userId) {
+          try {
+            console.log(`Uploading ${documents.length} documents for client ${mappedClient.id}`);
+            await uploadClientDocuments(mappedClient.id, documents, userId);
+          } catch (docError) {
+            console.error('Error uploading documents:', docError);
+            // We'll still return the client, but add a warning
+            return {
+              ...mappedClient,
+              warningMessage: `El cliente se creó correctamente, pero hubo un problema al subir documentos: ${docError instanceof Error ? docError.message : 'Error desconocido'}`
+            };
+          }
+        }
+        
+        return mappedClient;
+      }
+    } catch (apiError) {
+      console.error('Exception during client creation with direct API:', apiError);
+      // Continue to fallback
+    }
+
+    // Fallback approach: Use safer parameterized SQL execution
+    console.log('Using fallback SQL approach for client creation');
+    
+    try {
+      // Build column lists and prepare parameters array
+      const cols: string[] = Object.keys(cleanClientObj);
+      const params: any[] = Object.values(cleanClientObj);
+      
+      // Add UUID generation for the ID
+      cols.push('id');
+      
+      // Create the parameterized SQL query
+      const placeholders = params.map((_, i) => `$${i + 1}`).join(', ');
+      const sql = `
+        INSERT INTO users (${cols.join(', ')})
+        VALUES (${placeholders}, gen_random_uuid())
+        RETURNING id;
+      `;
+      
+      console.log('Executing parameterized SQL insert');
       const { data: sqlData, error: sqlError } = await serviceClient.rpc('execute_sql', {
-        sql: `
-          INSERT INTO users (
-            id, first_name, paternal_surname, maternal_surname, email, phone, 
-            company_id, birth_date, rfc, curp, advisor_id, is_sso_user, is_anonymous
-          ) VALUES (
-            gen_random_uuid(), 
-            '${userData.first_name}', 
-            '${userData.paternal_surname}', 
-            '${userData.maternal_surname}', 
-            '${userData.email}', 
-            '${userData.phone}', 
-            '${userData.company_id}', 
-            '${userData.birth_date}', 
-            '${userData.rfc}', 
-            '${userData.curp}',
-            ${userData.advisor_id ? `'${userData.advisor_id}'` : 'NULL'},
-            false,
-            false
-          ) RETURNING id;
-        `
+        sql: sql,
+        params: params
       });
       
       if (sqlError) {
-        logError(sqlError, 'createClient - direct SQL fallback');
-        throw handleApiError(sqlError);
+        console.error('Error with parameterized SQL insert:', sqlError);
+        throw sqlError;
       }
       
-      if (!sqlData || !sqlData[0] || !sqlData[0].id) {
+      if (!sqlData || !sqlData.length || !sqlData[0].id) {
         throw new Error("No se pudo crear el cliente (SQL directo no retornó id)");
       }
+      
+      const clientId = sqlData[0].id;
+      console.log(`Client created with ID ${clientId} using SQL fallback`);
       
       // Get the newly created client
       const { data: newClient, error: fetchError } = await serviceClient
         .from(USERS_TABLE)
         .select('*')
-        .eq('id', sqlData[0].id)
+        .eq('id', clientId)
         .single();
         
       if (fetchError) {
-        logError(fetchError, 'createClient - fetch after direct SQL');
-        throw handleApiError(fetchError);
+        console.error('Error fetching newly created client:', fetchError);
+        throw fetchError;
       }
       
       const mappedClient = mapUserToClient(newClient);
-      
-      // Update the client with all the additional fields
-      if (mappedClient.id) {
-        // Extract all 27 fields that might be missing plus any other fields
-        const additionalFields: Partial<Client> = {};
-        
-        // Extended client fields
-        const allFieldsToUpdate = [
-          'address', 'city', 'state', 'postal_code', 'gender', 'marital_status', 
-          'employment_type', 'employment_years', 'monthly_income', 'additional_income', 
-          'monthly_expenses', 'other_loan_balances', 'bank_name', 'bank_clabe', 
-          'bank_account_number', 'bank_account_type', 'bank_account_origin',
-          // The 27 missing fields
-          'dependent_persons', 'spouse_paternal_surname', 'spouse_maternal_surname',
-          'birth_state', 'nationality', 'street_number_ext', 'street_number_int',
-          'neighborhood', 'home_phone', 'job_position', 'employer_name', 
-          'employer_phone', 'employer_address', 'employer_activity', 'mortgage_payment',
-          'rent_payment', 'income_frequency', 'payment_method', 'credit_purpose',
-          'reference1_name', 'reference1_relationship', 'reference1_address', 
-          'reference1_phone', 'reference2_name', 'reference2_relationship',
-          'reference2_address', 'reference2_phone'
-        ];
-        
-        // Copy fields from client to additionalFields if they exist
-        for (const field of allFieldsToUpdate) {
-          if (client[field as keyof typeof client] !== undefined) {
-            // @ts-ignore - Safe to assign as we're copying field by field from client to additionalFields
-            additionalFields[field] = client[field as keyof typeof client];
-          }
-        }
-        
-        // Only update if there are additional fields
-        if (Object.keys(additionalFields).length > 0) {
-          console.log(`Updating client ${mappedClient.id} with additional fields:`, additionalFields);
-          
-          try {
-            // Update the client with all additional fields
-            await updateClient(mappedClient.id, additionalFields);
-          } catch (updateError) {
-            console.error(`Error updating client with additional fields: ${updateError}`);
-            mappedClient.warningMessage = `El cliente se creó, pero algunos campos adicionales no se pudieron guardar. Por favor, edite el cliente para completar la información.`;
-          }
-        }
-      }
       
       // Handle documents if provided
       if (documents && documents.length > 0 && userId && mappedClient.id) {
         try {
           console.log(`Uploading ${documents.length} documents for new client ${mappedClient.id}`);
-          // Convertir documentos al formato esperado por uploadDocs
-          const convertedDocs = convertDocumentsForUpload(documents);
-          const documentResult = await uploadDocs(mappedClient.id, convertedDocs);
-          console.log(`${documentResult.length} documents uploaded successfully`);
+          await uploadClientDocuments(mappedClient.id, documents, userId);
         } catch (docError) {
           console.error('Error uploading documents during client creation:', docError);
           mappedClient.warningMessage = `Se creó el cliente, pero hubo un problema al subir los documentos. Puede intentar agregarlos nuevamente más tarde.`;
@@ -581,88 +612,10 @@ export const createClient = async (client: Omit<Client, 'id' | 'created_at'>, do
       }
       
       return mappedClient;
+    } catch (sqlError) {
+      logError(sqlError, 'createClient - SQL fallback');
+      throw handleApiError(sqlError);
     }
-
-    // If RPC was successful
-    const clientId = data;
-    
-    if (!clientId) {
-      throw new Error("No se pudo crear el cliente (RPC no retornó id)");
-    }
-    
-    // Get the newly created client
-    const { data: newClient, error: fetchError } = await serviceClient
-      .from(USERS_TABLE)
-      .select('*')
-      .eq('id', clientId)
-      .single();
-      
-    if (fetchError) {
-      logError(fetchError, 'createClient - fetch after RPC');
-      throw handleApiError(fetchError);
-    }
-    
-    const mappedClient = mapUserToClient(newClient);
-    
-    // Update the client with all the additional fields
-    if (mappedClient.id) {
-      // Extract all 27 fields that might be missing plus any other fields
-      const additionalFields: Partial<Client> = {};
-      
-      // Extended client fields
-      const allFieldsToUpdate = [
-        'address', 'city', 'state', 'postal_code', 'gender', 'marital_status', 
-        'employment_type', 'employment_years', 'monthly_income', 'additional_income', 
-        'monthly_expenses', 'other_loan_balances', 'bank_name', 'bank_clabe', 
-        'bank_account_number', 'bank_account_type', 'bank_account_origin',
-        // The 27 missing fields
-        'dependent_persons', 'spouse_paternal_surname', 'spouse_maternal_surname',
-        'birth_state', 'nationality', 'street_number_ext', 'street_number_int',
-        'neighborhood', 'home_phone', 'job_position', 'employer_name', 
-        'employer_phone', 'employer_address', 'employer_activity', 'mortgage_payment',
-        'rent_payment', 'income_frequency', 'payment_method', 'credit_purpose',
-        'reference1_name', 'reference1_relationship', 'reference1_address', 
-        'reference1_phone', 'reference2_name', 'reference2_relationship',
-        'reference2_address', 'reference2_phone'
-      ];
-      
-      // Copy fields from client to additionalFields if they exist
-      for (const field of allFieldsToUpdate) {
-        if (client[field as keyof typeof client] !== undefined) {
-          // @ts-ignore - Safe to assign as we're copying field by field from client to additionalFields
-          additionalFields[field] = client[field as keyof typeof client];
-        }
-      }
-      
-      // Only update if there are additional fields
-      if (Object.keys(additionalFields).length > 0) {
-        console.log(`Updating client ${mappedClient.id} with additional fields:`, additionalFields);
-        
-        try {
-          // Update the client with all additional fields
-          await updateClient(mappedClient.id, additionalFields);
-        } catch (updateError) {
-          console.error(`Error updating client with additional fields: ${updateError}`);
-          mappedClient.warningMessage = `El cliente se creó, pero algunos campos adicionales no se pudieron guardar. Por favor, edite el cliente para completar la información.`;
-        }
-      }
-    }
-    
-    // Handle documents if provided
-    if (documents && documents.length > 0 && userId && mappedClient.id) {
-      try {
-        console.log(`Uploading ${documents.length} documents for new client ${mappedClient.id}`);
-        // Convertir documentos al formato esperado por uploadDocs
-        const convertedDocs = convertDocumentsForUpload(documents);
-        const documentResult = await uploadDocs(mappedClient.id, convertedDocs);
-        console.log(`${documentResult.length} documents uploaded successfully`);
-      } catch (docError) {
-        console.error('Error uploading documents during client creation:', docError);
-        mappedClient.warningMessage = `Se creó el cliente, pero hubo un problema al subir los documentos. Puede intentar agregarlos nuevamente más tarde.`;
-      }
-    }
-
-    return mappedClient;
   } catch (error) {
     logError(error, 'createClient', { clientData: client });
     throw handleApiError(error);
@@ -684,6 +637,16 @@ export const updateClient = async (
     // Get the service client for operations that require elevated privileges
     const serviceClient = getServiceClient();
     
+    // Handle empty birth_date to prevent DB errors
+    if (data.birth_date !== undefined) {
+      // If birth_date is empty string, set it to null
+      if (data.birth_date === '' || (typeof data.birth_date === 'string' && data.birth_date.trim() === '')) {
+        console.log('Converting empty birth_date to null');
+        // Use type assertion to fix TypeScript error
+        data.birth_date = null as unknown as string;
+      }
+    }
+    
     // List of the 27 problematic fields for reference and debugging
     const problematicFields = [
       'dependent_persons', 'spouse_paternal_surname', 'spouse_maternal_surname',
@@ -703,6 +666,17 @@ export const updateClient = async (
     
     if (updatedProblematicFields.length > 0) {
       console.log('Updating the following previously problematic fields:', updatedProblematicFields);
+      
+      // Log each problematic field's value and type
+      updatedProblematicFields.forEach(field => {
+        const value = data[field as keyof Partial<Client>];
+        console.log(`  - ${field}: ${value} (${typeof value})`);
+      });
+    }
+    
+    // Special check for dependent_persons
+    if ('dependent_persons' in data) {
+      console.log(`FOCUS: dependent_persons is ${data.dependent_persons} (type: ${typeof data.dependent_persons})`);
     }
     
     let success = false;
@@ -710,14 +684,14 @@ export const updateClient = async (
     
     // First try with the RPC method
     try {
-      // Use our stored procedure to update the client
-      const { data: updateResult, error } = await serviceClient.rpc('update_client', {
-        p_id: id,
-        p_updates: data
-      });
-      
-      // If there was an error with the update
-      if (error) {
+    // Use our stored procedure to update the client
+    const { data: updateResult, error } = await serviceClient.rpc('update_client', {
+      p_id: id,
+      p_updates: data
+    });
+    
+    // If there was an error with the update
+    if (error) {
         console.error('Error updating client with RPC:', error);
         rpcError = error;
       } else if (!updateResult) {
@@ -743,16 +717,28 @@ export const updateClient = async (
         for (const [key, value] of Object.entries(data)) {
           if (value === undefined) continue;
           
+          // Special log for dependent_persons to debug the issue
+          if (key === 'dependent_persons') {
+            console.log(`Processing ${key}, value: ${value}, type: ${typeof value}`);
+          }
+          
           let sqlValue: string;
           if (value === null) {
             sqlValue = 'NULL';
+          } else if (key === 'birth_date' && (value === '' || !value)) {
+            // Handle empty date strings specifically
+            sqlValue = 'NULL';
           } else if (typeof value === 'number') {
             sqlValue = value.toString();
+            // Log number fields for debugging
+            if (key === 'dependent_persons') {
+              console.log(`Numeric field ${key} with value ${value} converted to SQL: ${sqlValue}`);
+            }
           } else if (typeof value === 'boolean') {
             sqlValue = value ? 'TRUE' : 'FALSE';
           } else {
             // Escape string values
-            sqlValue = `'${escapeSQLString(String(value))}'`;
+            sqlValue = `'${safeEscapeSQLString(String(value))}'`;
           }
           
           updateParts.push(`${key} = ${sqlValue}`);
@@ -774,17 +760,12 @@ export const updateClient = async (
         
         console.log('Executing direct SQL update');
         const { data: sqlResult, error: sqlError } = await serviceClient.rpc('execute_sql', {
-          query_text: updateSql
+          sql: updateSql
         });
         
         if (sqlError) {
           console.error('Error with direct SQL update:', sqlError);
           throw new Error(`Error al actualizar cliente (directo): ${sqlError.message}`);
-        }
-        
-        if (!sqlResult || sqlResult.length === 0) {
-          console.warn(`Direct SQL update for client ${id} had no effect`);
-          throw new Error('La actualización directa no tuvo efecto');
         }
         
         success = true;
@@ -794,7 +775,11 @@ export const updateClient = async (
         
         // If both methods failed, throw the original RPC error
         if (rpcError) {
-          throw new Error(`Error al actualizar cliente: ${rpcError.message}`);
+          // Cast rpcError to any to avoid TypeScript error or use a safer approach
+          const errorMessage = typeof rpcError === 'object' && rpcError !== null 
+            ? (rpcError as any).message || JSON.stringify(rpcError)
+            : String(rpcError);
+          throw new Error(`Error al actualizar cliente: ${errorMessage}`);
         } else {
           throw sqlError;
         }
@@ -1227,4 +1212,92 @@ export const getClientFromAnySource = async (clientId: string): Promise<Client |
     
     // Try 3: clients table as fallback
     try {
-      console.log(`
+      console.log(`[getClientFromAnySource] Checking clients table for client ${clientId}`);
+      const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('id', clientId)
+        .maybeSingle();
+      
+      if (clientError) {
+        console.log(`[getClientFromAnySource] Error checking clients table: ${clientError.message}`);
+      } else if (clientData) {
+        console.log(`[getClientFromAnySource] Client found in clients table`);
+        return mapUserToClient(clientData);
+      }
+    } catch (clientError) {
+      console.log(`[getClientFromAnySource] Exception checking clients table: ${clientError}`);
+    }
+    
+    // Add closing return statement for getClientFromAnySource
+    console.log(`[getClientFromAnySource] Client ${clientId} not found in any source`);
+    return null;
+  } catch (error) {
+    console.error(`[getClientFromAnySource] Error: ${error}`);
+    return null;
+  }
+};
+
+/**
+ * Gets canonical/preferred client ID when multiple IDs might exist for same client
+ * 
+ * @param clientId The client ID to check
+ * @returns The canonical client ID or the original if no mapping exists
+ */
+export const getCanonicalClientId = async (clientId: string): Promise<string | null> => {
+  if (!clientId) return null;
+  
+  console.log(`[getCanonicalClientId] Checking for canonical ID mapping for: ${clientId}`);
+  
+  try {
+    // Check if there's a mapping in client_id_mappings table
+    const { data: mappingData, error: mappingError } = await supabase
+      .from('client_id_mappings')
+      .select('canonical_id')
+      .eq('client_id', clientId)
+      .maybeSingle();
+      
+    if (mappingError) {
+      console.log(`[getCanonicalClientId] Error or table doesn't exist: ${mappingError.message}`);
+      return clientId; // Return original ID if table doesn't exist or error
+    }
+    
+    if (mappingData?.canonical_id) {
+      console.log(`[getCanonicalClientId] Found canonical mapping: ${clientId} -> ${mappingData.canonical_id}`);
+      return mappingData.canonical_id;
+    }
+    
+    return clientId; // No mapping found, return original
+  } catch (error) {
+    console.error(`[getCanonicalClientId] Error: ${error}`);
+    return clientId; // Return original on error
+  }
+};
+
+/**
+ * Robust client fetch function that handles synchronization with external systems
+ * 
+ * @param clientId The client ID to fetch
+ * @returns Client data or null if not found
+ */
+export const getClientWithSync = async (clientId: string): Promise<Client | null> => {
+  if (!clientId) return null;
+  
+  try {
+    // First check if we need to map to a canonical ID
+    const canonicalId = await getCanonicalClientId(clientId);
+    const idToUse = canonicalId || clientId;
+    
+    // Try to get from any source first
+    let client = await getClientFromAnySource(idToUse);
+    
+    // If client found, return it
+    if (client) return client;
+    
+    // If not found, try to create a placeholder client
+    return await createMissingClient(idToUse);
+  } catch (error) {
+    console.error(`[getClientWithSync] Error: ${error}`);
+    return null;
+  }
+}; 
