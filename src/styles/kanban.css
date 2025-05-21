@@ -1,69 +1,87 @@
 /* Specific styles for the Kanban board in Applications page */
 
 /* Increase vertical space for Kanban columns */
-.kanban-board-container .column-content {
+.kanban-board-container .column-content,
+div.kanban-board-container div.column-content,
+.applications-page-container .kanban-board-container .column-content {
   height: calc(100vh - 200px) !important; /* Increased from 300px subtraction to 200px */
   min-height: 500px !important; /* Ensure minimum height even on small screens */
+  max-height: none !important;
 }
 
 /* Make the entire kanban board container taller */
-.kanban-board-container {
-  min-height: calc(100vh - 120px);
-  margin-bottom: 20px;
-  padding-bottom: 40px;
+.kanban-board-container,
+div.kanban-board-container,
+.applications-page-container .kanban-board-container {
+  min-height: calc(100vh - 120px) !important;
+  margin-bottom: 20px !important;
+  padding-bottom: 40px !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 /* Ensure kanban columns take up more space vertically */
-.kanban-column {
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100vh - 180px);
+.kanban-column,
+div.kanban-column,
+.applications-page-container .kanban-column,
+.kanban-board-container .kanban-column {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: calc(100vh - 180px) !important;
+  height: 100% !important;
 }
 
 /* Ensure the Applications component has sufficient space */
 .applications-page-container {
-  min-height: calc(100vh - 80px);
-  padding-bottom: 40px;
+  min-height: calc(100vh - 80px) !important;
+  padding-bottom: 40px !important;
 }
 
 /* Fix for the grid layout to ensure all columns have equal height */
-.applications-page-container .grid {
-  align-items: stretch;
-  min-height: calc(100vh - 180px);
+.applications-page-container .grid,
+.applications-page-container div.grid {
+  align-items: stretch !important;
+  min-height: calc(100vh - 180px) !important;
 }
 
 /* Specific class for applications kanban board */
-.applications-kanban {
-  min-height: calc(100vh - 150px);
+.applications-kanban,
+div.applications-kanban {
+  min-height: calc(100vh - 150px) !important;
 }
 
 /* Specifically target the columns in applications kanban */
-.applications-kanban .kanban-column {
-  height: auto;
-  min-height: calc(100vh - 180px);
-  display: flex;
-  flex-direction: column;
+.applications-kanban .kanban-column,
+div.applications-kanban div.kanban-column {
+  height: auto !important;
+  min-height: calc(100vh - 180px) !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 /* Override column content height in applications kanban */
-.applications-kanban .column-content {
-  flex-grow: 1;
+.applications-kanban .column-content,
+div.applications-kanban div.column-content {
+  flex-grow: 1 !important;
   height: auto !important;
   min-height: calc(100vh - 250px) !important;
   max-height: none !important;
+  overflow-y: auto !important;
 }
 
 /* Increase column height specifically for applications kanban */
-.applications-page-container .kanban-board-container .kanban-column {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+.applications-page-container .kanban-board-container .kanban-column,
+.applications-page-container div.kanban-board-container div.kanban-column {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 /* Ensure column-content takes maximum available space */
-.applications-page-container .kanban-board-container .column-content {
-  flex: 1;
-  overflow-y: auto;
+.applications-page-container .kanban-board-container .column-content,
+.applications-page-container div.kanban-board-container div.column-content {
+  flex: 1 !important;
+  overflow-y: auto !important;
   height: auto !important; /* Override fixed height */
   min-height: calc(100vh - 200px) !important;
   max-height: none !important;
@@ -71,30 +89,62 @@
 
 /* Adjust custom scrollbar styling */
 .applications-page-container .kanban-board-container .custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
+  width: 8px !important;
 }
 
 .applications-page-container .kanban-board-container .custom-scrollbar::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
+  background: #f1f1f1 !important;
+  border-radius: 4px !important;
 }
 
 .applications-page-container .kanban-board-container .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
+  background: #888 !important;
+  border-radius: 4px !important;
 }
 
 .applications-page-container .kanban-board-container .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: #555 !important;
 }
 
 /* Ensures proper spacing for the kanban grid layout */
 .applications-page-container .grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-3.xl\\:grid-cols-6.gap-4 {
-  min-height: calc(100vh - 180px);
-  align-items: stretch;
+  min-height: calc(100vh - 180px) !important;
+  align-items: stretch !important;
 }
 
 /* Specifically target the KanbanBoard when in kanban view */
 .applications-page-container [class*="kanban-board"] {
-  min-height: calc(100vh - 180px);
+  min-height: calc(100vh - 180px) !important;
+}
+
+/* Override styles even in production environment */
+/* These selectors use attribute selectors and very high specificity to ensure they win in production */
+body [data-kanban="column"],
+html body [data-kanban="column"] {
+  min-height: calc(100vh - 180px) !important;
+  height: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+body [data-kanban="content"],
+html body [data-kanban="content"] {
+  flex-grow: 1 !important;
+  height: auto !important;
+  min-height: calc(100vh - 200px) !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+}
+
+/* Additional selectors targeting specific production classes that might be generated */
+[class^="kanban-column"],
+[class*=" kanban-column"] {
+  min-height: calc(100vh - 180px) !important;
+  height: auto !important;
+}
+
+[class^="column-content"],
+[class*=" column-content"] {
+  min-height: calc(100vh - 200px) !important;
+  height: auto !important;
 } 

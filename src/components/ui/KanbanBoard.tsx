@@ -1221,7 +1221,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   };
   
     return (
-    <div className="kanban-board-container bg-base-100 p-2">
+    <div className="kanban-board-container bg-base-100 p-2 applications-kanban">
       <style dangerouslySetInnerHTML={{ __html: customStyles }} />
       
       {/* Remove the Indicador permanente de filtro de Planes Seleccionados section */}
@@ -1280,7 +1280,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
         // The actual Kanban board grid
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {/* New Applications */}
-          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full">
+          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full" data-kanban="column">
             <div className="column-header mb-4">
               <h3 className="text-lg font-bold flex items-center">
                 <span className="w-3 h-3 rounded-full bg-yellow-400 mr-2"></span>
@@ -1289,6 +1289,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
             </div>
             <div 
               className="column-content h-[calc(100vh-300px)] overflow-y-auto custom-scrollbar p-1 rounded-md"
+              data-kanban="content"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, APPLICATION_STATUS.NEW)}
@@ -1361,7 +1362,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 </div>
                 
           {/* In Review Applications */}
-          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full">
+          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full" data-kanban="column">
             <div className="column-header mb-4">
               <h3 className="text-lg font-bold flex items-center">
                 <span className="w-3 h-3 rounded-full bg-blue-400 mr-2"></span>
@@ -1370,6 +1371,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
             </div>
             <div 
               className="column-content h-[calc(100vh-300px)] overflow-y-auto custom-scrollbar p-1 rounded-md"
+              data-kanban="content"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, APPLICATION_STATUS.IN_REVIEW)}
@@ -1442,7 +1444,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 </div>
                 
           {/* Approved Applications */}
-          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full">
+          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full" data-kanban="column">
             <div className="column-header mb-4">
               <h3 className="text-lg font-bold flex items-center">
                 <span className="w-3 h-3 rounded-full bg-green-400 mr-2"></span>
@@ -1451,6 +1453,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 </div>
             <div 
               className="column-content h-[calc(100vh-300px)] overflow-y-auto custom-scrollbar p-1 rounded-md"
+              data-kanban="content"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, APPLICATION_STATUS.APPROVED)}
@@ -1523,7 +1526,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
       </div>
       
           {/* Ready for Disbursement (Por Dispersar) */}
-          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full">
+          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full" data-kanban="column">
             <div className="column-header mb-4">
               <h3 className="text-lg font-bold flex items-center">
                 <span className="w-3 h-3 rounded-full bg-purple-400 mr-2"></span>
@@ -1532,6 +1535,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
             </div>
             <div 
               className="column-content h-[calc(100vh-300px)] overflow-y-auto custom-scrollbar p-1 rounded-md"
+              data-kanban="content"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, APPLICATION_STATUS.POR_DISPERSAR)}
@@ -1604,15 +1608,16 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
           </div>
           
           {/* Completed Applications */}
-          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full">
+          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full" data-kanban="column">
             <div className="column-header mb-4">
               <h3 className="text-lg font-bold flex items-center">
-                <span className="w-3 h-3 rounded-full bg-slate-400 mr-2"></span>
+                <span className="w-3 h-3 rounded-full bg-emerald-700 mr-2"></span>
                 {STATUS_LABELS[APPLICATION_STATUS.COMPLETED]} ({getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length})
               </h3>
             </div>
             <div 
               className="column-content h-[calc(100vh-300px)] overflow-y-auto custom-scrollbar p-1 rounded-md"
+              data-kanban="content"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, APPLICATION_STATUS.COMPLETED)}
@@ -1685,15 +1690,16 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             </div>
                             
           {/* Rejected Applications */}
-          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full">
+          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full" data-kanban="column">
             <div className="column-header mb-4">
               <h3 className="text-lg font-bold flex items-center">
-                <span className="w-3 h-3 rounded-full bg-red-400 mr-2"></span>
+                <span className="w-3 h-3 rounded-full bg-red-500 mr-2"></span>
                 {STATUS_LABELS[APPLICATION_STATUS.REJECTED]} ({getApplicationsByStatus(APPLICATION_STATUS.REJECTED).length})
               </h3>
             </div>
             <div 
               className="column-content h-[calc(100vh-300px)] overflow-y-auto custom-scrollbar p-1 rounded-md"
+              data-kanban="content"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, APPLICATION_STATUS.REJECTED)}

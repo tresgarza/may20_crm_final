@@ -390,7 +390,7 @@ const Applications: React.FC = () => {
   
   return (
     <MainLayout>
-      <div className="p-6">
+      <div className="p-6 applications-page-container">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
           <div>
             <h1 className="text-2xl font-bold mb-1">Solicitudes de Crédito</h1>
