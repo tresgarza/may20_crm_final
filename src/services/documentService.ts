@@ -54,7 +54,7 @@ export const ensureStorageBucketExists = async (client?: SupabaseClient) => {
       throw error;
     }
     
-    const bucketExists = buckets.some(bucket => bucket.name === STORAGE_BUCKET);
+    const bucketExists = buckets.some((bucket: { name: string }) => bucket.name === STORAGE_BUCKET);
     
     if (!bucketExists) {
       console.log(`Storage bucket '${STORAGE_BUCKET}' does not exist, creating it...`);
@@ -433,7 +433,7 @@ export const getAllClientDocuments = async (clientId: string) => {
     if (appsByIdErr) {
       console.error(`[getAllClientDocuments] Error fetching apps by client_id:`, appsByIdErr);
     } else if (appsById && appsById.length > 0) {
-      applicationIds.push(...appsById.map(a => a.id));
+      applicationIds.push(...appsById.map((a: { id: string }) => a.id));
     }
 
     // 2b. Fallback: buscar aplicaciones cuyo client_name coincida con el nombre completo del usuario (para datos antiguos)
@@ -459,7 +459,7 @@ export const getAllClientDocuments = async (clientId: string) => {
         if (appsByNameErr) {
           console.error(`[getAllClientDocuments] Error apps by name:`, appsByNameErr);
         } else if (appsByName && appsByName.length > 0) {
-          applicationIds.push(...appsByName.map(a => a.id));
+          applicationIds.push(...appsByName.map((a: { id: string }) => a.id));
         }
       }
     }
