@@ -98,7 +98,7 @@ const NewClient: React.FC = () => {
       }
       
       // Check if there's a warning message (e.g., some documents failed to upload)
-      if (newClient.warningMessage) {
+      if (newClient && 'warningMessage' in newClient && newClient.warningMessage) {
         setSuccessMessage(newClient.warningMessage);
         setIsSubmitting(false);
         // No limpiamos localStorage ni navegamos para que el usuario pueda intentar subir documentos nuevamente
@@ -162,7 +162,7 @@ const NewClient: React.FC = () => {
           }
           
           // Check if there's a warning message
-          if (updatedClient.warningMessage) {
+          if (updatedClient && 'warningMessage' in updatedClient && updatedClient.warningMessage) {
             setSuccessMessage(updatedClient.warningMessage);
           } else {
             setSuccessMessage(`Los datos de la sección ${step} se han guardado correctamente.`);
