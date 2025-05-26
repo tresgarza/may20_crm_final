@@ -4,4 +4,5 @@ export * from './applicationService';
 export * from './clientService';
 export * from './companyService';
 export * from './advisorService';
-export * from './documentService'; 
+export * from './documentService';
+export * from './documentSignatureService'; 

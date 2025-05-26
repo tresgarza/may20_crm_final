@@ -23,6 +23,9 @@ export type Database = {
           approval_date_company?: string;
           financing_type?: string;
           product_type?: string;
+          docusign_envelope_id?: string | null;
+          docusign_sent_to?: string | null;
+          docusign_manual_status?: string | null;
           deletedAt?: string | null;
           [key: string]: any;
         };

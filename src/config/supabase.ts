@@ -7,8 +7,8 @@ import { USER_ROLES } from '../utils/constants/roles';
 export type UserRoleType = typeof USER_ROLES[keyof typeof USER_ROLES] | 'ANONYMOUS';
 
 // Environment variables for Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ydnygntfkrleiseuciwq.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbnlnbnRma3JsZWlzZXVjaXdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk5OTI0MDYsImV4cCI6MjA1NTU2ODQwNn0.B-dH2Kptzz1oyM4ynno_GjlvjpxL-HbNKC_st4bgf0A';
 
 // Storage keys
 const AUTH_STORAGE_KEY = 'supabase.auth.token';
@@ -16,6 +16,26 @@ const USER_STORAGE_KEY = 'supabase.auth.user';
 
 // Create Supabase client
 export const createSupabaseClient = () => {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('Supabase URL or Anon Key is missing!');
+    // Fallback to hardcoded values if environment variables are missing
+    return createClient<Database>(
+      'https://ydnygntfkrleiseuciwq.supabase.co', 
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbnlnbnRma3JsZWlzZXVjaXdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk5OTI0MDYsImV4cCI6MjA1NTU2ODQwNn0.B-dH2Kptzz1oyM4ynno_GjlvjpxL-HbNKC_st4bgf0A', 
+      {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+          storageKey: AUTH_STORAGE_KEY,
+        },
+        global: {
+          headers: { 'x-application-name': 'CRM' },
+        },
+      }
+    );
+  }
+
   const options = {
     auth: {
       persistSession: true,      // Enable session persistence
