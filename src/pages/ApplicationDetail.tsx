@@ -27,6 +27,9 @@ import ClientProfileButton from '../components/ClientProfileButton';
 import { Document, getApplicationDocuments, uploadDocument } from '../services/documentService';
 import DocumentUploader from '../components/documents/DocumentUploader';
 import { supabase, getServiceClient } from '../lib/supabaseClient';
+import RequestSignatureButton from '../components/RequestSignatureButton';
+import DocumentSignatureStatus from '../components/DocumentSignatureStatus';
+import DocuSignPanel from '../components/DocuSignPanel';
 
 // Helper function for status badge styling - moved outside component so it's accessible to all components
 const getStatusBadgeClass = (status: string) => {
@@ -482,6 +485,9 @@ const ApplicationDetail = () => {
   
   // State for document viewer
   const [viewingDocument, setViewingDocument] = useState<Document | null>(null);
+  
+  // Estado para refrescar la lista de documentos firmados
+  const [refreshSignatures, setRefreshSignatures] = useState<number>(0);
   
   // Función auxiliar para construir el estado de aprobación localmente si es necesario
   const buildApprovalStatus = (app: ApplicationType): ApprovalStatus => {
@@ -1632,6 +1638,36 @@ const ApplicationDetail = () => {
                 </div>
               </div>
             </div>
+
+            {/* NUEVA SECCIÓN: Documentos para firma digital */}
+            {application && userCan(PERMISSIONS.UPLOAD_DOCUMENTS) && (
+              <div className="mt-8">
+                <div className="card bg-base-100 shadow-xl">
+                  <div className="card-body">
+                    {/* Panel DocuSign - seguimiento manual */}
+                    {application && (
+                      <DocuSignPanel
+                        applicationId={application.id}
+                        initialEnvelopeId={(application as any).docusign_envelope_id}
+                        initialSentTo={(application as any).docusign_sent_to}
+                        initialStatus={(application as any).docusign_manual_status}
+                        clientEmail={application.client_email as any}
+                        sandbox={false}
+                        onSaved={() => {
+                          addNotification({
+                            title: 'DocuSign',
+                            message: 'Datos de DocuSign guardados correctamente',
+                            type: NotificationType.SUCCESS,
+                          });
+                          // Optionally reload application data
+                          // loadApplicationData();
+                        }}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Historial de la solicitud */}
             <div className="mt-8">
