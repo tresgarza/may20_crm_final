@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { PERMISSIONS } from '../utils/constants/permissions';
 import { usePermissions } from '../contexts/PermissionsContext';
@@ -25,6 +25,7 @@ const Clients: React.FC = () => {
 
   // Add strict advisor_id filter if user is an advisor
   useEffect(() => {
+    console.log('🔄 useEffect [user] triggered with user:', user?.role, user?.entityId);
     if (user && user.role === 'ADVISOR') {
       console.log('Setting strict advisor filter: advisor_id =', user.id);
       setFilters(prev => ({
@@ -34,13 +35,19 @@ const Clients: React.FC = () => {
         company_id: undefined
       }));
     } else if (user && user.role === 'COMPANY_ADMIN') {
-      console.log('Setting company admin filter:', { company_id: user.entityId });
-      setFilters(prev => ({ ...prev, company_id: user.entityId }));
+      console.log('🔒 SECURITY: Setting company admin filter:', { company_id: user.entityId });
+      setFilters(prev => ({ 
+        ...prev, 
+        company_id: user.entityId,
+        // Ensure no advisor_id filter for company admins
+        advisor_id: undefined
+      }));
     }
   }, [user]);
 
   // Load companies based on user role
   useEffect(() => {
+    console.log('🔄 useEffect [loadCompanies] triggered with user:', user?.role);
     const loadCompanies = async () => {
       try {
         let companiesData: Company[] = [];
@@ -66,27 +73,18 @@ const Clients: React.FC = () => {
     }
   }, [user]);
 
-  useEffect(() => {
-    fetchClients();
-  }, [filters.page, filters.pageSize, filters.advisor_id, filters.company_id]);
-
-  // Separate effect for search to avoid too many requests
-  useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      if (filters.page !== 0) {
-        // Reset to first page when search changes
-        setFilters(prev => ({ ...prev, page: 0 }));
-      } else {
-        fetchClients();
-      }
-    }, 500);
-
-    return () => clearTimeout(debounceTimer);
-  }, [filters.searchQuery, filters.dateFrom, filters.dateTo]);
-
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => {
     try {
       setLoading(true);
+      
+      // CRITICAL SECURITY CHECK: Prevent company admins from querying without company filter
+      if (isCompanyAdmin() && user && user.entityId && !filters.company_id) {
+        console.error('🚨 FRONTEND SECURITY VIOLATION: Company admin attempting to fetch clients without company filter');
+        console.error('🚨 User entityId:', user.entityId);
+        console.error('🚨 Current filters:', filters);
+        setError('Error de seguridad: No se puede acceder a datos sin filtro de empresa');
+        return;
+      }
       
       // Ensure advisor_id filter is always applied for advisors
       let currentFilters = {...filters};
@@ -95,6 +93,23 @@ const Clients: React.FC = () => {
         currentFilters.advisor_id = user.id;
       }
       
+      // CRITICAL: Ensure company_id filter is ALWAYS applied for company admins
+      if (isCompanyAdmin() && user && user.entityId && !currentFilters.company_id) {
+        console.log('🔒 SECURITY: Adding missing company_id filter for company admin role');
+        currentFilters.company_id = user.entityId;
+      }
+      
+      // DOUBLE CHECK: If user is company admin, FORCE the company_id filter even if it exists
+      if (isCompanyAdmin() && user && user.entityId) {
+        console.log('🔒 SECURITY: Enforcing company_id filter for company admin:', user.entityId);
+        currentFilters.company_id = user.entityId;
+      }
+      
+      // SECURITY VALIDATION: Log the final filters being sent
+      console.log('🔍 FINAL FILTERS BEING SENT TO API:', JSON.stringify(currentFilters, null, 2));
+      console.log('🔍 USER ROLE:', user?.role);
+      console.log('🔍 USER ENTITY ID:', user?.entityId);
+      
       // Debug log to verify filters sent to API
       console.log('Fetching clients with filters:', currentFilters);
       
@@ -102,6 +117,9 @@ const Clients: React.FC = () => {
       // Handle potential undefined values with default empty array and zero
       setClients(result.clients || []);
       setTotalCount(result.totalCount || 0);
+      
+      // SECURITY LOG: Log how many clients were returned
+      console.log(`🔍 SECURITY CHECK: Returned ${result.clients?.length || 0} clients for company admin with entityId: ${user?.entityId}`);
       
       // If we got an empty list, check if it's because the table doesn't exist
       // Use optional chaining to avoid potential undefined errors
@@ -116,7 +134,39 @@ const Clients: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, isCompanyAdmin, user, isAdvisor]);
+
+  useEffect(() => {
+    console.log('🔄 useEffect [fetchClients] triggered with filters:', filters);
+    
+    // CRITICAL: Prevent race condition - don't fetch if company admin doesn't have company_id filter yet
+    if (isCompanyAdmin() && user && user.entityId && !filters.company_id) {
+      console.log('⏳ WAITING: Company admin filter not yet established, skipping fetch');
+      return;
+    }
+    
+    fetchClients();
+  }, [filters.page, filters.pageSize, filters.advisor_id, filters.company_id, filters.searchQuery, filters.dateFrom, filters.dateTo, fetchClients, isCompanyAdmin, user]);
+
+  // Separate effect for search to avoid too many requests
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      // CRITICAL: Prevent race condition for search as well
+      if (isCompanyAdmin() && user && user.entityId && !filters.company_id) {
+        console.log('⏳ WAITING: Company admin filter not yet established, skipping search fetch');
+        return;
+      }
+      
+      if (filters.page !== 0) {
+        // Reset to first page when search changes
+        setFilters(prev => ({ ...prev, page: 0 }));
+      } else {
+        fetchClients();
+      }
+    }, 500);
+
+    return () => clearTimeout(debounceTimer);
+  }, [filters.searchQuery, filters.dateFrom, filters.dateTo, filters.page, fetchClients, isCompanyAdmin, user, setFilters]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFilters(prev => ({ ...prev, searchQuery: e.target.value }));
@@ -238,7 +288,11 @@ const Clients: React.FC = () => {
                     value={filters.searchQuery}
                     onChange={handleSearchChange}
                   />
-                  <button className="btn btn-square" onClick={() => fetchClients()}>
+                  <button className="btn btn-square" onClick={() => {
+                    // Force a re-fetch by updating the filters timestamp
+                    // This ensures the useEffect is triggered with current filters
+                    setFilters(prev => ({ ...prev }));
+                  }}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
@@ -252,27 +306,38 @@ const Clients: React.FC = () => {
                   <label className="label">
                     <span className="label-text">Empresa</span>
                   </label>
-                  <select
-                    className="select select-bordered w-full"
-                    value={filters.company_id || ''}
-                    onChange={(e) => {
-                      const value = e.target.value || undefined;
-                      setFilters(prev => ({ 
-                        ...prev, 
-                        company_id: value,
-                        // For advisors, always keep advisor_id filter even when company changes
-                        ...(isAdvisor() && { advisor_id: user?.id }),
-                        page: 0 
-                      }));
-                    }}
-                  >
-                    <option value="">Todas mis empresas</option>
-                    {companies.map(company => (
-                      <option key={company.id} value={company.id}>
-                        {company.name}
-                      </option>
-                    ))}
-                  </select>
+                  {isCompanyAdmin() ? (
+                    // Company admins should only see their own company - no selection allowed
+                    <div className="input input-bordered w-full bg-base-200 flex items-center">
+                      <span className="text-gray-700">
+                        {companies.find(c => c.id === user?.entityId)?.name || 'Mi Empresa'}
+                      </span>
+                      <span className="badge badge-primary ml-2 text-xs">Solo mi empresa</span>
+                    </div>
+                  ) : (
+                    // Advisors and super admins can select companies
+                    <select
+                      className="select select-bordered w-full"
+                      value={filters.company_id || ''}
+                      onChange={(e) => {
+                        const value = e.target.value || undefined;
+                        setFilters(prev => ({ 
+                          ...prev, 
+                          company_id: value,
+                          // For advisors, always keep advisor_id filter even when company changes
+                          ...(isAdvisor() && { advisor_id: user?.id }),
+                          page: 0 
+                        }));
+                      }}
+                    >
+                      <option value="">Todas mis empresas</option>
+                      {companies.map(company => (
+                        <option key={company.id} value={company.id}>
+                          {company.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               )}
             </div>

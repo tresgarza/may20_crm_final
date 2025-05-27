@@ -129,6 +129,19 @@ export const getClients = async (filters?: ClientFilter) => {
     // Additional debug logging
     console.log('[getClients] Starting client query with filters:', JSON.stringify(filters));
     
+    // CRITICAL SECURITY CHECK: Prevent company admins from seeing other companies' data
+    // This is a server-side validation to ensure no data leakage
+    const currentUser = await serviceClient.auth.getUser();
+    if (currentUser?.data?.user?.user_metadata?.role === 'COMPANY_ADMIN') {
+      const userEntityId = currentUser?.data?.user?.user_metadata?.entityId;
+      if (!filters?.company_id || filters.company_id !== userEntityId) {
+        console.error('🚨 SECURITY VIOLATION: Company admin attempting to access data without proper company filter');
+        console.error('🚨 User entityId:', userEntityId);
+        console.error('🚨 Requested company_id:', filters?.company_id);
+        throw new Error('Acceso denegado: No tiene permisos para ver datos de otras empresas');
+      }
+    }
+    
     let query = serviceClient.from(USERS_TABLE)
       .select(`
         id, email, first_name, paternal_surname, maternal_surname, phone, 

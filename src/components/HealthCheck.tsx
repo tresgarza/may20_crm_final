@@ -2,6 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 const HealthCheck: React.FC = () => {
+  // DISABLE IN PRODUCTION - No mostrar notificaciones molestas en producción
+  if (process.env.NODE_ENV === 'production') {
+    return null;
+  }
+
   const [supabaseConnected, setSupabaseConnected] = useState<boolean | null>(null);
   const [mcpConnected, setMcpConnected] = useState<boolean | null>(null);
   const [checking, setChecking] = useState(true);
@@ -66,25 +71,70 @@ const HealthCheck: React.FC = () => {
   };
 
   const handleDismiss = () => {
+    console.log('🔕 HealthCheck notification dismissed by user');
     setDismissed(true);
-    // Store in session storage so it stays dismissed on page navigations
+    
+    // Store in both session and local storage for better persistence
     try {
       sessionStorage.setItem('healthcheck_dismissed', 'true');
+      localStorage.setItem('healthcheck_dismissed', 'true');
+      
+      // Also store a timestamp to potentially auto-reset after some time
+      const timestamp = Date.now().toString();
+      sessionStorage.setItem('healthcheck_dismissed_at', timestamp);
+      localStorage.setItem('healthcheck_dismissed_at', timestamp);
+      
+      console.log('✅ HealthCheck dismiss state saved to storage');
     } catch (e) {
-      console.error('Could not save dismiss state to sessionStorage', e);
+      console.error('❌ Could not save dismiss state to storage', e);
     }
   };
 
+  const handleRetryManually = () => {
+    console.log('🔄 Manual retry requested by user');
+    setRetries(0);
+    setChecking(true);
+    setSupabaseConnected(null);
+    setMcpConnected(null);
+    setErrorDetails({});
+    
+    // Run checks immediately
+    Promise.all([
+      checkSupabaseConnection(),
+      checkMcpConnection()
+    ]).then(() => {
+      setChecking(false);
+    });
+  };
+
   useEffect(() => {
-    // Check if previously dismissed
+    // Check if previously dismissed in either session or local storage
     try {
-      const wasDismissed = sessionStorage.getItem('healthcheck_dismissed') === 'true';
-      if (wasDismissed) {
+      const sessionDismissed = sessionStorage.getItem('healthcheck_dismissed') === 'true';
+      const localDismissed = localStorage.getItem('healthcheck_dismissed') === 'true';
+      
+      if (sessionDismissed || localDismissed) {
+        console.log('🔕 HealthCheck was previously dismissed, hiding notification');
         setDismissed(true);
+        return; // Don't run checks if dismissed
       }
     } catch (e) {
-      console.error('Could not read from sessionStorage', e);
+      console.error('❌ Could not read dismiss state from storage', e);
     }
+
+    // Add global function to reset dismissed state (for debugging)
+    (window as any).resetHealthCheckDismissed = () => {
+      try {
+        sessionStorage.removeItem('healthcheck_dismissed');
+        sessionStorage.removeItem('healthcheck_dismissed_at');
+        localStorage.removeItem('healthcheck_dismissed');
+        localStorage.removeItem('healthcheck_dismissed_at');
+        setDismissed(false);
+        console.log('✅ HealthCheck dismiss state cleared. Notification will show again.');
+      } catch (e) {
+        console.error('❌ Could not clear dismiss state', e);
+      }
+    };
 
     const runChecks = async () => {
       setChecking(true);
@@ -95,21 +145,43 @@ const HealthCheck: React.FC = () => {
       setChecking(false);
     };
 
+    // Only run initial checks
     runChecks();
+  }, []); // FIXED: Remove problematic dependencies that were causing infinite loop
 
-    // Retry if not connected, with exponential backoff
-    const interval = setInterval(() => {
-      if ((!supabaseConnected || !mcpConnected) && retries < 5) {
+  // Separate useEffect for retry logic
+  useEffect(() => {
+    if (dismissed) return; // Don't retry if dismissed
+    
+    let interval: NodeJS.Timeout;
+    
+    // Only set up retry interval if there are connection issues and we haven't exceeded retry limit
+    if ((!supabaseConnected || !mcpConnected) && retries < 5) {
+      console.log(`Setting up retry interval (attempt ${retries + 1}/5)...`);
+      
+      interval = setTimeout(() => {
         console.log(`Retrying connections (attempt ${retries + 1}/5)...`);
-        runChecks();
-        setRetries(prev => prev + 1);
-      } else {
-        clearInterval(interval);
-      }
-    }, Math.min(5000 + retries * 5000, 30000)); // Start at 5s, max 30s
+        
+        const runRetryChecks = async () => {
+          setChecking(true);
+          await Promise.all([
+            checkSupabaseConnection(),
+            checkMcpConnection()
+          ]);
+          setChecking(false);
+          setRetries(prev => prev + 1);
+        };
+        
+        runRetryChecks();
+      }, Math.min(5000 + retries * 5000, 30000)); // Start at 5s, max 30s
+    }
 
-    return () => clearInterval(interval);
-  }, [supabaseConnected, mcpConnected, retries]);
+    return () => {
+      if (interval) {
+        clearTimeout(interval);
+      }
+    };
+  }, [supabaseConnected, mcpConnected, retries, dismissed]); // Keep these dependencies for retry logic only
 
   if (checking && retries === 0) {
     return null; // Don't show on first check
@@ -132,10 +204,11 @@ const HealthCheck: React.FC = () => {
             <p className="font-bold">Problemas de conectividad detectados</p>
             <button 
               onClick={handleDismiss}
-              className="ml-2 text-red-700 hover:text-red-900 focus:outline-none"
+              className="ml-2 p-2 text-red-700 hover:text-red-900 hover:bg-red-200 rounded-full focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors bg-red-50 border border-red-300"
               aria-label="Cerrar notificación"
+              title="Cerrar notificación permanentemente"
             >
-              <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <svg className="h-6 w-6 font-bold" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
               </svg>
             </button>
@@ -162,8 +235,24 @@ const HealthCheck: React.FC = () => {
                 )}
               </li>
             )}
-            <li className="mt-2">
-              Intentando reconectar... ({retries} intentos)
+            <li className="mt-2 flex items-center justify-between">
+              <span>Intentando reconectar... ({retries} intentos)</span>
+              <div className="flex gap-2">
+                <button 
+                  onClick={handleRetryManually}
+                  className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  disabled={checking}
+                >
+                  {checking ? 'Verificando...' : 'Reintentar'}
+                </button>
+                <button 
+                  onClick={handleDismiss}
+                  className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors font-bold"
+                  title="Cerrar notificación permanentemente"
+                >
+                  ✕ Cerrar
+                </button>
+              </div>
             </li>
           </ul>
         </div>
