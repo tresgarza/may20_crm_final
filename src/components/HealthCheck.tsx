@@ -12,11 +12,6 @@ const HealthCheck: React.FC = () => {
     mcp?: string;
   }>({});
 
-  // DISABLE IN PRODUCTION - No mostrar notificaciones molestas en producción
-  if (process.env.NODE_ENV === 'production') {
-    return null;
-  }
-
   const checkSupabaseConnection = async () => {
     try {
       // Intentionally use a simple query that doesn't require special permissions
@@ -182,6 +177,11 @@ const HealthCheck: React.FC = () => {
       }
     };
   }, [supabaseConnected, mcpConnected, retries, dismissed]); // Keep these dependencies for retry logic only
+
+  // DISABLE IN PRODUCTION - No mostrar notificaciones molestas en producción
+  if (process.env.NODE_ENV === 'production') {
+    return null;
+  }
 
   if (checking && retries === 0) {
     return null; // Don't show on first check
