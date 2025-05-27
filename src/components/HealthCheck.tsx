@@ -2,11 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 const HealthCheck: React.FC = () => {
-  // DISABLE IN PRODUCTION - No mostrar notificaciones molestas en producción
-  if (process.env.NODE_ENV === 'production') {
-    return null;
-  }
-
   const [supabaseConnected, setSupabaseConnected] = useState<boolean | null>(null);
   const [mcpConnected, setMcpConnected] = useState<boolean | null>(null);
   const [checking, setChecking] = useState(true);
@@ -16,6 +11,11 @@ const HealthCheck: React.FC = () => {
     supabase?: string;
     mcp?: string;
   }>({});
+
+  // DISABLE IN PRODUCTION - No mostrar notificaciones molestas en producción
+  if (process.env.NODE_ENV === 'production') {
+    return null;
+  }
 
   const checkSupabaseConnection = async () => {
     try {
