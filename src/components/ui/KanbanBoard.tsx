@@ -1,1362 +1,1043 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Application, getApprovalStatus, approveByAdvisor, approveByCompany } from '../../services/applicationService';
-import { STATUS_COLORS, APPLICATION_STATUS, STATUS_LABELS } from '../../utils/constants/statuses';
+import { APPLICATION_STATUS, STATUS_LABELS } from '../../utils/constants/statuses';
 import { usePermissions } from '../../contexts/PermissionsContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { TABLES } from '../../utils/constants/tables';
-import { useNotifications } from '../../contexts/NotificationContext';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatCurrency } from '../../utils/formatters';
 import { APPLICATION_TYPE_LABELS } from '../../utils/constants/applications';
+import { USER_ROLES } from '../../utils/constants/roles';
+import { statusEquals, asStatusKey, asStatusValue, ensureAmount } from '../../utils/types/adapter';
 
-// Verificar si APPLICATION_HISTORY tabla está definida
-const APPLICATION_HISTORY_TABLE = TABLES.APPLICATION_HISTORY || 'application_history';
-
-// Función para escapar cadenas de texto para SQL
-function escapeSQLString(str: string) {
-  if (!str) return '';
-  return str.replace(/'/g, "''");
-}
+// NOTA: La funcionalidad de tiempo real ha sido desactivada 
+// debido a problemas de compatibilidad
+// Las actualizaciones se reflejarán al recargar la página o cuando el componente
+// padre envíe nuevas aplicaciones como prop
 
 interface KanbanBoardProps {
-  applications: Application[];
-  onStatusChange?: (application: Application, newStatus: string) => Promise<void>;
+  applications: any[];
+  onStatusChange?: (application: any, newStatus: string, statusField?: string) => Promise<void>;
+  statusField?: 'status' | 'advisor_status' | 'company_status' | 'global_status';
+  applicationTypeFilter?: string;
+  attentionNeededOnly?: boolean; // Add attentionNeededOnly property
 }
 
-// Interfaz para el estado de aprobación
-interface ApprovalStatus {
-  approvedByAdvisor: boolean;
-  approvedByCompany: boolean;
-}
-
-// Crear un tipo para aplicaciones con su estado de aprobación
-type ApplicationWithApproval = Application & {
-  approvalStatus?: ApprovalStatus;
+interface ApplicationWithApproval {
+  id: string;
+  status: string;
+  advisor_status?: string;
+  company_status?: string;
+  global_status?: string;
+  client_name: string;
+  company_name?: string;
+  amount: number;
+  application_type: string;
+  financing_type?: string;
   isMoving?: boolean;
-  targetStatus?: string;
-  company_review_status?: boolean;
-};
+  updated_at?: string; // Add this property to track when the status was last updated
+  approvalStatus?: {
+    approvedByAdvisor?: boolean;
+    approvedByCompany?: boolean;
+    isFullyApproved?: boolean;
+    rejectedByAdvisor?: boolean;
+    rejectedByCompany?: boolean;
+  };
+}
 
-const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange }) => {
-  const [isLoading, setIsLoading] = useState(false);
+// Añadir nueva interfaz para el payload
+interface ApplicationStatusPayload {
+  id: string;
+  status?: string;
+  advisor_status?: string;
+  company_status?: string;
+  global_status?: string;
+}
+
+const KanbanBoard: React.FC<KanbanBoardProps> = ({ 
+  applications, 
+  onStatusChange, 
+  statusField = 'status', 
+  applicationTypeFilter,
+  attentionNeededOnly = false // Default to false
+}) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [appsWithApproval, setAppsWithApproval] = useState<ApplicationWithApproval[]>([]);
+  const [warnMessage, setWarnMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [processingAppId, setProcessingAppId] = useState<string | null>(null);
-  const { shouldFilterByEntity, getEntityFilter, isAdvisor, isCompanyAdmin } = usePermissions();
-  const { user } = useAuth();
+  const [appsWithApproval, setAppsWithApproval] = useState<ApplicationWithApproval[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const dragItemRef = useRef<HTMLDivElement | null>(null);
-  const dragImageRef = useRef<HTMLDivElement | null>(null);
-  const draggedItemIndexRef = useRef<number>(-1);
-  const draggedItemNewStatusRef = useRef<string>('');
-  const [autoTransitionMessage, setAutoTransitionMessage] = useState<string | null>(null);
+  const pendingRefreshRef = useRef<boolean>(false);
+  const [expandedColumns, setExpandedColumns] = useState<Record<string, boolean>>({});
   
-  // Añadir estados para filtros
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [dateFromFilter, setDateFromFilter] = useState<string>('');
-  const [dateToFilter, setDateToFilter] = useState<string>('');
-  const [amountMinFilter, setAmountMinFilter] = useState<string>('');
-  const [amountMaxFilter, setAmountMaxFilter] = useState<string>('');
-  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  // Use existing hooks for permissions and auth
+  const { isAdvisor, isCompanyAdmin } = usePermissions();
+  const { user } = useAuth();
   
-  // Primero, modificar useEffect para cargar aplicaciones con datos de aprobación
+  // Set up applications when component mounts
   useEffect(() => {
-    const loadApprovalStatuses = async () => {
-      if (!applications || applications.length === 0) return;
-      
+    const fetchApplicationsWithApproval = async () => {
       setIsLoading(true);
       try {
-        const appsWithStatus: ApplicationWithApproval[] = await Promise.all(
-          applications.map(async (app) => {
-            // Obtener el estado de aprobación real de la API
-            const status = await getApprovalStatus(app.id);
-            
-            // Devolver la aplicación con su estado de aprobación
-            return {
-              ...app,
-              approvalStatus: status || { approvedByAdvisor: false, approvedByCompany: false },
-              // Para administradores de empresa, agregar un campo que maneja su "estado virtual"
-              company_review_status: isCompanyAdmin() ? 
-                // Si la aplicación está en revisión o aprobada por empresa, marcarla
-                (app.status === APPLICATION_STATUS.IN_REVIEW || 
-                 (status && status.approvedByCompany)) : false
-            };
-          })
-        );
+        // Debug: Log all unique application types 
+        const appTypes = new Set(applications.map(app => app.application_type));
+        console.log('Available application types:', Array.from(appTypes));
+        console.log('Current filter type:', applicationTypeFilter);
+        console.log('Number of applications before filtering:', applications.length);
         
-        setAppsWithApproval(appsWithStatus);
+        // Debug: Log financing_type values
+        console.log('Financing types:', applications.map(app => ({ 
+          id: app.id, 
+          type: app.application_type, 
+          financing: app.financing_type 
+        })));
+        
+        // Primero, asegurarse de que solo trabajamos con aplicaciones de tipo 'selected_plans'
+        const selectedPlansOnly = applications.filter(app => app.application_type === 'selected_plans');
+        console.log(`Filtered to ${selectedPlansOnly.length} 'selected_plans' applications`);
+        
+        // Map applications to a simpler format and initialize status properties
+        let mappedApps = selectedPlansOnly.map(app => {
+          // Determine which status field to use
+          const statusToUse = app[statusField] || app.status;
+          
+          // Debug: Log financing_type for this specific app
+          console.log(`App ${app.id} financing_type:`, app.financing_type);
+          
+          return {
+            id: app.id,
+            status: statusToUse, // Use the status field specified in props
+            advisor_status: app.advisor_status || app.status,
+            company_status: app.company_status || app.status,
+            global_status: app.global_status || app.status,
+            client_name: app.client_name || 'Cliente sin nombre',
+            company_name: app.company_name,
+            amount: app.amount || 0,
+            application_type: app.application_type,
+            financing_type: app.financing_type || null, // Asegurarse de incluir financing_type
+            updated_at: app.updated_at || null, // Include the updated_at field
+            approvalStatus: {
+              approvedByAdvisor: app.approved_by_advisor,
+              approvedByCompany: app.approved_by_company,
+              isFullyApproved: app.approved_by_advisor && app.approved_by_company,
+              rejectedByAdvisor: app.rejected_by_advisor,
+              rejectedByCompany: app.rejected_by_company
+            }
+          } as ApplicationWithApproval;
+        });
+        
+        // Debug: Log mapped apps to check rejection flags
+        console.log('Mapped applications with rejection flags:');
+        mappedApps.forEach(app => {
+          if (app.status === 'rejected') {
+            console.log(`Rejected app ${app.id}:`, {
+              rejectedByAdvisor: app.approvalStatus?.rejectedByAdvisor,
+              rejectedByCompany: app.approvalStatus?.rejectedByCompany
+            });
+          }
+        });
+        
+        // Filter by application type if specified
+        if (applicationTypeFilter && applicationTypeFilter !== 'all') {
+          console.log(`Filtering initial applications by type: ${applicationTypeFilter}`);
+          const beforeCount = mappedApps.length;
+          mappedApps = mappedApps.filter(app => app.application_type === applicationTypeFilter);
+          console.log(`Filtered from ${beforeCount} to ${mappedApps.length} applications with type ${applicationTypeFilter}`);
+        }
+
+        // Set the applications in state
+        setAppsWithApproval(mappedApps);
       } catch (error) {
-        console.error("Error loading approval statuses:", error);
+        console.error('Error setting up applications:', error);
+        setErrorMessage('Error al cargar las aplicaciones');
       } finally {
         setIsLoading(false);
       }
     };
     
-    loadApprovalStatuses();
-  }, [applications]);
+    // Call the function
+    fetchApplicationsWithApproval();
+  }, [applications, statusField, applicationTypeFilter]);
   
-  // Modificar cómo se transforman las aplicaciones para ordenarlas de más viejas a más recientes
-  // en el useEffect donde se establece appsWithApproval alrededor de la línea 100-150
-  useEffect(() => {
-    const setupApplications = async () => {
-      const appsWithApprovalStatuses = await Promise.all(
-        applications.map(async (app) => {
-          // Cargar estado de aprobación si aún no está cargado
-          const approvalStatus = await getApprovalStatus(app.id);
-          
-          return {
-            ...app,
-            approvalStatus,
-            isMoving: false
-          };
-        })
-      );
-      
-      // Ordenar de más viejas a más recientes por fecha de creación
-      const sortedApps = [...appsWithApprovalStatuses].sort((a, b) => {
-        const dateA = new Date(a.created_at);
-        const dateB = new Date(b.created_at);
-        return dateA.getTime() - dateB.getTime(); // Orden ascendente (más viejas primero)
-      });
-      
-      setAppsWithApproval(sortedApps);
-    };
+  // Group applications by status
+  const getApplicationsByStatus = (status: string) => {
+    // First filter by status
+    let filteredApps = appsWithApproval.filter(app => app.status === status);
     
-    setupApplications();
-  }, [applications]);
-  
-  // Actualizar la lógica para nuevas aplicaciones para incluir todas las nuevas notificaciones
-  useEffect(() => {
-    // Verificar si hay aplicaciones que deberían estar en "nuevo" (recién creadas)
-    const newApplications = applications.filter(app => {
-      // Identificar aplicaciones recién creadas (menos de 24 horas)
-      const isNew = !app.status || app.status === 'pending' || app.status === 'solicitud';
-      const createdAt = new Date(app.created_at);
-      const now = new Date();
-      const hoursElapsed = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
-      const isRecent = hoursElapsed < 72;
-      
-      return isRecent && (isNew || app.status === 'new');
-    });
+    // SIEMPRE filtrar por 'selected_plans' independientemente del filtro recibido
+    const selectedPlansFilter = 'selected_plans';
+    filteredApps = filteredApps.filter(app => app.application_type === selectedPlansFilter);
     
-    // Si hay aplicaciones nuevas sin status o con status pendiente/solicitud, asignarles "nuevo"
-    if (newApplications.length > 0) {
-      console.log('Aplicaciones nuevas detectadas:', newApplications);
-      const updatedApps = [...appsWithApproval];
-      newApplications.forEach(newApp => {
-        const index = updatedApps.findIndex(app => app.id === newApp.id);
-        if (index !== -1 && (!updatedApps[index].status || updatedApps[index].status === 'pending' || updatedApps[index].status === 'solicitud')) {
-          updatedApps[index] = {
-            ...updatedApps[index],
-            status: APPLICATION_STATUS.NEW
-          };
-          console.log(`Aplicación ${newApp.id} movida a estado NUEVO`);
-        }
-      });
-      
-      setAppsWithApproval(updatedApps);
-    }
-  }, [applications]); // Usar applications como dependencia en lugar de appsWithApproval
-
-  // Asegurar que nuevas aplicaciones se muestren inmediatamente
-  // añadiendo una función de comprobación en el useEffect principal
-  useEffect(() => {
-    const checkForNewApplications = async () => {
-      // Verificar que tenemos usuario y permisos
-      if (!user?.id) return;
-      
-      try {
-        // Ejecutar esta comprobación solo si somos admin de empresa
-        if (isCompanyAdmin() && applications.length > 0) {
-          // Obtener la fecha de hace 24 horas
-          const oneDayAgo = new Date();
-          oneDayAgo.setHours(oneDayAgo.getHours() - 24);
-          
-          // Buscar aplicaciones creadas en las últimas 24 horas
-          const recentApps = applications.filter(app => {
-            const createdAt = new Date(app.created_at);
-            return createdAt >= oneDayAgo;
-          });
-          
-          // Si hay aplicaciones recientes, asegurarnos de que aparezcan en el tablero
-          if (recentApps.length > 0) {
-            console.log(`Encontradas ${recentApps.length} aplicaciones recientes`);
-            
-            // Asegurar que todas estas aplicaciones están en nuestro estado local
-            // y que tienen el estado correcto (NEW si no tienen un estado específico)
-            const updatedApps = [...appsWithApproval];
-            let hasChanges = false;
-            
-            recentApps.forEach(recentApp => {
-              const index = updatedApps.findIndex(app => app.id === recentApp.id);
-              
-              // Si la aplicación no está en nuestro estado, agregarla
-              if (index === -1) {
-                console.log(`Agregando aplicación nueva ${recentApp.id} al estado`);
-                updatedApps.push({
-                  ...recentApp,
-                  status: recentApp.status || APPLICATION_STATUS.NEW,
-                  approvalStatus: {
-                    approvedByAdvisor: recentApp.approved_by_advisor || false,
-                    approvedByCompany: recentApp.approved_by_company || false
-                  }
-                });
-                hasChanges = true;
-              } 
-              // Si no tiene estado o está en estado pendiente/solicitud, asignarle NEW
-              else if (!updatedApps[index].status || updatedApps[index].status === 'pending' || updatedApps[index].status === 'solicitud') {
-                console.log(`Actualizando estado de ${recentApp.id} a NUEVO`);
-                updatedApps[index] = {
-                  ...updatedApps[index],
-                  status: APPLICATION_STATUS.NEW
-                };
-                hasChanges = true;
-              }
-            });
-            
-            // Actualizar el estado solo si hubo cambios
-            if (hasChanges) {
-              setAppsWithApproval(updatedApps);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error verificando nuevas aplicaciones:', error);
-      }
-    };
-    
-    // Ejecutar la función de comprobación
-    checkForNewApplications();
-  }, [applications, user?.id, isCompanyAdmin]);
-  
-  // Modificar la lógica para actualizar todas las aplicaciones con estado "pending" o "solicitud" a "new"
-  useEffect(() => {
-    // Si no hay aplicaciones, no hacer nada
-    if (!applications || applications.length === 0) return;
-    
-    console.log('Verificando estado de aplicaciones:', applications.map(a => ({ id: a.id, status: a.status })));
-    
-    // Actualizar solo las aplicaciones con estado específico a "new" sin afectar las demás
-    const updatedApps = [...appsWithApproval];
-    let hasChanges = false;
-    
-    applications.forEach(app => {
-      const index = updatedApps.findIndex(a => a.id === app.id);
-      const needsUpdate = 
-        !app.status || 
-        app.status === 'pending' || 
-        app.status === 'solicitud';
-      
-      // Solo actualizar si el estado necesita cambiar a "new"
-      if (index !== -1 && needsUpdate) {
-        console.log(`Actualizando estado de aplicación ${app.id} de "${app.status}" a "new"`);
-        updatedApps[index] = {
-          ...updatedApps[index],
-          status: APPLICATION_STATUS.NEW
-        };
-        hasChanges = true;
-      } else if (index === -1) {
-        // Si la aplicación no está en el array, agregarla con su estado original
-        // o "new" si no tiene estado o es pending/solicitud
-        const newStatus = needsUpdate ? APPLICATION_STATUS.NEW : (app.status as Application['status']);
-        console.log(`Agregando aplicación ${app.id} con estado "${newStatus}"`);
-        updatedApps.push({
-          ...app,
-          status: newStatus,
-          approvalStatus: {
-            approvedByAdvisor: app.approved_by_advisor || false,
-            approvedByCompany: app.approved_by_company || false
-          }
-        });
-        hasChanges = true;
-      }
-      // Si existe y no necesita actualización, la dejamos como está
-    });
-    
-    if (hasChanges) {
-      console.log('Actualizando aplicaciones:');
-      updatedApps.forEach(app => console.log(`- ${app.id}: ${app.status}`));
-      setAppsWithApproval(updatedApps);
-    }
-  }, [applications]);
-  
-  // Modificar la forma en que agrupamos las aplicaciones por estado para los administradores de empresa
-  // para crear un flujo de trabajo independiente
-  const groupedApplications = React.useMemo(() => {
-    // Crear un objeto con todos los estados posibles como claves y arrays vacíos como valores
-    const initialGroups = Object.values(APPLICATION_STATUS).reduce((acc, status) => {
-      acc[status] = [];
-      return acc as Record<string, ApplicationWithApproval[]>;
-    }, {} as Record<string, ApplicationWithApproval[]>);
-    
-    // Para los administradores de empresa, usaremos un agrupamiento virtual basado en las aprobaciones
-    if (isCompanyAdmin()) {
-    return appsWithApproval.reduce((acc, app) => {
-        // Si está en movimiento, respetar el estado de destino
-      if (app.isMoving && app.targetStatus) {
-          // Verificar que el estado existe antes de intentar agregar la aplicación
-          if (acc[app.targetStatus]) {
-        acc[app.targetStatus].push(app);
-      } else {
-            // Si el estado no existe, usar NEW como fallback
-            console.warn(`Estado inválido detectado: ${app.targetStatus}, usando NEW como fallback`);
-            acc[APPLICATION_STATUS.NEW].push(app);
-          }
-          return acc;
-        }
-        
-        // Normalizar estados "pending" y "solicitud" a "new"
-        if (!app.status || app.status === 'pending' || app.status === 'solicitud') {
-          acc[APPLICATION_STATUS.NEW].push(app);
-          return acc;
-        }
-        
-        // Estados compartidos que siempre se muestran igual para todos los usuarios
-        const sharedStatuses = [
-          APPLICATION_STATUS.POR_DISPERSAR,
-          APPLICATION_STATUS.COMPLETED,
-          APPLICATION_STATUS.EXPIRED,
-          APPLICATION_STATUS.CANCELLED,
-          APPLICATION_STATUS.REJECTED
-        ];
-        
-        if (sharedStatuses.includes(app.status as APPLICATION_STATUS)) {
-          // Verificar que el estado existe
-          if (acc[app.status]) {
-            acc[app.status].push(app);
-          } else {
-            console.warn(`Estado compartido inválido detectado: ${app.status}, usando NEW como fallback`);
-            acc[APPLICATION_STATUS.NEW].push(app);
-          }
-          return acc;
-        }
-        
-        // Para los estados independientes, usar la lógica personalizada para admin de empresa
-        if (app.status === APPLICATION_STATUS.APPROVED) {
-          // Si está aprobada por la empresa pero no por el asesor, mostrarla en "aprobado por mi" 
-          if (app.approvalStatus?.approvedByCompany && !app.approvalStatus.approvedByAdvisor) {
-            acc[APPLICATION_STATUS.APPROVED].push(app);
-            return acc;
-          }
-          
-          // Si está aprobada por ambos, y el estado real es aprobado, mostrarla en aprobado
-          if (app.approvalStatus?.approvedByCompany && app.approvalStatus?.approvedByAdvisor) {
-            acc[APPLICATION_STATUS.APPROVED].push(app);
-            return acc;
-          }
-          
-          // En otros casos, mostrarla en el estado que tenga según otras reglas
-        }
-        
-        // Si está en revisión según la empresa
-        if (app.status === APPLICATION_STATUS.IN_REVIEW) {
-          // Si no está aprobada por la empresa, mostrarla en "en revisión"
-          if (!app.approvalStatus?.approvedByCompany) {
-            acc[APPLICATION_STATUS.IN_REVIEW].push(app);
-            return acc;
-          }
-          
-          // Si está aprobada por la empresa, mostrarla en "aprobado por mi"
-          acc[APPLICATION_STATUS.APPROVED].push(app);
-          return acc;
-        }
-        
-        // Para nuevas aplicaciones sin aprobación
-        if (app.status === APPLICATION_STATUS.NEW) {
-          // Si está aprobada por la empresa, mostrarla en "aprobado por mi"
-          if (app.approvalStatus?.approvedByCompany) {
-            acc[APPLICATION_STATUS.APPROVED].push(app);
-            return acc;
-          }
-          
-          // Si está en revisión por la empresa
-          if (app.company_review_status === true) {
-            acc[APPLICATION_STATUS.IN_REVIEW].push(app);
-            return acc;
-          }
-          
-          // Si no tiene marca especial, mostrarla como nueva
-          acc[APPLICATION_STATUS.NEW].push(app);
-          return acc;
-        }
-        
-        // Para cualquier otro caso, usar el estado real si existe, o NEW como fallback
-        if (acc[app.status]) {
-          acc[app.status].push(app);
-        } else {
-          console.warn(`Estado desconocido detectado: ${app.status}, usando NEW como fallback`);
-          acc[APPLICATION_STATUS.NEW].push(app);
-        }
-        return acc;
-      }, initialGroups);
-    }
-    
-    // Para asesores y otros roles, usamos el agrupamiento normal basado en estado
-    return appsWithApproval.reduce((acc, app) => {
-      if (app.isMoving && app.targetStatus) {
-        // Si está en movimiento, verificar que el estado de destino existe
-        if (acc[app.targetStatus]) {
-          acc[app.targetStatus].push(app);
-        } else {
-          console.warn(`Estado de destino inválido: ${app.targetStatus}, usando NEW como fallback`);
-          acc[APPLICATION_STATUS.NEW].push(app);
-        }
-      } else {
-        // Si no, usar el estado normal, normalizando "pending" y "solicitud" a "new"
-        let status = app.status || 'new';
-        
-        // Normalizar estados "pending" y "solicitud" a "new"
-        if (status === 'pending' || status === 'solicitud') {
-          status = APPLICATION_STATUS.NEW;
-        }
-        
-        // Verificar que el estado existe antes de agregar
-        if (acc[status]) {
-        acc[status].push(app);
-        } else {
-          console.warn(`Estado inválido detectado: ${status}, usando NEW como fallback`);
-          acc[APPLICATION_STATUS.NEW].push(app);
-        }
-      }
-      return acc;
-    }, initialGroups);
-  }, [appsWithApproval, isCompanyAdmin, isAdvisor]);
-  
-  // Modificar la lógica de agrupamiento de aplicaciones para separar flujos
-  // Esta es la parte clave que separa completamente los flujos
-  const columns = useMemo(() => {
-    // Estados estándar del Kanban
-    const statusGroups: Record<string, ApplicationWithApproval[]> = {
-      [APPLICATION_STATUS.NEW]: [],
-      [APPLICATION_STATUS.IN_REVIEW]: [],
-      [APPLICATION_STATUS.APPROVED]: [],
-      [APPLICATION_STATUS.POR_DISPERSAR]: [],
-      [APPLICATION_STATUS.COMPLETED]: [],
-      [APPLICATION_STATUS.EXPIRED]: [],
-      [APPLICATION_STATUS.REJECTED]: [],
-      [APPLICATION_STATUS.CANCELLED]: []
-    };
-    
-    // Agrupar aplicaciones por estado
-    appsWithApproval.forEach(app => {
-      // Asegurarnos de que el app.status no es undefined antes de usarlo
-      const currentStatus = app.status || APPLICATION_STATUS.NEW;
-      
-      // Lógica específica para administradores de empresa - flujo sincronizado
-      if (isCompanyAdmin()) {
-        // Los estados avanzados siempre deben mostrarse en su columna correspondiente
-        // independientemente del flujo (esto garantiza que se sincronicen con la vista del asesor)
-        const advancedStatuses = [
-          APPLICATION_STATUS.POR_DISPERSAR,
-          APPLICATION_STATUS.COMPLETED,
-          APPLICATION_STATUS.EXPIRED,
-          APPLICATION_STATUS.CANCELLED,
-          APPLICATION_STATUS.REJECTED
-        ];
-        
-        if (advancedStatuses.includes(currentStatus as APPLICATION_STATUS)) {
-          console.log(`Mostrando tarjeta ${app.id} en estado avanzado: ${currentStatus}`);
-          statusGroups[currentStatus].push(app);
-          return;
-        }
-        
-        // Para los estados básicos, aplicar la lógica personalizada del admin de empresa
-        
-        // 1. Si está aprobada por empresa -> va a "Aprobado por mi"
-        if (app.approvalStatus?.approvedByCompany) {
-          statusGroups[APPLICATION_STATUS.APPROVED].push(app);
-        }
-        // 2. Si está en revisión por empresa -> va a "En Revisión"
-        else if (app.company_review_status) {
-          statusGroups[APPLICATION_STATUS.IN_REVIEW].push(app);
-        }
-        // 3. Si no está ni en revisión ni aprobada por empresa -> va a "Nuevo"
-        else if (currentStatus === APPLICATION_STATUS.NEW || 
-                currentStatus === APPLICATION_STATUS.PENDING || 
-                (!app.company_review_status && !app.approvalStatus?.approvedByCompany)) {
-          statusGroups[APPLICATION_STATUS.NEW].push(app);
-        }
-      }
-      // Lógica para asesores - flujo normal basado en estado real
-      else if (isAdvisor()) {
-        if (currentStatus) {
-          // Verificar que el estado existe en nuestros grupos antes de agregar
-          if (statusGroups[currentStatus]) {
-            statusGroups[currentStatus].push(app);
-          } else {
-            // Si no existe, log warning y usar NEW como fallback
-            console.warn(`Estado desconocido en columns para asesor: ${currentStatus}, usando NEW como fallback`);
-            statusGroups[APPLICATION_STATUS.NEW].push(app);
-          }
-        } else {
-          // Si no tiene estado, ponerla en "Nuevo"
-          statusGroups[APPLICATION_STATUS.NEW].push(app);
-        }
-      }
-      // Lógica para otros roles
-      else {
-        if (currentStatus) {
-          // Verificar que el estado existe en nuestros grupos
-          if (statusGroups[currentStatus]) {
-            statusGroups[currentStatus].push(app);
-          } else {
-            // Si no existe, usar NEW como fallback
-            console.warn(`Estado desconocido en columns para otros roles: ${currentStatus}, usando NEW como fallback`);
-            statusGroups[APPLICATION_STATUS.NEW].push(app);
-          }
-        } else {
-          // Si no tiene estado, ponerla en "Nuevo"
-          statusGroups[APPLICATION_STATUS.NEW].push(app);
-        }
-      }
-    });
-    
-    // Definición de colores para cada columna
-    const columnDefinitions = [
-      { id: APPLICATION_STATUS.NEW, title: 'Nuevo', color: 'warning', applications: statusGroups[APPLICATION_STATUS.NEW] },
-      { id: APPLICATION_STATUS.IN_REVIEW, title: 'En Revisión', color: 'info', applications: statusGroups[APPLICATION_STATUS.IN_REVIEW] },
-      { id: APPLICATION_STATUS.APPROVED, title: 'Aprobado por mi', color: 'success', applications: statusGroups[APPLICATION_STATUS.APPROVED] },
-      { id: APPLICATION_STATUS.POR_DISPERSAR, title: 'Por Dispersar', color: 'accent', applications: statusGroups[APPLICATION_STATUS.POR_DISPERSAR] },
-      { id: APPLICATION_STATUS.COMPLETED, title: 'Completado', color: 'primary', applications: statusGroups[APPLICATION_STATUS.COMPLETED] },
-      { id: APPLICATION_STATUS.EXPIRED, title: 'Expirado', color: 'error', applications: statusGroups[APPLICATION_STATUS.EXPIRED] },
-      { id: APPLICATION_STATUS.REJECTED, title: 'Rechazado', color: 'error', applications: statusGroups[APPLICATION_STATUS.REJECTED] },
-      { id: APPLICATION_STATUS.CANCELLED, title: 'Cancelado', color: 'neutral', applications: statusGroups[APPLICATION_STATUS.CANCELLED] }
-    ];
-    
-    return columnDefinitions;
-  }, [appsWithApproval, isAdvisor, isCompanyAdmin]);
-  
-  // Función para actualizar localmente el estado de aprobación de una aplicación
-  const updateLocalApprovalStatus = (applicationId: string, updates: Partial<{ approvedByAdvisor: boolean, approvedByCompany: boolean }>, newStatus?: string) => {
-    console.log(`Actualizando estado de aprobación para ${applicationId}:`, updates);
-    
-    // Crear una copia del estado actual
-    const currentApps = [...appsWithApproval];
-    const appIndex = currentApps.findIndex(app => app.id === applicationId);
-    
-    if (appIndex === -1) {
-      console.warn(`No se encontró la aplicación ${applicationId} para actualizar approval status`);
-      return;
-    }
-    
-    // Crear copia profunda de la aplicación para evitar mutaciones directas
-    const updatedApp = { ...currentApps[appIndex] };
-    
-    // Asegurar que el objeto approvalStatus exista
-    const currentApprovalStatus = updatedApp.approvalStatus || { approvedByAdvisor: false, approvedByCompany: false };
-    
-    // Crear el nuevo objeto de aprobación, asegurando que mantenemos los valores existentes
-    // a menos que se especifiquen explícitamente en el parámetro updates
-    const newApprovalStatus = {
-      approvedByAdvisor: updates.approvedByAdvisor !== undefined ? updates.approvedByAdvisor : currentApprovalStatus.approvedByAdvisor,
-      approvedByCompany: updates.approvedByCompany !== undefined ? updates.approvedByCompany : currentApprovalStatus.approvedByCompany
-    };
-    
-    console.log(`Approval Status anterior: ${JSON.stringify(currentApprovalStatus)}`);
-    console.log(`Nuevo Approval Status: ${JSON.stringify(newApprovalStatus)}`);
-    
-    // Actualizar la aplicación con el nuevo estado de aprobación
-    updatedApp.approvalStatus = newApprovalStatus;
-    
-    // Para mantener sincronizados los estados, cuando quitamos la aprobación de empresa,
-    // también actualizamos el company_review_status
-    if (updates.approvedByCompany === false && isCompanyAdmin()) {
-      console.log(`Actualizando company_review_status a true porque estamos quitando aprobación`);
-      updatedApp.company_review_status = true;
-    }
-
-    // Si ambos están aprobados, asegurarnos de moverla a por_dispersar
-    if (newApprovalStatus.approvedByAdvisor && newApprovalStatus.approvedByCompany) {
-      console.log(`Ambas aprobaciones están presentes, verificando si necesita moverse a Por Dispersar`);
-      if (updatedApp.status !== APPLICATION_STATUS.POR_DISPERSAR && 
-          updatedApp.status !== APPLICATION_STATUS.COMPLETED) {
-        console.log(`Actualizando estado a Por Dispersar debido a doble aprobación`);
-        updatedApp.status = APPLICATION_STATUS.POR_DISPERSAR;
-      }
-    }
-    
-    // Actualizar el array de aplicaciones
-    currentApps[appIndex] = updatedApp;
-    
-    // Establecer el nuevo estado
-    setAppsWithApproval(currentApps);
+    return filteredApps;
   };
   
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, application: ApplicationWithApproval, idx: number) => {
-    // Guardar la aplicación que estamos arrastrando
-    draggedItemIndexRef.current = idx;
-    
-    // Almacenar el elemento que estamos arrastrando para gestionar mejor el evento
+  // Get visible applications (limited to 5 by default)
+  const getVisibleApplications = (status: string) => {
+    let visibleApps = getApplicationsByStatus(status);
+
+    // Apply application type filter if specified
+    if (applicationTypeFilter && applicationTypeFilter !== 'all') {
+      visibleApps = visibleApps.filter(app => app.application_type === applicationTypeFilter);
+    }
+
+    // Apply attention needed filter if enabled
+    if (attentionNeededOnly) {
+      visibleApps = visibleApps.filter(app => requiresAttention(app));
+    }
+
+    // If expanded, show all applications in that column, otherwise show only 3
+    if (expandedColumns[status]) {
+      return visibleApps; // Return all applications when expanded
+    } else {
+      return visibleApps.slice(0, 3); // Show only 3 when collapsed
+    }
+  };
+  
+  // Toggle expanded state for a column
+  const toggleColumnExpand = (status: string) => {
+    setExpandedColumns(prev => ({
+      ...prev,
+      [status]: !prev[status]
+    }));
+  };
+  
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, application: ApplicationWithApproval) => {
+    // Store the drag start element for later reference
     dragItemRef.current = e.currentTarget;
     
-    // Establecer los datos que queremos transferir
-    e.dataTransfer.setData('text/plain', application.id);
+    // Add moving class to the dragged item
+    e.currentTarget.classList.add('card-moving');
+    
+    // Set the data for the drag operation
+    e.dataTransfer.setData('application/id', application.id);
     e.dataTransfer.effectAllowed = 'move';
     
-    // Crear una copia visual para el arrastre
-    if (!dragImageRef.current) {
-      dragImageRef.current = e.currentTarget.cloneNode(true) as HTMLDivElement;
-      dragImageRef.current.style.position = 'absolute';
-      dragImageRef.current.style.top = '-1000px';
-      dragImageRef.current.style.opacity = '0.8';
-      dragImageRef.current.style.transform = 'scale(0.9)';
-      dragImageRef.current.style.width = `${e.currentTarget.offsetWidth}px`;
-      document.body.appendChild(dragImageRef.current);
-    }
-    
-    // Establecer la imagen de arrastre
-    if (dragImageRef.current) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      e.dataTransfer.setDragImage(dragImageRef.current, rect.width / 2, 20);
-    }
-    
-    // Añadir clase CSS para mostrar visualmente que el elemento está siendo arrastrado
-    if (e.currentTarget) {
-      e.currentTarget.classList.add('dragging');
+    // Create a custom drag image for better UX
+    try {
+      const ghostElement = e.currentTarget.cloneNode(true) as HTMLElement;
+      ghostElement.style.position = 'absolute';
+      ghostElement.style.top = '-1000px';
+      ghostElement.style.opacity = '0.8';
+      ghostElement.style.transform = 'scale(0.8)';
+      ghostElement.style.width = `${e.currentTarget.offsetWidth}px`;
+      document.body.appendChild(ghostElement);
+      e.dataTransfer.setDragImage(ghostElement, 20, 20);
+
+      // Clean up the ghost element after a short delay
+      setTimeout(() => {
+        if (ghostElement.parentNode) {
+          document.body.removeChild(ghostElement);
+        }
+      }, 100);
+    } catch (error) {
+      console.warn('Failed to create custom drag image:', error);
+      // Fall back to default drag image
     }
   };
   
   const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
-    // Eliminar clase CSS de arrastre
+    // Remove dragging-related classes from the dragged item
     if (dragItemRef.current) {
-      dragItemRef.current.classList.remove('dragging');
-      dragItemRef.current = null;
+      dragItemRef.current.classList.remove('card-moving');
     }
     
-    if (e.currentTarget) {
-      e.currentTarget.classList.remove('dragging');
-    }
+    // Get and remove any columns with drag-over class
+    const columns = document.querySelectorAll('.column-content');
+    columns.forEach(column => column.classList.remove('drag-over'));
     
-    // Eliminar el elemento clonado para el arrastre
-    if (dragImageRef.current) {
-      document.body.removeChild(dragImageRef.current);
-      dragImageRef.current = null;
-    }
-    
-    draggedItemIndexRef.current = -1;
-    draggedItemNewStatusRef.current = '';
+    // Clear the reference
+    dragItemRef.current = null;
   };
   
-  const handleDragOver = (e: React.DragEvent, columnStatus: string) => {
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
     
-    // Guardar el nuevo estado para la actualización optimista
-    if (draggedItemNewStatusRef.current !== columnStatus) {
-      draggedItemNewStatusRef.current = columnStatus;
-    }
-    
-    // Añadir clase visual para indicar la columna destino
-    if (e.currentTarget.classList.contains('kanban-column')) {
-      document.querySelectorAll('.kanban-column').forEach(col => {
-        col.classList.remove('drag-over');
-      });
+    // Add a class to the drop target
       e.currentTarget.classList.add('drag-over');
-    }
   };
   
-  // Verificar si el usuario puede arrastrar una tarjeta
-  const canDragCard = (app: ApplicationWithApproval): boolean => {
-    // No permitir arrastrar si la aplicación no tiene status o id
-    if (!app.status || !app.id) {
-      return false;
-    }
-    
-    // No permitir arrastrar tarjetas que están en proceso de cambio de estado
-    if (app.isMoving) {
-      return false;
-    }
-    
-    // No permitir arrastrar tarjetas que están siendo procesadas
-    if (processingAppId === app.id) {
-      return false;
-    }
-    
-    // Restricciones específicas basadas en el rol del usuario
-    
-    // Para asesores
-    if (isAdvisor()) {
-      // Estados que nunca pueden ser movidos por ningún usuario
-      const restrictedStatuses = [
-        APPLICATION_STATUS.EXPIRED,
-        APPLICATION_STATUS.CANCELLED,
-        APPLICATION_STATUS.POR_DISPERSAR
-      ];
-      
-      // No permitir arrastrar si está en un estado restringido
-      if (restrictedStatuses.includes(app.status as APPLICATION_STATUS)) {
-        return false;
-      }
-      
-      // Si tiene aprobaciones de ambos (asesor y empresa), no permitir mover
-      if (app.approvalStatus?.approvedByAdvisor && app.approvalStatus?.approvedByCompany) {
-        return false;
-      }
-      
-      return true;
-    }
-    
-    // Para administradores de empresa
-    if (isCompanyAdmin()) {
-      // Estados que nunca pueden ser movidos por un admin de empresa
-      const restrictedStatuses = [
-        APPLICATION_STATUS.POR_DISPERSAR,
-        APPLICATION_STATUS.COMPLETED,
-        APPLICATION_STATUS.EXPIRED,
-        APPLICATION_STATUS.CANCELLED,
-        APPLICATION_STATUS.REJECTED
-      ];
-      
-      // No permitir arrastrar si está en un estado restringido
-      if (restrictedStatuses.includes(app.status as APPLICATION_STATUS)) {
-        return false;
-      }
-      
-      // Si tiene aprobaciones de ambos (asesor y empresa), no permitir mover
-      if (app.approvalStatus?.approvedByAdvisor && app.approvalStatus?.approvedByCompany) {
-        return false;
-      }
-      
-      // MODIFICACIÓN: Aunque el asesor haya aprobado, el admin de empresa debe poder aprobar también
-      // Aquí no se impide mover la tarjeta si solo está aprobada por el asesor
-      
-      return true;
-    }
-    
-    // Para otros roles, no permitir arrastrar
-    return false;
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    // Remove the drag-over class
+    e.currentTarget.classList.remove('drag-over');
   };
   
-  // Modificar handleDrop para manejar correctamente el flujo independiente
+  const canMoveToStatus = (applicationStatus: string, newStatus: string, application: ApplicationWithApproval): boolean => {
+    // Don't allow moving to the same status
+    if (applicationStatus === newStatus) return false;
+
+    // Special case for moving to POR_DISPERSAR - only allow if both advisor and company have approved
+    if (newStatus === APPLICATION_STATUS.POR_DISPERSAR) {
+      // Allow the move only if both have approved or we're already in APPROVED state
+      const bothApproved = application.approvalStatus?.approvedByAdvisor === true && 
+                           application.approvalStatus?.approvedByCompany === true;
+      
+      // If we're not already in APPROVED, require both approvals
+      if (applicationStatus !== APPLICATION_STATUS.APPROVED && !bothApproved) {
+        console.log('Blocking move to POR_DISPERSAR - both advisor and company must approve first');
+        return false;
+      }
+      
+      // From APPROVED, always allow move to POR_DISPERSAR regardless of which view we're in
+      if (applicationStatus === APPLICATION_STATUS.APPROVED) {
+        console.log('Allowing move from APPROVED to POR_DISPERSAR');
+        return true;
+      }
+    }
+
+    // Status transition rules based on the specific view (advisor, company, or global)
+    if (statusField === 'advisor_status') {
+      // Advisor-specific rules
+      if (applicationStatus === APPLICATION_STATUS.NEW) {
+        // From NEW, advisors can move to IN_REVIEW, APPROVED or REJECTED
+        return newStatus === APPLICATION_STATUS.IN_REVIEW || 
+               newStatus === APPLICATION_STATUS.APPROVED || 
+               newStatus === APPLICATION_STATUS.REJECTED;
+      } else if (applicationStatus === APPLICATION_STATUS.IN_REVIEW) {
+        // From IN_REVIEW, advisors can go back to NEW, approve or reject
+        return newStatus === APPLICATION_STATUS.NEW || 
+               newStatus === APPLICATION_STATUS.APPROVED || 
+               newStatus === APPLICATION_STATUS.REJECTED;
+      } else if (applicationStatus === APPLICATION_STATUS.APPROVED) {
+        // Once approved, advisors can go back to IN_REVIEW, move to POR_DISPERSAR, or reject
+        return newStatus === APPLICATION_STATUS.IN_REVIEW || 
+               newStatus === APPLICATION_STATUS.POR_DISPERSAR ||
+               newStatus === APPLICATION_STATUS.REJECTED;
+      } else if (applicationStatus === APPLICATION_STATUS.POR_DISPERSAR) {
+        // Permitir a asesores retroceder de POR_DISPERSAR a EN_REVISIÓN para corregir errores
+        // o marcar como COMPLETED para indicar que se ha completado la dispersión
+        // o REJECTED para rechazar
+        return newStatus === APPLICATION_STATUS.IN_REVIEW || 
+               newStatus === APPLICATION_STATUS.COMPLETED || 
+               newStatus === APPLICATION_STATUS.REJECTED;
+      } else if (applicationStatus === APPLICATION_STATUS.REJECTED) {
+        // Permitir mover desde REJECTED a NEW o IN_REVIEW para reactivar
+        return newStatus === APPLICATION_STATUS.NEW || 
+               newStatus === APPLICATION_STATUS.IN_REVIEW || 
+               newStatus === APPLICATION_STATUS.APPROVED;
+      }
+    } 
+    else if (statusField === 'company_status') {
+      // Company-specific rules
+      if (applicationStatus === APPLICATION_STATUS.NEW) {
+        // From NEW, company can move to IN_REVIEW, APPROVED or REJECTED
+        return newStatus === APPLICATION_STATUS.IN_REVIEW || 
+               newStatus === APPLICATION_STATUS.APPROVED || 
+               newStatus === APPLICATION_STATUS.REJECTED;
+      } else if (applicationStatus === APPLICATION_STATUS.IN_REVIEW) {
+        // From IN_REVIEW, company can go back to NEW, approve or reject
+        return newStatus === APPLICATION_STATUS.NEW || 
+               newStatus === APPLICATION_STATUS.APPROVED || 
+               newStatus === APPLICATION_STATUS.REJECTED;
+      } else if (applicationStatus === APPLICATION_STATUS.APPROVED) {
+        // Once approved, company can go back to IN_REVIEW, move to POR_DISPERSAR, or reject
+        return newStatus === APPLICATION_STATUS.IN_REVIEW || 
+               newStatus === APPLICATION_STATUS.POR_DISPERSAR ||
+               newStatus === APPLICATION_STATUS.REJECTED;
+      } else if (applicationStatus === APPLICATION_STATUS.REJECTED) {
+        // Permitir mover desde REJECTED a NEW o IN_REVIEW para reactivar
+        return newStatus === APPLICATION_STATUS.NEW || 
+               newStatus === APPLICATION_STATUS.IN_REVIEW ||
+               newStatus === APPLICATION_STATUS.APPROVED;
+      }
+    }
+    else if (statusField === 'global_status') {
+      // Global view rules - this is for admins or the "por dispersar" stage and beyond
+      if (applicationStatus === APPLICATION_STATUS.NEW) {
+        // Can move from NEW to IN_REVIEW, APPROVED or REJECTED
+        return newStatus === APPLICATION_STATUS.IN_REVIEW || 
+               newStatus === APPLICATION_STATUS.APPROVED || 
+               newStatus === APPLICATION_STATUS.REJECTED;
+      } else if (applicationStatus === APPLICATION_STATUS.IN_REVIEW) {
+        // From IN_REVIEW, can move to NEW, APPROVED or REJECTED
+        if (newStatus === APPLICATION_STATUS.NEW) return true;
+        if (newStatus === APPLICATION_STATUS.APPROVED) {
+          // For global view, we still require both approvals when moving from IN_REVIEW to APPROVED
+          return application.approvalStatus?.approvedByAdvisor === true && 
+                 application.approvalStatus?.approvedByCompany === true;
+        }
+        if (newStatus === APPLICATION_STATUS.REJECTED) return true;
+        return false;
+      } else if (applicationStatus === APPLICATION_STATUS.APPROVED) {
+        // From APPROVED, can move to IN_REVIEW, POR_DISPERSAR or REJECTED
+        return newStatus === APPLICATION_STATUS.IN_REVIEW || 
+               newStatus === APPLICATION_STATUS.POR_DISPERSAR || 
+               newStatus === APPLICATION_STATUS.REJECTED;
+      } else if (applicationStatus === APPLICATION_STATUS.POR_DISPERSAR) {
+        // From POR_DISPERSAR, can move to APPROVED, COMPLETED, IN_REVIEW or REJECTED
+        return newStatus === APPLICATION_STATUS.APPROVED || 
+               newStatus === APPLICATION_STATUS.COMPLETED || 
+               newStatus === APPLICATION_STATUS.IN_REVIEW ||
+               newStatus === APPLICATION_STATUS.REJECTED;
+      } else if (applicationStatus === APPLICATION_STATUS.COMPLETED) {
+        // Completed applications cannot be moved
+        return false;
+      } else if (applicationStatus === APPLICATION_STATUS.REJECTED) {
+        // Permitir mover desde REJECTED a otros estados para reactivar
+        return newStatus === APPLICATION_STATUS.NEW || 
+               newStatus === APPLICATION_STATUS.IN_REVIEW ||
+               newStatus === APPLICATION_STATUS.APPROVED;
+      }
+    } else {
+      // Default rules for the standard status field
+      if (applicationStatus === APPLICATION_STATUS.NEW) {
+        // Can move from NEW to IN_REVIEW, APPROVED or REJECTED
+        return newStatus === APPLICATION_STATUS.IN_REVIEW || 
+               newStatus === APPLICATION_STATUS.APPROVED ||
+               newStatus === APPLICATION_STATUS.REJECTED;
+      } else if (applicationStatus === APPLICATION_STATUS.IN_REVIEW) {
+        // From IN_REVIEW, can move to NEW or APPROVED or REJECTED
+        if (newStatus === APPLICATION_STATUS.NEW) return true;
+        if (newStatus === APPLICATION_STATUS.APPROVED) {
+          if (isAdvisor()) {
+            return application.approvalStatus?.approvedByAdvisor === true;
+          }
+          else if (isCompanyAdmin()) {
+            return application.approvalStatus?.approvedByCompany === true;
+          }
+          else {
+            return application.approvalStatus?.approvedByAdvisor === true && 
+                   application.approvalStatus?.approvedByCompany === true;
+          }
+        }
+        if (newStatus === APPLICATION_STATUS.REJECTED) return true;
+        return false;
+      } else if (applicationStatus === APPLICATION_STATUS.APPROVED) {
+        // From APPROVED, can move to IN_REVIEW, POR_DISPERSAR or REJECTED
+        return newStatus === APPLICATION_STATUS.IN_REVIEW || 
+               newStatus === APPLICATION_STATUS.POR_DISPERSAR ||
+               newStatus === APPLICATION_STATUS.REJECTED;
+      } else if (applicationStatus === APPLICATION_STATUS.POR_DISPERSAR) {
+        // From POR_DISPERSAR, can move to APPROVED, COMPLETED, IN_REVIEW or REJECTED
+        if (isAdvisor() && newStatus === APPLICATION_STATUS.IN_REVIEW) return true;
+        if (isAdvisor() && newStatus === APPLICATION_STATUS.REJECTED) return true;
+        if (isAdvisor() && newStatus === APPLICATION_STATUS.COMPLETED) return true;
+        if (isCompanyAdmin() && newStatus === APPLICATION_STATUS.REJECTED) return true;
+        if (isCompanyAdmin() && newStatus === APPLICATION_STATUS.IN_REVIEW) return true;
+        
+        // For other roles or transitions
+        return newStatus === APPLICATION_STATUS.APPROVED || 
+               newStatus === APPLICATION_STATUS.COMPLETED;
+      } else if (applicationStatus === APPLICATION_STATUS.COMPLETED) {
+        // Completed applications cannot be moved
+        return false;
+      } else if (applicationStatus === APPLICATION_STATUS.REJECTED) {
+        // Permitir mover desde REJECTED a otros estados para reactivar
+        return newStatus === APPLICATION_STATUS.NEW || 
+               newStatus === APPLICATION_STATUS.IN_REVIEW ||
+               newStatus === APPLICATION_STATUS.APPROVED;
+      }
+    }
+      
+    // Default: allow movement between states that don't have specific rules
+    return true;
+  };
+  
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>, newStatus: string) => {
     e.preventDefault();
-    e.stopPropagation();
     
-    // Eliminar todas las clases de arrastre
-    document.querySelectorAll('.kanban-column').forEach(col => {
-      col.classList.remove('drag-over');
-    });
+    // Clear styling
+    e.currentTarget.classList.remove('drag-over');
     
-    // Verificar que el newStatus es válido
-    const validStatuses = Object.values(APPLICATION_STATUS);
-    if (!validStatuses.includes(newStatus as APPLICATION_STATUS)) {
-      console.error(`Estado inválido para drop: ${newStatus}`);
-      setErrorMessage(`Error: estado "${newStatus}" no es válido.`);
+    // Check if something is being dragged
+    if (!dragItemRef.current) {
+      console.warn('Nothing is being dragged');
       return;
     }
     
-    // Recuperar el ID de la aplicación
-    const applicationId = e.dataTransfer.getData('text/plain');
-    if (!applicationId || !user?.id) return;
-    
+    // Extract application data from the dataTransfer
+    const applicationId = e.dataTransfer.getData('application/id');
     const application = appsWithApproval.find(app => app.id === applicationId);
-    if (!application) return;
     
-    const oldStatus = application.status || APPLICATION_STATUS.NEW;
+    if (!application) {
+      console.error('Application not found:', applicationId);
+      return;
+    }
+        
+    // Don't allow dropping in the same column or if processing another application
+    if (application.status === newStatus || processingAppId !== null) {
+      return;
+    }
+        
+    // Check if this transition is allowed
+    if (!canMoveToStatus(application.status, newStatus, application)) {
+      if (application.status === APPLICATION_STATUS.IN_REVIEW && newStatus === APPLICATION_STATUS.APPROVED) {
+        // Mensaje personalizado según el rol del usuario
+        if (isAdvisor() && !application.approvalStatus?.approvedByAdvisor) {
+          setWarnMessage('No puedes aprobar esta solicitud. Debes aprobarla primero desde la página de detalle.');
+        } else if (isCompanyAdmin() && !application.approvalStatus?.approvedByCompany) {
+          setWarnMessage('No puedes aprobar esta solicitud. Debes aprobarla primero desde la página de detalle.');
+        } else {
+          // Para otros roles, mostrar mensaje sobre ambas aprobaciones
+          const missingApprovals = [];
+          if (!application.approvalStatus?.approvedByAdvisor) missingApprovals.push('del asesor');
+          if (!application.approvalStatus?.approvedByCompany) missingApprovals.push('de la empresa');
+          
+          setWarnMessage(`No se puede aprobar esta solicitud. Falta aprobación ${missingApprovals.join(' y ')}.`);
+        }
+        setTimeout(() => setWarnMessage(null), 5000);
+      } else if (newStatus === APPLICATION_STATUS.POR_DISPERSAR) {
+        // Caso especial para movimientos a POR_DISPERSAR
+        const bothApproved = application.approvalStatus?.approvedByAdvisor === true && 
+                             application.approvalStatus?.approvedByCompany === true;
+        
+        if (!bothApproved && application.status !== APPLICATION_STATUS.APPROVED) {
+          const missingApprovals = [];
+          if (!application.approvalStatus?.approvedByAdvisor) missingApprovals.push('del asesor');
+          if (!application.approvalStatus?.approvedByCompany) missingApprovals.push('de la empresa');
+          
+          setErrorMessage(`Para mover a "Por Dispersar" se requiere aprobación ${missingApprovals.join(' y ')}, o estar en estado "Aprobado".`);
+        } else {
+          setErrorMessage(`No se permite cambiar el estado de "${STATUS_LABELS[application.status as keyof typeof STATUS_LABELS]}" a "${STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS]}". Revise las condiciones.`);
+        }
+        setTimeout(() => setErrorMessage(null), 5000);
+      } else {
+        // General transition not allowed message
+        setErrorMessage(`No se permite cambiar el estado de "${STATUS_LABELS[application.status as keyof typeof STATUS_LABELS]}" a "${STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS]}"`);
+        setTimeout(() => setErrorMessage(null), 5000);
+      }
+      return;
+    }
     
-    // No hacer nada si el estatus es el mismo
-    if (oldStatus === newStatus) return;
+    // Bail if there's no status change handler
+    if (!onStatusChange) {
+      setWarnMessage('No tienes permisos para cambiar el estado de las solicitudes');
+      setTimeout(() => setWarnMessage(null), 3000);
+      return;
+    }
     
-    console.log(`Intentando mover tarjeta ${applicationId} de ${oldStatus} a ${newStatus}`);
+    // Mark that we're processing this application
+    setProcessingAppId(applicationId);
     
-      // Establecer el ID de la aplicación que se está procesando
-      setProcessingAppId(applicationId);
-      
+    // Mark this application as moving in the UI
+    setAppsWithApproval(prev => 
+      prev.map(app => 
+        app.id === applicationId
+          ? { ...app, isMoving: true } 
+          : app
+      )
+    );
+    
     try {
-      // Para administradores de empresa (FLUJO INDEPENDIENTE)
-      if (isCompanyAdmin()) {
-        // El admin de empresa solo puede mover tarjetas entre estos estados
-        const allowedTargetStates = [
-          APPLICATION_STATUS.NEW,
-          APPLICATION_STATUS.IN_REVIEW,
-          APPLICATION_STATUS.APPROVED
-        ];
-        
-        // Si intenta mover a un estado que no está permitido
-        if (!allowedTargetStates.includes(newStatus as APPLICATION_STATUS)) {
-          setErrorMessage(`No puedes mover solicitudes al estado "${STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS] || newStatus}". Solo puedes mover entre Nuevo, En Revisión y Aprobado por mí.`);
-          setProcessingAppId(null);
-          return;
-        }
-        
-        // Estados que nunca pueden ser movidos por un admin de empresa
-        const restrictedStatuses = [
-          APPLICATION_STATUS.POR_DISPERSAR,
-          APPLICATION_STATUS.COMPLETED,
-          APPLICATION_STATUS.EXPIRED,
-          APPLICATION_STATUS.CANCELLED,
-          APPLICATION_STATUS.REJECTED
-        ];
-        
-        // Si la tarjeta está en un estado restringido, no permitir moverla
-        if (restrictedStatuses.includes(oldStatus as APPLICATION_STATUS)) {
-          setErrorMessage(`No puedes mover solicitudes que están en estado "${STATUS_LABELS[oldStatus as keyof typeof STATUS_LABELS] || oldStatus}".`);
-          setProcessingAppId(null);
-          return;
-        }
-        
-        // Actualización optimista en UI para mejor fluidez
-      const updatedApps = [...appsWithApproval];
-      const appIndex = updatedApps.findIndex(app => app.id === applicationId);
+      // IMPORTANTE: Crear un payload que solo contenga el campo de status específico
+      // para evitar que se actualicen otros campos
+      const payload: ApplicationStatusPayload = { 
+        id: application.id,
+        // Solo incluir el campo correspondiente al statusField actual
+      };
       
-      if (appIndex !== -1) {
-          // Crear copia profunda para evitar referencias
-        const updatedApp = { 
-          ...updatedApps[appIndex], 
-          isMoving: true,
-          targetStatus: newStatus 
-        };
-        
-          if (newStatus === APPLICATION_STATUS.NEW) {
-            // Mover a Nuevo
-            updatedApp.company_review_status = false;
-          updatedApp.approvalStatus = {
-            ...(updatedApp.approvalStatus || { approvedByAdvisor: false, approvedByCompany: false }),
-              approvedByCompany: false
-            };
+      // Solo añadir el campo que necesitamos actualizar, no todos los campos de estado
+      if (statusField === 'advisor_status') {
+        payload.advisor_status = newStatus;
+      } else if (statusField === 'company_status') {
+        payload.company_status = newStatus;
+      } else if (statusField === 'global_status') {
+        payload.global_status = newStatus;
+      } else {
+        payload.status = newStatus;
+      }
+
+      console.log(`Actualizando ${statusField} a ${newStatus} para aplicación ${application.id}. Payload:`, payload);
+      
+      // Call the parent component to update the status
+      await onStatusChange(
+        payload,
+        newStatus,
+        statusField
+      );
+      
+      // Update local state after successful change
+      setAppsWithApproval(prev => 
+        prev.map(app => {
+          if (app.id === applicationId) {
+            // Create a new object with updated status
+            const updatedApp = { ...app, isMoving: false };
             
-            // Si estaba aprobado y se mueve a Nuevo, hay que quitar la aprobación de la empresa
-            if (updatedApp.approvalStatus?.approvedByCompany && user?.entityId && application.company_id) {
-              try {
-                console.log("Quitando aprobación de empresa en la base de datos");
-                // Ejecutamos una consulta SQL para quitar la aprobación
-                const query = `
-                  UPDATE ${TABLES.APPLICATIONS}
-                  SET approved_by_company = false, 
-                      approval_date_company = NULL
-                  WHERE id = '${applicationId}' AND company_id = '${application.company_id}'
-                  RETURNING *
-                `;
+            // IMPORTANTE: Handle rejection specifically to ensure UI consistency
+            if (newStatus === APPLICATION_STATUS.REJECTED) {
+              // Si la solicitud se está rechazando, actualizar todos los estados
+              // para mantener consistencia con la lógica del backend
+              updatedApp.status = APPLICATION_STATUS.REJECTED;
+              updatedApp.advisor_status = APPLICATION_STATUS.REJECTED;
+              updatedApp.company_status = APPLICATION_STATUS.REJECTED;
+              updatedApp.global_status = APPLICATION_STATUS.REJECTED;
+              
+              // IMPORTANTE: Establecer SOLO UNO de los flags de rechazo, nunca ambos
+              // Esto debe coincidir exactamente con la lógica del backend
+              if (statusField === 'advisor_status') {
+                // Rechazado por el asesor - explícitamente marcar solo uno
+                updatedApp.approvalStatus = {
+                  ...updatedApp.approvalStatus,
+                  rejectedByAdvisor: true,
+                  rejectedByCompany: false, // Explícitamente false para evitar doble rechazo
+                  approvedByAdvisor: false, // Quitar aprobación del asesor
+                  approvedByCompany: updatedApp.approvalStatus?.approvedByCompany || false, // Mantener estado previo
+                  isFullyApproved: false
+                };
+                console.log(`Aplicación ${app.id} - Actualizada localmente como rechazada ÚNICAMENTE por asesor`);
+              } else if (statusField === 'company_status') {
+                // Rechazado por la empresa - explícitamente marcar solo uno
+                updatedApp.approvalStatus = {
+                  ...updatedApp.approvalStatus,
+                  rejectedByCompany: true,
+                  rejectedByAdvisor: false, // Explícitamente false para evitar doble rechazo
+                  approvedByCompany: false, // Quitar aprobación de la empresa
+                  approvedByAdvisor: updatedApp.approvalStatus?.approvedByAdvisor || false, // Mantener estado previo
+                  isFullyApproved: false
+                };
+                console.log(`Aplicación ${app.id} - Actualizada localmente como rechazada ÚNICAMENTE por empresa`);
+              } else {
+                // Para global_status o status general, determinar basado en el rol del usuario actual
+                const userIsAdvisor = isAdvisor();
+                const userIsCompanyAdmin = isCompanyAdmin();
                 
-                const response = await fetch('http://localhost:3100/query', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({ query }),
-                });
-                
-                const result = await response.json();
-                if (result.error) {
-                  throw new Error(result.error);
-                }
-                
-                console.log("✅ Aprobación de empresa removida correctamente:", result.data);
-                
-                // Registrar en historial
-                const historyQuery = `
-                  INSERT INTO ${APPLICATION_HISTORY_TABLE} (application_id, status, comment, created_by)
-                  VALUES ('${applicationId}', 'new', 'Regresado a Nuevo por administrador de empresa', '${user.entityId}')
-                  RETURNING *
-                `;
-                
-                await fetch('http://localhost:3100/query', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({ query: historyQuery }),
-                });
-                
-                // Actualizar UI explícitamente
-                updateLocalApprovalStatus(applicationId, { approvedByCompany: false }, APPLICATION_STATUS.NEW);
-              } catch (error) {
-                console.error("❌ Error al quitar aprobación de empresa:", error);
-                setErrorMessage(`Error al quitar aprobación: ${(error as Error).message}`);
-              }
-            }
-          } 
-          else if (newStatus === APPLICATION_STATUS.IN_REVIEW) {
-            // Mover a En Revisión
-            updatedApp.company_review_status = true;
-          updatedApp.approvalStatus = {
-            ...(updatedApp.approvalStatus || { approvedByAdvisor: false, approvedByCompany: false }),
-              approvedByCompany: false
-            };
-            
-            // Si estaba aprobado y se mueve a En Revisión, hay que quitar la aprobación de la empresa
-            if (oldStatus === APPLICATION_STATUS.APPROVED && 
-                updatedApp.approvalStatus?.approvedByCompany && 
-                user?.entityId && 
-                application.company_id) {
-              try {
-                console.log("Quitando aprobación de empresa en la base de datos");
-                // Ejecutamos una consulta SQL para quitar la aprobación
-                const query = `
-                  UPDATE ${TABLES.APPLICATIONS}
-                  SET approved_by_company = false, 
-                      approval_date_company = NULL,
-                      status = '${APPLICATION_STATUS.IN_REVIEW}'
-                  WHERE id = '${applicationId}' AND company_id = '${application.company_id}'
-                  RETURNING *
-                `;
-                
-                const response = await fetch('http://localhost:3100/query', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({ query }),
-                });
-                
-                const result = await response.json();
-                if (result.error) {
-                  throw new Error(result.error);
-                }
-                
-                console.log("✅ Aprobación de empresa removida correctamente:", result.data);
-                
-                // Registrar en historial
-                const historyQuery = `
-                  INSERT INTO ${APPLICATION_HISTORY_TABLE} (application_id, status, comment, created_by)
-                  VALUES ('${applicationId}', 'in_review', 'Revisión adicional requerida por empresa', '${user.entityId}')
-                  RETURNING *
-                `;
-                
-                await fetch('http://localhost:3100/query', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({ query: historyQuery }),
-                });
-                
-                // Actualizar UI explícitamente con ambas propiedades
-                updateLocalApprovalStatus(applicationId, { 
-                  approvedByCompany: false 
-                }, APPLICATION_STATUS.IN_REVIEW);
-                
-                // Forzar actualización global de la aplicación para todos los usuarios
-                // llamando a la API de cambio de estado
-                if (onStatusChange) {
-                  try {
-                    await onStatusChange(application, APPLICATION_STATUS.IN_REVIEW);
-                    console.log("✅ Estado actualizado correctamente a EN REVISIÓN");
-                  } catch (error) {
-                    console.error("❌ Error al actualizar estado:", error);
+                if (userIsAdvisor) {
+                  // Si el usuario es asesor, marcar como rechazado ÚNICAMENTE por asesor
+                  updatedApp.approvalStatus = {
+                    ...updatedApp.approvalStatus,
+                    rejectedByAdvisor: true, 
+                    rejectedByCompany: false, // Explícitamente false para evitar doble rechazo
+                    approvedByAdvisor: false, // Quitar aprobación del asesor
+                    approvedByCompany: updatedApp.approvalStatus?.approvedByCompany || false, // Mantener estado previo
+                    isFullyApproved: false
+                  };
+                  console.log(`Aplicación ${app.id} - Actualizada localmente como rechazada ÚNICAMENTE por asesor (basado en rol)`);
+                } else if (userIsCompanyAdmin) {
+                  // Si el usuario es admin de empresa, marcar como rechazado ÚNICAMENTE por empresa
+                  updatedApp.approvalStatus = {
+                    ...updatedApp.approvalStatus,
+                    rejectedByCompany: true,
+                    rejectedByAdvisor: false, // Explícitamente false para evitar doble rechazo
+                    approvedByCompany: false, // Quitar aprobación de la empresa
+                    approvedByAdvisor: updatedApp.approvalStatus?.approvedByAdvisor || false, // Mantener estado previo
+                    isFullyApproved: false
+                  };
+                  console.log(`Aplicación ${app.id} - Actualizada localmente como rechazada ÚNICAMENTE por empresa (basado en rol)`);
+                } else {
+                  // Para roles administrativos, determinar basado en contexto previo
+                  if (app.approvalStatus?.approvedByAdvisor && !app.approvalStatus?.approvedByCompany) {
+                    // Si el asesor ya aprobó pero la empresa no, inferir que la empresa rechazó
+                    updatedApp.approvalStatus = {
+                      ...updatedApp.approvalStatus,
+                      rejectedByCompany: true,
+                      rejectedByAdvisor: false, // Explícitamente false para evitar doble rechazo
+                      approvedByCompany: false, // Quitar aprobación de la empresa
+                      approvedByAdvisor: true, // Mantener aprobación del asesor
+                      isFullyApproved: false
+                    };
+                    console.log(`Aplicación ${app.id} - Inferida como rechazada ÚNICAMENTE por empresa (basado en aprobación previa)`);
+                  } else if (app.approvalStatus?.approvedByCompany && !app.approvalStatus?.approvedByAdvisor) {
+                    // Si la empresa ya aprobó pero el asesor no, inferir que el asesor rechazó
+                    updatedApp.approvalStatus = {
+                      ...updatedApp.approvalStatus,
+                      rejectedByAdvisor: true,
+                      rejectedByCompany: false, // Explícitamente false para evitar doble rechazo
+                      approvedByAdvisor: false, // Quitar aprobación del asesor
+                      approvedByCompany: true, // Mantener aprobación de la empresa
+                      isFullyApproved: false
+                    };
+                    console.log(`Aplicación ${app.id} - Inferida como rechazada ÚNICAMENTE por asesor (basado en aprobación previa)`);
+                  } else {
+                    // Si el contexto no es claro, elegir explícitamente la empresa por defecto
+                    // para mantener consistencia con el backend
+                    updatedApp.approvalStatus = {
+                      ...updatedApp.approvalStatus,
+                      rejectedByCompany: true,
+                      rejectedByAdvisor: false, // Explícitamente false para evitar doble rechazo
+                      approvedByCompany: false,
+                      approvedByAdvisor: false,
+                      isFullyApproved: false
+                    };
+                    console.log(`Aplicación ${app.id} - Marcada como rechazada ÚNICAMENTE por empresa por defecto`);
                   }
                 }
-              } catch (error) {
-                console.error("❌ Error al quitar aprobación de empresa:", error);
-                setErrorMessage(`Error al quitar aprobación: ${(error as Error).message}`);
+              }
+              
+              console.log(`Estado local tras rechazo actualizado:`, updatedApp);
+            } else {
+              // For all other status changes, update only the specific field
+              // and the local view status
+            if (statusField === 'advisor_status') {
+              updatedApp.advisor_status = newStatus;
+              updatedApp.status = newStatus; // This is the view-specific status
+              
+              // Si estamos moviendo directo de NEW a APPROVED, actualizar el indicador de aprobación del asesor
+              if (app.status === APPLICATION_STATUS.NEW && newStatus === APPLICATION_STATUS.APPROVED) {
+                updatedApp.approvalStatus = {
+                  ...app.approvalStatus,
+                  approvedByAdvisor: true,
+                    isFullyApproved: app.approvalStatus?.approvedByCompany === true,
+                    rejectedByAdvisor: false
+                };
+              }
+            } else if (statusField === 'company_status') {
+              updatedApp.company_status = newStatus;
+              updatedApp.status = newStatus; // This is the view-specific status
+              
+              // Si estamos moviendo directo de NEW a APPROVED, actualizar el indicador de aprobación de la empresa
+              if (app.status === APPLICATION_STATUS.NEW && newStatus === APPLICATION_STATUS.APPROVED) {
+                updatedApp.approvalStatus = {
+                  ...app.approvalStatus,
+                  approvedByCompany: true,
+                    isFullyApproved: app.approvalStatus?.approvedByAdvisor === true,
+                    rejectedByCompany: false
+                };
+              }
+            } else if (statusField === 'global_status') {
+              updatedApp.global_status = newStatus;
+              updatedApp.status = newStatus; // This is the view-specific status
+              
+              // Si estamos moviendo directo de NEW a APPROVED en global_status, establecer ambos como aprobados
+              if (app.status === APPLICATION_STATUS.NEW && newStatus === APPLICATION_STATUS.APPROVED) {
+                updatedApp.approvalStatus = {
+                  ...app.approvalStatus,
+                  approvedByAdvisor: true,
+                  approvedByCompany: true,
+                    isFullyApproved: true,
+                    rejectedByAdvisor: false,
+                    rejectedByCompany: false
+                };
               }
             } else {
-              // Incluso si no estaba aprobada, forzar actualización de estado
-              if (onStatusChange) {
-                try {
-                  await onStatusChange(application, APPLICATION_STATUS.IN_REVIEW);
-                  console.log("✅ Estado actualizado correctamente a EN REVISIÓN");
-                } catch (error) {
-                  console.error("❌ Error al actualizar estado:", error);
+              updatedApp.status = newStatus;
+              
+              // Si estamos moviendo directo de NEW a APPROVED en el status principal
+              if (app.status === APPLICATION_STATUS.NEW && newStatus === APPLICATION_STATUS.APPROVED) {
+                if (isAdvisor()) {
+              updatedApp.approvalStatus = {
+                ...app.approvalStatus,
+                    approvedByAdvisor: true,
+                      isFullyApproved: app.approvalStatus?.approvedByCompany === true,
+                      rejectedByAdvisor: false
+                  };
+                } else if (isCompanyAdmin()) {
+                  updatedApp.approvalStatus = {
+                    ...app.approvalStatus,
+                    approvedByCompany: true,
+                      isFullyApproved: app.approvalStatus?.approvedByAdvisor === true,
+                      rejectedByCompany: false
+                  };
+                } else {
+                  // Para rol de admin, establecer ambos como aprobados
+                  updatedApp.approvalStatus = {
+                    ...app.approvalStatus,
+                    approvedByAdvisor: true,
+                    approvedByCompany: true,
+                      isFullyApproved: true,
+                    rejectedByAdvisor: false,
+                      rejectedByCompany: false
+                    };
+                  }
                 }
               }
             }
-          } 
-          else if (newStatus === APPLICATION_STATUS.APPROVED) {
-            // Mover a Aprobado por mí
-            updatedApp.company_review_status = true; // Se considera revisado si está aprobado
-            updatedApp.approvalStatus = {
-              ...(updatedApp.approvalStatus || { approvedByAdvisor: false, approvedByCompany: false }),
-              approvedByCompany: true
-            };
             
-            // Llamar a la API para aprobar por empresa
-            if (user?.entityId && application.company_id) {
-              try {
-                console.log(`Empresa ${user.entityId} está aprobando la solicitud ${applicationId}`);
-                
-                // Aplicar cambio optimista a la UI primero
-                updatedApps[appIndex] = updatedApp;
-                setAppsWithApproval([...updatedApps]);
-                
-                // Llamar a la API y esperar a que termine
-                const result = await approveByCompany(
-                  applicationId, 
-                  "Aprobado vía Kanban", 
-                  user.entityId, 
-                  application.company_id, 
-                  { company_id: application.company_id } // Pasar company_id en el entityFilter
-                );
-                
-                console.log("✅ Aplicación aprobada por empresa:", result);
-                
-                // Actualizar UI con respuesta del servidor
-                updateLocalApprovalStatus(applicationId, { approvedByCompany: true });
-                
-                // Verificar si la aplicación ya está aprobada por el asesor
-                const approvalStatus = await getApprovalStatus(applicationId);
-                console.log("Estado de aprobación actual:", approvalStatus);
-                
-                // Si está aprobada por ambos, mover automáticamente a "por_dispersar"
-                if (approvalStatus?.approvedByAdvisor) {
-                  console.log("❇️ Ambas aprobaciones completadas, moviendo a Por Dispersar");
-                  // Mostrar notificación de transición automática
-                  setAutoTransitionMessage(`La solicitud ha sido aprobada por asesor y empresa. Moviendo automáticamente a "${STATUS_LABELS[APPLICATION_STATUS.POR_DISPERSAR] || 'Por Dispersar'}"`);
-                  
-                  // Cambiar el estado a "por_dispersar" después de un breve retraso
-                  setTimeout(() => {
-                    if (onStatusChange) {
-                      onStatusChange(application, APPLICATION_STATUS.POR_DISPERSAR);
-                    }
-                    // Limpiar el mensaje después de mostrar
-                    setTimeout(() => setAutoTransitionMessage(null), 3000);
-                  }, 500);
-                }
-              } catch (error) {
-                console.error("❌ Error al aprobar por empresa:", error);
-                setErrorMessage(`Error al aprobar: ${(error as Error).message}`);
-                
-                // Revertir el estado optimista en caso de error
-            updatedApp.approvalStatus = {
-              ...(updatedApp.approvalStatus || { approvedByAdvisor: false, approvedByCompany: false }),
-              approvedByCompany: false
-            };
-                updatedApps[appIndex] = updatedApp;
-                setAppsWithApproval([...updatedApps]);
-              }
+            return updatedApp;
           }
-        }
-        
-          // Actualizar la app en el estado
-        updatedApps[appIndex] = updatedApp;
-        setAppsWithApproval(updatedApps);
-          
-          // Quitar la marca de movimiento después de un breve retraso
-          setTimeout(() => {
-            setAppsWithApproval(prev => 
-              prev.map(app => 
-                app.id === applicationId
-                  ? { ...app, isMoving: false, targetStatus: undefined }
-                  : app
-              )
-            );
-            setProcessingAppId(null);
-          }, 500);
-        }
-      }
-      // Para asesores (flujo normal)
-      else if (isAdvisor()) {
-        // Verificar que el estado es válido
-        if (!validStatuses.includes(newStatus as APPLICATION_STATUS)) {
-          setErrorMessage(`Estado de destino "${newStatus}" no es válido.`);
-          setProcessingAppId(null);
-          return;
-        }
-        
-        // Actualización optimista en UI
-        const updatedApps = [...appsWithApproval];
-        const appIndex = updatedApps.findIndex(app => app.id === applicationId);
-        
-        if (appIndex !== -1) {
-          // Crear copia profunda para evitar referencias
-          const updatedApp = { 
-            ...updatedApps[appIndex], 
-            isMoving: true, 
-            targetStatus: newStatus, 
-            status: newStatus as Application['status'] // actualizar el estado directamente
-          };
-          
-          // Lógica para manejar aprobaciones de manera optimista
-          if (newStatus === APPLICATION_STATUS.APPROVED) {
-            console.log(`Advisor ${user?.id} está aprobando la solicitud ${applicationId}`);
-            
-            // Actualizar inmediatamente el estado visual de aprobación del asesor
-            // para una respuesta inmediata en la UI
-            updatedApp.approvalStatus = {
-              ...(updatedApp.approvalStatus || { approvedByAdvisor: false, approvedByCompany: false }),
-              approvedByAdvisor: true  // Optimistically set to true
-            };
-            
-            // Aplicar cambio optimista a la UI
-            updatedApps[appIndex] = updatedApp;
-            setAppsWithApproval([...updatedApps]);  // Clone to trigger re-render
-            
-            // Llamar a la API para aprobar por asesor
-            if (user?.entityId) {
-              try {
-                // Llamar a la API y esperar a que termine
-                console.log("Llamando a approveByAdvisor API...");
-                const result = await approveByAdvisor(
-            applicationId, 
-            "Aprobado vía Kanban", 
-            user.entityId, 
-                  { advisor_id: user.entityId }  // Ensure we're using the advisor filter
-                );
-                
-                console.log("✅ Aplicación aprobada por asesor:", result);
-                
-                // Actualizar UI con respuesta del servidor explícitamente
-                // para asegurar que el indicador se actualiza correctamente
-                updateLocalApprovalStatus(applicationId, { approvedByAdvisor: true });
-                
-                // Verificar si la aplicación ya está aprobada por la empresa
-                const approvalStatus = await getApprovalStatus(applicationId);
-                console.log("Estado de aprobación actual:", approvalStatus);
-                
-                // Si está aprobada por ambos, mover automáticamente a "por_dispersar"
-                if (approvalStatus?.approvedByCompany) {
-                  // Mostrar notificación de transición automática
-                  setAutoTransitionMessage(`La solicitud ha sido aprobada por asesor y empresa. Moviendo automáticamente a "${STATUS_LABELS[APPLICATION_STATUS.POR_DISPERSAR] || 'Por Dispersar'}"`);
-                  
-                  // Cambiar el estado a "por_dispersar" después de un breve retraso
-                  setTimeout(() => {
-                    if (onStatusChange) {
-                      onStatusChange(application, APPLICATION_STATUS.POR_DISPERSAR);
-                    }
-                    // Limpiar el mensaje después de mostrar
-                    setTimeout(() => setAutoTransitionMessage(null), 3000);
-                  }, 500);
-                }
-              } catch (error) {
-                console.error("❌ Error al aprobar por asesor:", error);
-                setErrorMessage(`Error al aprobar: ${(error as Error).message}`);
-                
-                // Revertir el estado optimista en caso de error
-                // pero solo si realmente falló la aprobación
-                const appToPatch = appsWithApproval.find(app => app.id === applicationId);
-                if (appToPatch) {
-                  updateLocalApprovalStatus(applicationId, { approvedByAdvisor: false });
-                }
-              }
-            }
-          }
-          // Si se mueve de APPROVED a otro estado, quitar la aprobación
-          else if (oldStatus === APPLICATION_STATUS.APPROVED && newStatus !== APPLICATION_STATUS.POR_DISPERSAR) {
-            console.log("Moviendo de aprobado a otro estado, resetear aprobación de asesor");
-            updatedApp.approvalStatus = {
-              ...(updatedApp.approvalStatus || { approvedByAdvisor: false, approvedByCompany: false }),
-              approvedByAdvisor: false
-            };
-            
-            // Actualizar en BD para quitar aprobación (nueva API)
-            if (user?.entityId && newStatus === APPLICATION_STATUS.IN_REVIEW) {
-              try {
-                console.log("Quitando aprobación de asesor en la base de datos");
-                // Ejecutamos una consulta SQL para quitar la aprobación
-                const query = `
-                  UPDATE ${TABLES.APPLICATIONS}
-                  SET approved_by_advisor = false, 
-                      approval_date_advisor = NULL
-                  WHERE id = '${applicationId}' AND assigned_to = '${user.entityId}'
-                  RETURNING *
-                `;
-                
-                const response = await fetch('http://localhost:3100/query', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({ query }),
-                });
-                
-                const result = await response.json();
-                if (result.error) {
-                  throw new Error(result.error);
-                }
-                
-                console.log("✅ Aprobación de asesor removida correctamente:", result.data);
-                
-                // Registrar en historial
-                const historyQuery = `
-                  INSERT INTO ${APPLICATION_HISTORY_TABLE} (application_id, status, comment, created_by)
-                  VALUES ('${applicationId}', 'in_review', 'Revisión adicional requerida', '${user.entityId}')
-                  RETURNING *
-                `;
-                
-                await fetch('http://localhost:3100/query', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({ query: historyQuery }),
-                });
-                
-                // Actualizar UI explícitamente
-                updateLocalApprovalStatus(applicationId, { approvedByAdvisor: false });
-              } catch (error) {
-                console.error("❌ Error al quitar aprobación del asesor:", error);
-                setErrorMessage(`Error al quitar aprobación: ${(error as Error).message}`);
-              }
-            }
-          }
-          
-          // Actualizar la app en el estado solo si no es una aprobación (ese caso ya lo manejamos arriba)
-          if (newStatus !== APPLICATION_STATUS.APPROVED) {
-            updatedApps[appIndex] = updatedApp;
-            setAppsWithApproval(updatedApps);
-          }
-          
-          // Llamar a la API para actualizar el estado
-          if (onStatusChange) {
-            try {
-              await onStatusChange(application, newStatus);
-            } catch (error) {
-          console.error("Error updating status:", error);
-              setErrorMessage(`Error al actualizar el estado: ${(error as Error).message}`);
-          
-              // Revertir cambios en caso de error
-          setAppsWithApproval(prev => 
-            prev.map(app => 
-              app.id === applicationId
-                    ? { ...app, status: oldStatus as Application['status'], isMoving: false, targetStatus: undefined }
-                : app
-            )
-          );
-            }
-          }
-          
-          // Quitar la marca de movimiento después de un breve retraso
-          setTimeout(() => {
-      setAppsWithApproval(prev => 
-        prev.map(app => 
-          app.id === applicationId
-                  ? { ...app, isMoving: false, targetStatus: undefined }
-            : app
-        )
+          return app;
+        })
       );
-            setProcessingAppId(null);
-          }, 500);
+      
+      // Show success message
+      if (newStatus === APPLICATION_STATUS.REJECTED) {
+        // Mensaje de rechazo según quién rechazó
+        if (statusField === 'advisor_status' || isAdvisor()) {
+          setSuccessMessage('Solicitud rechazada por el asesor');
+        } else if (statusField === 'company_status' || isCompanyAdmin()) {
+          setSuccessMessage('Solicitud rechazada por la empresa');
+      } else {
+          setSuccessMessage('Solicitud rechazada');
         }
+      } else {
+        setSuccessMessage(`Solicitud movida a "${STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS]}"`);
       }
+      
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 3000);
     } catch (error) {
-      console.error("Error in handleDrop:", error);
-      setErrorMessage(`Error al actualizar el estado: ${(error as Error).message}`);
+      console.error('Error updating application status:', error);
+      setErrorMessage(`Error al actualizar el estado: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      setTimeout(() => setErrorMessage(null), 5000);
+    } finally {
       setProcessingAppId(null);
     }
   };
   
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-MX', {
-      style: 'currency',
-      currency: 'MXN',
-    }).format(amount);
+  // Function to get the appropriate card color based on its approval status
+  const getCardColor = (app: ApplicationWithApproval) => {
+    // Here you can implement different styling based on approval status
+    if (app.isMoving) return 'card-moving';
+    
+    // Use the status that corresponds to the current view
+    const viewStatus = statusField === 'advisor_status' ? app.advisor_status :
+                       statusField === 'company_status' ? app.company_status :
+                       statusField === 'global_status' ? app.global_status : 
+                       app.status;
+    
+    switch (viewStatus) {
+      case APPLICATION_STATUS.NEW:
+        return 'bg-white border-l-yellow-400';
+      case APPLICATION_STATUS.IN_REVIEW:
+        return 'bg-white border-l-blue-400';
+      case APPLICATION_STATUS.APPROVED:
+        return 'bg-white border-l-green-400';
+      case APPLICATION_STATUS.REJECTED:
+        return 'bg-white border-l-red-400';
+      case APPLICATION_STATUS.POR_DISPERSAR:
+        return 'bg-white border-l-purple-400';
+      case APPLICATION_STATUS.COMPLETED:
+        return 'bg-white border-l-slate-400';
+      default:
+        return 'bg-white';
+    }
   };
   
-  // Renderizar los indicadores de aprobación con mejor formato y legibilidad
+  // Function to determine if a card can be dragged
+  const canDragCard = (app: ApplicationWithApproval) => {
+    // Implement your business rules for what cards can be dragged
+    // For example, you might not want completed applications to be moved
+    
+    // Simple example: don't allow dragging of cards that are already moving
+    if (app.isMoving) return false;
+    
+    // Don't allow dragging while any card is processing
+    if (processingAppId) return false;
+    
+    return true;
+  };
+  
+  // Function to get tooltip text for draggable status
+  const getDragTooltip = (app: ApplicationWithApproval) => {
+    if (processingAppId) return 'Procesando otra aplicación, espere un momento';
+    if (app.isMoving) return 'Actualizando estado...';
+    if (!canDragCard(app)) return 'Esta aplicación no puede ser movida';
+    return 'Arrastre para cambiar el estado';
+  };
+  
+  // Function to get CSS classes for draggable status
+  const getDraggableClasses = (app: ApplicationWithApproval) => {
+    if (!canDragCard(app)) return 'kanban-card-locked';
+    return 'kanban-card-draggable';
+  };
+  
+  // Función auxiliar para renderizar los indicadores de aprobación
   const renderApprovalIndicators = (app: ApplicationWithApproval) => {
-    if (!app.approvalStatus) return null;
-    
-    const { approvedByAdvisor, approvedByCompany } = app.approvalStatus;
-    const hasFullApproval = approvedByAdvisor && approvedByCompany;
-    
+    let advisorBadgeClass = 'bg-yellow-500'; // Yellow for pending
+    let companyBadgeClass = 'bg-yellow-500'; // Yellow for pending
+    let advisorStatusText = 'Pendiente';
+    let companyStatusText = 'Pendiente';
+    let showRejectionMessage = false;
+    let rejector = '';
+
+    console.log(`Rendering approval indicators for app ${app.id}`, {
+      status: app.status,
+      approvalStatus: app.approvalStatus,
+      advisor_status: app.advisor_status,
+      company_status: app.company_status,
+      rejectedByAdvisor: app.approvalStatus?.rejectedByAdvisor,
+      rejectedByCompany: app.approvalStatus?.rejectedByCompany
+    });
+
+    // Verificar si la solicitud está rechazada
+    const isRejected = app.status === APPLICATION_STATUS.REJECTED;
+
+    // PRIMER PASO: Determinar el estado de la aprobación/rechazo del ASESOR
+    if (app.approvalStatus?.rejectedByAdvisor) {
+      // Si el asesor rechazó, mostrar en rojo
+      advisorBadgeClass = 'bg-red-500';
+        advisorStatusText = 'Rechazado';
+      
+      // Si la solicitud está en estado general de rechazo, indicar quién rechazó
+      if (isRejected) {
+        showRejectionMessage = true;
+        rejector = 'Asesor';
+        console.log(`App ${app.id} - Mostrando rechazo por ASESOR (flag explícito)`);
+      }
+    } else if (app.approvalStatus?.approvedByAdvisor) {
+      // Si el asesor aprobó, mostrar en verde
+      advisorBadgeClass = 'bg-green-500';
+        advisorStatusText = 'Aprobado';
+      }
+
+    // SEGUNDO PASO: Determinar el estado de la aprobación/rechazo de la EMPRESA
+    if (app.approvalStatus?.rejectedByCompany) {
+      // Si la empresa rechazó, mostrar en rojo
+      companyBadgeClass = 'bg-red-500';
+        companyStatusText = 'Rechazado';
+      
+      // Si la solicitud está en estado general de rechazo Y el asesor NO rechazó, mostrar rechazo por empresa
+      if (isRejected && !app.approvalStatus?.rejectedByAdvisor) {
+        showRejectionMessage = true;
+        rejector = 'Empresa';
+        console.log(`App ${app.id} - Mostrando rechazo por EMPRESA (flag explícito)`);
+      }
+    } else if (app.approvalStatus?.approvedByCompany) {
+      // Si la empresa aprobó, mostrar en verde
+      companyBadgeClass = 'bg-green-500';
+        companyStatusText = 'Aprobado';
+      }
+
+    // TERCER PASO: Si está en estado de rechazo pero no hay flags explícitos, intentar inferir
+    if (isRejected && !showRejectionMessage) {
+      console.log(`App ${app.id} - Estado REJECTED pero sin flags explícitos, intentando inferir`);
+      
+      // Verificar estados específicos para inferir quién rechazó
+      if (app.advisor_status === APPLICATION_STATUS.REJECTED && app.company_status !== APPLICATION_STATUS.REJECTED) {
+        // Solo el estado del asesor es REJECTED, probablemente el asesor rechazó
+          advisorBadgeClass = 'bg-red-500';
+          advisorStatusText = 'Rechazado';
+          showRejectionMessage = true;
+          rejector = 'Asesor';
+        console.log(`App ${app.id} - Inferido rechazo por ASESOR (basado en estados)`);
+      } else if (app.company_status === APPLICATION_STATUS.REJECTED && app.advisor_status !== APPLICATION_STATUS.REJECTED) {
+        // Solo el estado de la empresa es REJECTED, probablemente la empresa rechazó
+          companyBadgeClass = 'bg-red-500';
+          companyStatusText = 'Rechazado';
+          showRejectionMessage = true;
+          rejector = 'Empresa';
+        console.log(`App ${app.id} - Inferido rechazo por EMPRESA (basado en estados)`);
+      } else if (app.advisor_status === APPLICATION_STATUS.REJECTED && app.company_status === APPLICATION_STATUS.REJECTED) {
+        // Ambos estados son REJECTED, mostrar ambos indicadores en rojo
+        advisorBadgeClass = 'bg-red-500';
+          companyBadgeClass = 'bg-red-500';
+        advisorStatusText = 'Rechazado';
+          companyStatusText = 'Rechazado';
+        
+        // Para el mensaje principal, usar lógica adicional para determinar quién rechazó primero
+        // Basándose en el campo statusField actual o en el contexto de la vista
+        if (statusField === 'advisor_status') {
+          showRejectionMessage = true;
+          rejector = 'Asesor';
+          console.log(`App ${app.id} - Vista de asesor, mostrando rechazo por ASESOR`);
+        } else if (statusField === 'company_status') {
+          showRejectionMessage = true;
+          rejector = 'Empresa';
+          console.log(`App ${app.id} - Vista de empresa, mostrando rechazo por EMPRESA`);
+        } else {
+          // Si no hay información clara, usar un mensaje genérico o decidir basado en otra lógica
+          showRejectionMessage = true;
+          rejector = 'Sistema';
+          console.log(`App ${app.id} - Sin información clara, mostrando rechazo genérico`);
+      }
+    } else {
+        // No hay información clara de quién rechazó, mostrar un mensaje genérico
+        showRejectionMessage = true;
+        rejector = 'Sistema';
+        console.log(`App ${app.id} - No hay información clara, mostrando rechazo genérico`);
+      }
+    }
+
     return (
-      <div className="flex flex-col mt-1 space-y-1">
-        <div className="flex items-center justify-between">
-          <div className="tooltip tooltip-top flex items-center" data-tip={approvedByAdvisor ? "Aprobado por asesor" : "Pendiente de aprobación por asesor"}>
-            <span className="text-xs mr-1 whitespace-nowrap">Asesor:</span>
-            <div className={`w-3 h-3 rounded-full ${approvedByAdvisor ? 'bg-success' : 'bg-warning'}`}></div>
-            {approvedByAdvisor && (
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            )}
-          </div>
-          
-          <div className="tooltip tooltip-top flex items-center ml-3" data-tip={approvedByCompany ? "Aprobado por empresa" : "Pendiente de aprobación por empresa"}>
-            <span className="text-xs mr-1 whitespace-nowrap">Empresa:</span>
-            <div className={`w-3 h-3 rounded-full ${approvedByCompany ? 'bg-success' : 'bg-warning'}`}></div>
-            {approvedByCompany && (
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            )}
+      <div className="flex flex-col gap-1 mb-2">
+        {/* Only show "Complete" badge when both are approved and status is APPROVED */}
+        {app.status === APPLICATION_STATUS.APPROVED && 
+         app.approvalStatus?.approvedByAdvisor && 
+         app.approvalStatus?.approvedByCompany && (
+          <div className="flex items-center">
+            <div className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-500 text-white">
+              Aprobación Completa
           </div>
         </div>
-        
-        {/* Indicador de doble aprobación */}
-        {hasFullApproval && (
-          <div className="w-full flex justify-center mt-1">
-            <div className="badge badge-success text-xs px-2 py-1 text-white font-medium">
-              Aprobado Total
+        )}
+
+        {/* Show rejection message when applicable */}
+        {showRejectionMessage && app.status === APPLICATION_STATUS.REJECTED && (
+          <div className="flex items-center">
+            <div className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-red-500 text-white">
+              Rechazado por {rejector}
             </div>
           </div>
         )}
-        
-        {/* Botón para deshacer aprobación (solo para empresa y si está aprobado) */}
-        {isCompanyAdmin() && approvedByCompany && app.status === APPLICATION_STATUS.APPROVED && (
-          <div className="w-full flex justify-center mt-1">
-            <button 
-              onClick={(e) => {
-                e.stopPropagation(); // Evitar que se propague al card
-                handleDrop(e as unknown as React.DragEvent<HTMLDivElement>, APPLICATION_STATUS.IN_REVIEW);
-              }}
-              className="btn btn-xs btn-error w-full"
-            >
-              Deshacer Aprobación
-            </button>
+
+        {/* Individual approval badges */}
+        <div className="flex items-center">
+          <div className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${advisorBadgeClass} text-white mr-1`}>
+            Asesor: {advisorStatusText}
           </div>
-        )}
+          <div className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${companyBadgeClass} text-white`}>
+            Empresa: {companyStatusText}
+          </div>
+        </div>
       </div>
     );
   };
   
-  // Mejorar el formato de las etiquetas de producto para mayor legibilidad
-  const getProductLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      'selected_plans': 'Crédito a Plazos',
-      'product_simulations': 'Simulación',
-      'auto_loan': 'Crédito Auto',
-      'car_backed_loan': 'Crédito con Garantía',
-      'personal_loan': 'Préstamo Personal',
-      'cash_advance': 'Adelanto de Efectivo'
-    };
+  const getApplicationTag = (type: string, financingType?: string) => {
+    // Get the human-readable label
+    const label = APPLICATION_TYPE_LABELS[type] || type;
     
-    return labels[type] || type;
-  };
-  
-  // Función para renderizar el producto como una etiqueta bien formateada
-  const renderProductLabel = (type: string, color: string) => {
-    return (
-      <span className={`badge badge-${color} badge-md text-xs px-3 py-1 whitespace-nowrap inline-block`}>
-        {getProductLabel(type || '')}
-      </span>
-    );
-  };
-  
-  // Función para obtener el color apropiado para la tarjeta según estado y aprobaciones
-  const getCardColor = (app: ApplicationWithApproval) => {
-    const status = app.status || '';
+    // Si es un plan seleccionado y tiene tipo de financiamiento, mostrar eso en lugar del tipo de aplicación
+    if (type === 'selected_plans' && financingType) {
+      const financingLabel = financingType === 'producto' ? 'Financiamiento de Producto' : 
+                           financingType === 'personal' ? 'Crédito Personal' : 
+                           financingType;
+      
+      const bgColorClass = financingType === 'producto' ? 'bg-indigo-100 text-indigo-800' : 
+                         financingType === 'personal' ? 'bg-purple-100 text-purple-800' : 
+                         'bg-blue-100 text-blue-800';
+      
+      return (
+        <span className={`application-tag ${bgColorClass}`}>
+          {financingLabel}
+        </span>
+      );
+    }
     
-    // Colores específicos según el estado
-    switch (status.toLowerCase()) {
-      case APPLICATION_STATUS.REJECTED:
-        return 'border-error bg-red-50';
-      case APPLICATION_STATUS.APPROVED:
-        // Si está aprobado, verificar el estado de las aprobaciones
-        if (app.approvalStatus) {
-          const { approvedByAdvisor, approvedByCompany } = app.approvalStatus;
-          if (approvedByAdvisor && approvedByCompany) {
-            return 'border-success bg-green-100'; // Aprobado por ambos
-          } else if (approvedByAdvisor) {
-            return 'border-success bg-green-50'; // Aprobado solo por asesor
-          } else if (approvedByCompany) {
-            return 'border-info bg-blue-50'; // Aprobado solo por empresa
-          }
-        }
-        return 'border-success bg-green-50';
-      case APPLICATION_STATUS.IN_REVIEW:
-        return 'border-info bg-blue-50';
-      case APPLICATION_STATUS.NEW:
-        return 'border-warning bg-yellow-50';
-      case APPLICATION_STATUS.PENDING:
-        return 'border-warning bg-amber-50';
-      case APPLICATION_STATUS.POR_DISPERSAR:
-        return 'border-accent bg-purple-50';
-      case APPLICATION_STATUS.COMPLETED:
-        return 'border-primary bg-indigo-50';
-      case APPLICATION_STATUS.EXPIRED:
-        return 'border-error bg-red-100';
-      case APPLICATION_STATUS.CANCELLED:
-        return 'border-neutral bg-gray-100';
+    // Funcionamiento original para otros tipos
+    switch (type) {
+      case 'selected_plans':
+        return (
+          <span className="application-tag bg-blue-100 text-blue-800">
+            {label}
+          </span>
+        );
+      case 'cash_requests':
+        return (
+          <span className="application-tag bg-green-100 text-green-800">
+            {label}
+          </span>
+        );
+      case 'product_simulations':
+        return (
+          <span className="application-tag bg-orange-100 text-orange-800">
+            {label}
+          </span>
+        );
+      case 'AUTO_LOAN':
+        return (
+          <span className="application-tag bg-purple-100 text-purple-800">
+            {label}
+          </span>
+        );
+      case 'CAR_BACKED_LOAN':
+        return (
+          <span className="application-tag bg-indigo-100 text-indigo-800">
+            {label}
+          </span>
+        );
+      case 'PERSONAL_LOAN':
+        return (
+          <span className="application-tag bg-pink-100 text-pink-800">
+            {label}
+          </span>
+        );
+      case 'CASH_ADVANCE':
+        return (
+          <span className="application-tag bg-yellow-100 text-yellow-800">
+            {label}
+          </span>
+        );
       default:
-        // Si el estado no coincide con ninguno de los anteriores, usar el color de la columna
-        return `border-${app.status || 'neutral'}`;
+        return (
+          <span className="application-tag bg-gray-100 text-gray-800">
+            {label || type}
+          </span>
+        );
     }
   };
   
-  // Estilos personalizados para mostrar claramente cuáles tarjetas se pueden arrastrar
+  // CSS for the Kanban board
   const customStyles = `
     .custom-scrollbar::-webkit-scrollbar {
       width: 8px;
@@ -1400,888 +1081,691 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onStatusChange 
       cursor: grabbing !important;
     }
     
-    /* Indicator for draggable cards */
-    .kanban-card-draggable::after {
-      content: '';
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      width: 20px;
-      height: 20px;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23666'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 013 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11' /%3E%3C/svg%3E");
-      background-size: contain;
-      background-repeat: no-repeat;
-      opacity: 0.7;
-      transition: opacity 0.2s ease;
-    }
-    
-    .kanban-card-draggable:hover::after {
-      opacity: 1;
-    }
-    
     .kanban-card-locked {
       position: relative;
       cursor: not-allowed !important;
       opacity: 0.8;
     }
     
-    .kanban-card-locked::after {
-      content: '';
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      width: 20px;
-      height: 20px;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23999'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z' /%3E%3C/svg%3E");
-      background-size: contain;
-      background-repeat: no-repeat;
+    .card-moving {
       opacity: 0.7;
+      background-color: #f9fafb;
     }
     
-    .kanban-card.dragging {
-      opacity: 0.8;
-      transform: scale(1.03);
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-      z-index: 50;
-    }
-    
-    .kanban-column {
-      transition: all 0.2s ease;
-      border-radius: 0.75rem;
-      will-change: transform, background-color;
-    }
-    
-    .kanban-column.drag-over {
-      background-color: rgba(var(--b2, 217 217 217) / 0.5);
-      transform: scale(1.01);
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
-      border: 2px dashed #a855f7 !important;
-    }
-
-    .kanban-container {
-      scroll-behavior: smooth;
-    }
-
-    @media (min-width: 768px) {
-      .kanban-card-draggable:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15);
-      }
-    }
-    
-    /* Animaciones para cambios de estado */
-    @keyframes fadeIn {
-      0% { opacity: 0; }
-      100% { opacity: 1; }
-    }
-    
-    @keyframes slideIn {
-      0% { transform: translateY(10px); opacity: 0; }
-      100% { transform: translateY(0); opacity: 1; }
+    .drag-over {
+      background-color: #f3f4f6;
     }
     
     @keyframes processingPulse {
-      0% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.4); }
-      70% { box-shadow: 0 0 0 6px rgba(124, 58, 237, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0); }
+      0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.4); }
+      70% { box-shadow: 0 0 0 10px rgba(168, 85, 247, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
     }
     
-    .kanban-card {
-      animation: fadeIn 0.3s ease-out;
+    .processing {
+      animation: processingPulse 1.5s infinite;
+    }
+
+    .application-tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-weight: 500;
+    }
+
+    .approval-indicators {
+      display: flex;
+      margin-top: 0.5rem;
+      margin-bottom: 0.5rem;
+      gap: 0.5rem;
     }
     
-    .processing-toast {
-      position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 10px 20px;
-      background-color: white;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      z-index: 1000;
+    .approval-indicator {
       display: flex;
       align-items: center;
-      gap: 8px;
-      animation: slideIn 0.3s ease-out;
+      gap: 0.25rem;
     }
     
-    .auto-transition-toast {
-      position: fixed;
-      bottom: 70px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 10px 20px;
+    .approval-indicator-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #e2e8f0;
+      transition: all 0.2s ease;
+    }
+    
+    .approval-indicator-dot.approved {
+      background-color: #22c55e;
+      border-color: #16a34a;
+      box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+    }
+    
+    .approval-indicator-dot.pending {
+      background-color: #d1d5db;
+      border-color: #9ca3af;
+    }
+    
+    .approval-indicator-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    
+    .approval-indicator-label.approved {
+      color: #16a34a;
+    }
+    
+    .approval-indicator-label.pending {
+      color: #6b7280;
+    }
+
+    .tag-product {
+      background-color: #e0f2fe;
+      color: #0369a1;
+    }
+
+    .tag-cash {
       background-color: #dcfce7;
-      border: 1px solid #86efac;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      z-index: 1000;
-      display: flex;
+      color: #15803d;
+    }
+
+    .tag-selected {
+      background-color: #f3e8ff;
+      color: #7e22ce;
+    }
+
+    .column-header {
+      font-weight: 600;
+      padding: 0.75rem;
+      border-radius: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .column-count {
+      display: inline-flex;
       align-items: center;
-      gap: 8px;
-      animation: slideIn 0.3s ease-out;
-    }
-    
-    /* Pop-up tooltip con instrucciones para arrastrar */
-    .drag-instructions {
-      position: fixed;
-      top: 20px;
-      right: 20px;
+      justify-content: center;
+      width: 1.5rem;
+      height: 1.5rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
       background-color: white;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      padding: 12px 16px;
-      z-index: 1000;
-      max-width: 300px;
-      animation: fadeIn 0.3s ease-out;
-    }
-    
-    /* Mejoras para vista mobile */
-    @media (max-width: 640px) {
-      .kanban-column {
-        min-height: 300px;
-      }
+      color: #4b5563;
+      margin-left: 0.5rem;
     }
   `;
   
-  // Función para obtener clases draggable
-  const getDraggableClasses = (app: ApplicationWithApproval): string => {
-    // Usar la función canDragCard que está definida en el ámbito superior
-    const isDraggable = canDragCard(app) && app.id !== processingAppId;
-    return isDraggable 
-      ? 'cursor-grab kanban-card-draggable' 
-      : 'cursor-not-allowed opacity-80 kanban-card-locked';
+  // Check if an application requires attention (no status change in 48 hours and not rejected/completed)
+  const requiresAttention = (app: ApplicationWithApproval): boolean => {
+    // Skip applications that are rejected or completed
+    if (app.status === APPLICATION_STATUS.REJECTED || app.status === APPLICATION_STATUS.COMPLETED) {
+      return false;
+    }
+    
+    // Check if the application has updated_at
+    if (!app.updated_at) {
+      return false;
+    }
+    
+    // Calculate time since last update
+    const lastUpdateTime = new Date(app.updated_at).getTime();
+    const currentTime = new Date().getTime();
+    const hoursSinceUpdate = (currentTime - lastUpdateTime) / (1000 * 60 * 60);
+    
+    // Return true if more than 48 hours have passed since the last status update
+    return hoursSinceUpdate >= 48;
   };
-
-  // Función para definir los tooltips con información clara y precisa
-  const getDragTooltip = (app: ApplicationWithApproval): string => {
-    if (app.id === processingAppId) {
-      return "Esta tarjeta está siendo procesada";
-    }
-    
-    // Si la tarjeta se puede arrastrar, mostrar mensaje informativo
-    if (canDragCard(app)) {
-      return "Arrastra para cambiar el estado";
-    }
-    
-    // Mensajes específicos para casos donde no se puede arrastrar
-    if (app.approvalStatus?.approvedByAdvisor && app.approvalStatus?.approvedByCompany) {
-      return "Esta solicitud ya está completamente aprobada y no puede ser movida";
-    }
-    
-    // Asegurarse de que app.status no es undefined
-    const status = app.status || APPLICATION_STATUS.NEW;
-    
-    // Mensajes específicos según el rol y estado
-    if (isCompanyAdmin()) {
-      if (status === APPLICATION_STATUS.REJECTED) {
-        return "Las solicitudes rechazadas solo pueden ser movidas por asesores";
-      } else if (status === APPLICATION_STATUS.POR_DISPERSAR) {
-        return "Esta solicitud ya está lista para dispersión y no puede regresar a estados anteriores";
-      } else if (status === APPLICATION_STATUS.COMPLETED) {
-        return "Esta solicitud ya está completada y no puede cambiar de estado";
-      } else if (status === APPLICATION_STATUS.EXPIRED) {
-        return "Esta solicitud ha expirado y no puede cambiar de estado";
-      } else if (status === APPLICATION_STATUS.CANCELLED) {
-        return "Esta solicitud fue cancelada y no puede cambiar de estado";
-      }
-    }
-    
-    return "No puedes mover esta tarjeta en este momento";
-  };
-
-  // Efecto para mover automáticamente tarjetas con ambas aprobaciones a "Por Dispersar"
-  useEffect(() => {
-    const moveFullyApprovedCards = async () => {
-      // Encontrar tarjetas que tienen ambas aprobaciones pero no están en Por Dispersar
-      const fullyApprovedCards = appsWithApproval.filter(app => 
-        app.approvalStatus?.approvedByAdvisor && 
-        app.approvalStatus?.approvedByCompany && 
-        app.status !== APPLICATION_STATUS.POR_DISPERSAR &&
-        app.status !== APPLICATION_STATUS.COMPLETED
-      );
-      
-      if (fullyApprovedCards.length > 0) {
-        console.log(`Encontradas ${fullyApprovedCards.length} tarjetas con aprobación total, moviendo a Por Dispersar...`);
-        
-        // Mover cada tarjeta a Por Dispersar
-        for (const app of fullyApprovedCards) {
-          if (onStatusChange) {
-            try {
-              console.log(`Moviendo tarjeta ${app.id} a Por Dispersar automáticamente...`);
-              await onStatusChange(app, APPLICATION_STATUS.POR_DISPERSAR);
-            } catch (error) {
-              console.error(`Error al mover tarjeta ${app.id} a Por Dispersar:`, error);
-            }
-          }
-        }
-      }
-    };
-    
-    // Ejecutar después de un breve retraso para permitir que los estados se inicialicen
-    const timer = setTimeout(() => {
-      moveFullyApprovedCards();
-    }, 2000);
-    
-    return () => clearTimeout(timer);
-  }, [appsWithApproval, onStatusChange]);
-
-  // Agregar una sincronización de estados avanzados para las aplicaciones existentes
-  useEffect(() => {
-    const syncAdvancedStatusCards = async () => {
-      if (!isCompanyAdmin() || applications.length === 0) return;
-      
-      console.log("Sincronizando tarjetas en estados avanzados para el administrador de empresa...");
-      
-      // Estados avanzados que siempre deben sincronizarse entre ambas vistas
-      const advancedStatuses = [
-        APPLICATION_STATUS.POR_DISPERSAR,
-        APPLICATION_STATUS.COMPLETED,
-        APPLICATION_STATUS.EXPIRED,
-        APPLICATION_STATUS.CANCELLED,
-        APPLICATION_STATUS.REJECTED
-      ];
-      
-      // Buscar aplicaciones con ambas aprobaciones que deberían estar en Por Dispersar
-      const needsStatusUpdate = applications.filter(app => {
-        // Si la aplicación ya está en un estado avanzado, respetar ese estado
-        if (advancedStatuses.includes(app.status as APPLICATION_STATUS)) {
-          return false;
-        }
-        
-        // Verificar si tiene ambas aprobaciones
-        return app.approved_by_advisor && app.approved_by_company;
-      });
-      
-      if (needsStatusUpdate.length > 0) {
-        console.log(`Encontradas ${needsStatusUpdate.length} aplicaciones que necesitan actualización de estado:`);
-        
-        const updatedApps = [...appsWithApproval];
-        let hasChanges = false;
-        
-        for (const app of needsStatusUpdate) {
-          console.log(`- Aplicación ${app.id} con ambas aprobaciones, actualizando a Por Dispersar`);
-          
-          const index = updatedApps.findIndex(a => a.id === app.id);
-          if (index !== -1) {
-            updatedApps[index] = {
-              ...updatedApps[index],
-              status: APPLICATION_STATUS.POR_DISPERSAR
-            };
-            hasChanges = true;
-            
-            // Actualizar en la base de datos si es necesario
-            if (onStatusChange) {
-              try {
-                await onStatusChange(app, APPLICATION_STATUS.POR_DISPERSAR);
-                console.log(`✅ Estado de aplicación ${app.id} actualizado a Por Dispersar`);
-              } catch (error) {
-                console.error(`Error al actualizar estado de ${app.id}:`, error);
-              }
-            }
-          }
-        }
-        
-        if (hasChanges) {
-          console.log("Actualizando estado local con aplicaciones sincronizadas");
-          setAppsWithApproval(updatedApps);
-        }
-      }
-    };
-    
-    // Ejecutar la sincronización después de cargar las aplicaciones
-    syncAdvancedStatusCards();
-  }, [applications, isCompanyAdmin, onStatusChange]);
-
-  // Mejora para sincronizar estados entre vistas del asesor y administrador de empresa
-  useEffect(() => {
-    const syncCardStatusesWithAdvisorView = () => {
-      if (!isCompanyAdmin() || applications.length === 0) return;
-      
-      // Obtener todas las aplicaciones que no están en los estados básicos de flujo de empresa
-      const applicationsWithAdvancedStatus = applications.filter(app => {
-        const isBasicStatus = [
-          APPLICATION_STATUS.NEW,
-          APPLICATION_STATUS.IN_REVIEW,
-          APPLICATION_STATUS.APPROVED
-        ].includes(app.status as APPLICATION_STATUS);
-        
-        return !isBasicStatus;
-      });
-      
-      if (applicationsWithAdvancedStatus.length > 0) {
-        console.log(`Sincronizando ${applicationsWithAdvancedStatus.length} tarjetas con estados avanzados:`);
-        
-        // Crear copia del estado actual
-        const updatedApps = [...appsWithApproval];
-        let hasChanges = false;
-        
-        // Actualizar cada aplicación para que refleje el estado real
-        applicationsWithAdvancedStatus.forEach(app => {
-          const index = updatedApps.findIndex(a => a.id === app.id);
-          
-          if (index !== -1 && updatedApps[index].status !== app.status) {
-            console.log(`- Sincronizando aplicación ${app.id} de estado '${updatedApps[index].status}' a '${app.status}'`);
-            
-            // Actualizar el estado para que coincida con el estado real
-            updatedApps[index] = {
-              ...updatedApps[index],
-              status: app.status
-            };
-            
-            hasChanges = true;
-          }
-        });
-        
-        // Actualizar el estado solo si hubo cambios
-        if (hasChanges) {
-          console.log("Actualizando estado local con aplicaciones sincronizadas");
-          setAppsWithApproval(updatedApps);
-        }
-      }
-    };
-    
-    // Ejecutar la sincronización
-    syncCardStatusesWithAdvisorView();
-  }, [applications, appsWithApproval, isCompanyAdmin]);
-
-  // Agregar un nuevo useEffect para refrescar los estados de aprobación periódicamente
-  useEffect(() => {
-    // Función para refrescar los estados de aprobación desde la API
-    const refreshApprovalStatuses = async () => {
-      if (!applications || applications.length === 0) return;
-      
-      console.log("Refrescando estados de aprobación desde la API...");
-      try {
-        const updatedApps = [...appsWithApproval];
-        let hasChanges = false;
-        
-        for (const app of updatedApps) {
-          // Obtener el estado de aprobación actualizado desde la API
-          const status = await getApprovalStatus(app.id);
-          
-          // Si el estado es diferente al actual, actualizarlo
-          if (status && 
-              (status.approvedByAdvisor !== app.approvalStatus?.approvedByAdvisor ||
-               status.approvedByCompany !== app.approvalStatus?.approvedByCompany)) {
-            
-            console.log(`Actualización encontrada para app ${app.id}:`, {
-              actual: app.approvalStatus,
-              nuevo: status
-            });
-            
-            // Actualizar el estado de aprobación
-            app.approvalStatus = status;
-            hasChanges = true;
-            
-            // Si hay doble aprobación y no está en Por Dispersar, actualizarlo
-            if (status.approvedByAdvisor && status.approvedByCompany && 
-                app.status !== APPLICATION_STATUS.POR_DISPERSAR &&
-                app.status !== APPLICATION_STATUS.COMPLETED) {
-              console.log(`Aplicación ${app.id} tiene doble aprobación, moviendo a Por Dispersar`);
-              
-              // Actualizar el estado localmente
-              app.status = APPLICATION_STATUS.POR_DISPERSAR;
-              
-              // Actualizar en la BD
-              if (onStatusChange) {
-                try {
-                  await onStatusChange(app, APPLICATION_STATUS.POR_DISPERSAR);
-                } catch (error) {
-                  console.error(`Error actualizando estado a Por Dispersar:`, error);
-                }
-              }
-            }
-          }
-        }
-        
-        // Si hubo cambios, actualizar el estado
-        if (hasChanges) {
-          console.log("Actualizando aplicaciones con estados de aprobación refrescados");
-          setAppsWithApproval(updatedApps);
-        }
-      } catch (error) {
-        console.error("Error al refrescar estados de aprobación:", error);
-      }
-    };
-    
-    // Refrescar los estados inicialmente y cada 10 segundos
-    refreshApprovalStatuses();
-    
-    const intervalId = setInterval(() => {
-      refreshApprovalStatuses();
-    }, 10000); // 10 segundos
-    
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [applications, appsWithApproval, onStatusChange]);
-
-  // Mejora para funcionamiento con tarjetas existentes
-  useEffect(() => {
-    // Solo ejecutar para admin de empresa
-    if (!isCompanyAdmin() || applications.length === 0) return;
-    
-    console.log("Verificando y sincronizando estados de tarjetas existentes...");
-    
-    // Encontrar tarjetas que deben mostrar el mismo estado que en la vista del asesor
-    const appsNeedingSync = applications.filter(app => {
-      // Si no está en uno de los estados básicos del flujo de admin de empresa,
-      // debe sincronizarse exactamente con la vista del asesor
-      const isBasicStatus = [
-        APPLICATION_STATUS.NEW,
-        APPLICATION_STATUS.IN_REVIEW,
-        APPLICATION_STATUS.APPROVED
-      ].includes(app.status as APPLICATION_STATUS);
-      
-      return !isBasicStatus;
-    });
-    
-    if (appsNeedingSync.length > 0) {
-      console.log(`Encontradas ${appsNeedingSync.length} tarjetas que necesitan sincronización con vista del asesor`);
-      
-      // Crear copia del estado actual
-      const updatedApps = [...appsWithApproval];
-      let hasChanges = false;
-      
-      // Para cada aplicación que necesita sincronización
-      appsNeedingSync.forEach(app => {
-        const index = updatedApps.findIndex(a => a.id === app.id);
-        
-        // Si encontramos la aplicación y su estado es diferente al que debería tener
-        if (index !== -1 && updatedApps[index].status !== app.status) {
-          console.log(`- Actualizando tarjeta ${app.id}: de '${updatedApps[index].status}' a '${app.status}'`);
-          
-          // Actualizar el estado para que coincida con el de la vista del asesor
-          updatedApps[index] = {
-            ...updatedApps[index],
-            status: app.status
-          };
-          
-          hasChanges = true;
-        }
-      });
-      
-      // Si hubo cambios, actualizar el estado
-      if (hasChanges) {
-        console.log("Actualizando estados para sincronizar con vista del asesor");
-        setAppsWithApproval(updatedApps);
-      }
-    }
-  }, [applications, appsWithApproval, isCompanyAdmin]);
-
-  // Añadir función para manejar la limpieza de filtros
-  const handleClearFilters = () => {
-    setSearchQuery('');
-    setStatusFilter('all');
-    setTypeFilter('all');
-    setDateFromFilter('');
-    setDateToFilter('');
-    setAmountMinFilter('');
-    setAmountMaxFilter('');
-  };
-
-  // Modificar función para filtrar las aplicaciones según los criterios
-  const getFilteredApplications = (apps: ApplicationWithApproval[]): ApplicationWithApproval[] => {
-    return apps.filter(app => {
-      // Filtro por búsqueda de texto
-      if (searchQuery && !(
-        (app.client_name?.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (app.client_email?.toLowerCase().includes(searchQuery.toLowerCase()))
-      )) {
-        return false;
-      }
-      
-      // Filtro por estado
-      if (statusFilter !== 'all' && app.status !== statusFilter) {
-        return false;
-      }
-      
-      // Filtro por tipo de aplicación
-      if (typeFilter !== 'all' && app.application_type !== typeFilter) {
-        return false;
-      }
-      
-      // Filtro por fecha desde
-      if (dateFromFilter) {
-        const appDate = new Date(app.created_at);
-        const fromDate = new Date(dateFromFilter);
-        if (appDate < fromDate) {
-          return false;
-        }
-      }
-      
-      // Filtro por fecha hasta
-      if (dateToFilter) {
-        const appDate = new Date(app.created_at);
-        const toDate = new Date(dateToFilter);
-        // Ajustar para incluir todo el día
-        toDate.setHours(23, 59, 59, 999);
-        if (appDate > toDate) {
-          return false;
-        }
-      }
-      
-      // Filtro por monto mínimo
-      if (amountMinFilter && parseFloat(amountMinFilter) > 0) {
-        const amount = app.amount || app.requested_amount || 0;
-        if (amount < parseFloat(amountMinFilter)) {
-          return false;
-        }
-      }
-      
-      // Filtro por monto máximo
-      if (amountMaxFilter && parseFloat(amountMaxFilter) > 0) {
-        const amount = app.amount || app.requested_amount || 0;
-        if (amount > parseFloat(amountMaxFilter)) {
-          return false;
-        }
-      }
-      
-      return true;
-    });
-  };
-
-  if (applications.length === 0) {
-    return (
-      <div className="bg-base-200 p-6 rounded-lg">
-        <h3 className="text-xl font-medium text-center">No hay solicitudes para mostrar</h3>
-        <p className="text-center text-gray-500 mt-2">No se encontraron solicitudes en el sistema</p>
-      </div>
-    );
-  }
   
-  return (
-    <div className="w-full overflow-x-auto custom-scrollbar relative">
-      <style>{customStyles}</style>
+    return (
+    <div className="kanban-board-container bg-base-100 p-2 applications-kanban">
+      <style dangerouslySetInnerHTML={{ __html: customStyles }} />
       
-      {/* Reemplazar el overlay de carga con una notificación flotante más sutil */}
-      {processingAppId && (
-        <div className="processing-toast">
-          <span className="loading loading-spinner loading-sm text-primary"></span>
-          <p className="font-medium">Actualizando estado...</p>
-        </div>
-      )}
+      {/* Remove the Indicador permanente de filtro de Planes Seleccionados section */}
       
-      {/* Notificación para transiciones automáticas */}
-      {autoTransitionMessage && (
-        <div className="auto-transition-toast">
-          <span className="loading loading-spinner loading-sm text-success"></span>
-          <p className="font-medium">{autoTransitionMessage}</p>
-        </div>
-      )}
-      
+      {/* Messages display area */}
       {errorMessage && (
-        <div className="mb-4 alert alert-error shadow-lg">
+        <div className="alert alert-error shadow-lg mb-4 mx-2">
           <div>
-            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             <span>{errorMessage}</span>
           </div>
           <div className="flex-none">
-            <button className="btn btn-sm" onClick={() => setErrorMessage(null)}>Cerrar</button>
+            <button onClick={() => setErrorMessage(null)} className="btn btn-sm btn-ghost">Cerrar</button>
           </div>
         </div>
       )}
       
-      {/* Panel de Filtros */}
-      <div className="mb-6">
-        <div className="bg-base-100 border border-base-300 rounded-lg shadow-sm">
-          <div className="flex justify-between items-center p-4 border-b border-base-300">
-            <div className="relative flex-grow mr-4">
-              <input
-                type="text"
-                placeholder="Buscar por nombre o email..."
-                className="input input-bordered w-full pr-10"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-            </div>
-            
-            <button 
-              className="btn btn-ghost btn-sm"
-              onClick={() => setIsFilterExpanded(!isFilterExpanded)}
-            >
-              {isFilterExpanded ? 'Ocultar Filtros' : 'Mostrar Filtros'}
-              <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ml-2 transform ${isFilterExpanded ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
+      {warnMessage && (
+        <div className="alert alert-warning shadow-lg mb-4 mx-2">
+          <div>
+            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+            <span>{warnMessage}</span>
           </div>
-          
-          {isFilterExpanded && (
-            <div className="bg-base-200 p-4 rounded-lg">
-              <h3 className="text-lg font-semibold mb-4">Filtros Avanzados</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                <div className="form-control">
-                  <label className="label">
-                    <span className="label-text">Estado</span>
-                  </label>
-                  <select
-                    className="select select-bordered w-full"
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                  >
-                    <option value="all">Todos los estados</option>
-                    {Object.entries(APPLICATION_STATUS).map(([key, value]) => (
-                      <option key={key} value={value}>{STATUS_LABELS[value as keyof typeof STATUS_LABELS] || value}</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="form-control">
-                  <label className="label">
-                    <span className="label-text">Tipo de Aplicación</span>
-                  </label>
-                  <select
-                    className="select select-bordered w-full"
-                    value={typeFilter}
-                    onChange={(e) => setTypeFilter(e.target.value)}
-                  >
-                    <option value="all">Todos los tipos</option>
-                    {Object.entries(APPLICATION_TYPE_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="form-control">
-                  <label className="label">
-                    <span className="label-text">Fecha Desde</span>
-                  </label>
-                  <input
-                    type="date"
-                    className="input input-bordered w-full"
-                    value={dateFromFilter}
-                    onChange={(e) => setDateFromFilter(e.target.value)}
-                  />
-                </div>
-                
-                <div className="form-control">
-                  <label className="label">
-                    <span className="label-text">Fecha Hasta</span>
-                  </label>
-                  <input
-                    type="date"
-                    className="input input-bordered w-full"
-                    value={dateToFilter}
-                    onChange={(e) => setDateToFilter(e.target.value)}
-                  />
-                </div>
-                
-                <div className="form-control">
-                  <label className="label">
-                    <span className="label-text">Monto Mínimo</span>
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="0"
-                    className="input input-bordered w-full"
-                    value={amountMinFilter}
-                    onChange={(e) => setAmountMinFilter(e.target.value)}
-                  />
-                </div>
-                
-                <div className="form-control">
-                  <label className="label">
-                    <span className="label-text">Monto Máximo</span>
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="0"
-                    className="input input-bordered w-full"
-                    value={amountMaxFilter}
-                    onChange={(e) => setAmountMaxFilter(e.target.value)}
-                  />
-                </div>
+          <div className="flex-none">
+            <button onClick={() => setWarnMessage(null)} className="btn btn-sm btn-ghost">Cerrar</button>
+          </div>
+        </div>
+      )}
+      
+      {successMessage && (
+        <div className="alert alert-success shadow-lg mb-4 mx-2">
+          <div>
+            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <span>{successMessage}</span>
+          </div>
+          <div className="flex-none">
+            <button onClick={() => setSuccessMessage(null)} className="btn btn-sm btn-ghost">Cerrar</button>
+          </div>
+        </div>
+      )}
+      
+      {/* Loading indicator */}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-24">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <span className="ml-2 text-gray-600">Cargando aplicaciones...</span>
               </div>
-              
-              <div className="flex justify-end">
-                <button 
-                  className="btn btn-ghost"
-                  onClick={handleClearFilters}
+      ) : error ? (
+        <div className="alert alert-error shadow-lg mb-4">
+          <div>
+            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <span>Error: {error}</span>
+            </div>
+        </div>
+      ) : (
+        // The actual Kanban board grid
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          {/* New Applications */}
+          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full">
+            <div className="column-header mb-4">
+              <h3 className="text-lg font-bold flex items-center">
+                <span className="w-3 h-3 rounded-full bg-yellow-400 mr-2"></span>
+                {STATUS_LABELS[APPLICATION_STATUS.NEW]} ({getApplicationsByStatus(APPLICATION_STATUS.NEW).length})
+              </h3>
+            </div>
+            <div 
+              className="column-content overflow-y-auto custom-scrollbar p-1 rounded-md"
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, APPLICATION_STATUS.NEW)}
+            >
+              {getVisibleApplications(APPLICATION_STATUS.NEW).map((app) => (
+                <div 
+                  key={app.id}
+                  className={`kanban-card ${getCardColor(app)} p-4 rounded-md shadow-md mb-3 border-l-4 ${getDraggableClasses(app)} ${processingAppId === app.id ? 'processing' : ''}`}
+                  draggable={canDragCard(app)}
+                  onDragStart={canDragCard(app) ? (e) => handleDragStart(e, app) : undefined}
+                  onDragEnd={handleDragEnd}
+                  title={getDragTooltip(app)}
                 >
-                  Limpiar Filtros
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center">
+                    <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
+                    </div>
+                    <div className="flex items-center">
+                    {getApplicationTag(app.application_type, app.financing_type)}
+                      {requiresAttention(app) && (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 ml-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                          <title>Requiere atención: Sin cambios en 48+ horas</title>
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+          </div>
+                  <div className="text-sm text-gray-600 mb-2">
+                    {app.company_name && <p>{app.company_name}</p>}
+                  </div>
+                  <div className="text-sm font-medium text-gray-900 mb-1">
+                    {formatCurrency(app.amount)}
+                  </div>
+                  <div className="flex flex-col mt-2 pt-2 border-t border-gray-100">
+                    {renderApprovalIndicators(app)}
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-xs text-gray-500">ID: {app.id.substring(0, 5)}...</span>
+                      <Link 
+                        to={`/applications/${app.id}`} 
+                        className="btn btn-xs btn-primary"
+                      >
+                        VER DETALLE
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {getApplicationsByStatus(APPLICATION_STATUS.NEW).length > 3 && !expandedColumns[APPLICATION_STATUS.NEW] && (
+                <button 
+                  onClick={() => toggleColumnExpand(APPLICATION_STATUS.NEW)}
+                  className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
+                >
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.NEW).length - 3} más
                 </button>
+              )}
+              {expandedColumns[APPLICATION_STATUS.NEW] && getApplicationsByStatus(APPLICATION_STATUS.NEW).length > 3 && (
+                <button 
+                  onClick={() => toggleColumnExpand(APPLICATION_STATUS.NEW)}
+                  className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
+                >
+                  Ver menos
+                </button>
+              )}
+              {getApplicationsByStatus(APPLICATION_STATUS.NEW).length === 0 && (
+                <div className="text-center py-4 text-gray-500 italic">
+                  No hay solicitudes
+                </div>
+              )}
+            </div>
+                </div>
+                
+          {/* In Review Applications */}
+          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full">
+            <div className="column-header mb-4">
+              <h3 className="text-lg font-bold flex items-center">
+                <span className="w-3 h-3 rounded-full bg-blue-400 mr-2"></span>
+                {STATUS_LABELS[APPLICATION_STATUS.IN_REVIEW]} ({getApplicationsByStatus(APPLICATION_STATUS.IN_REVIEW).length})
+              </h3>
+            </div>
+            <div 
+              className="column-content overflow-y-auto custom-scrollbar p-1 rounded-md"
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, APPLICATION_STATUS.IN_REVIEW)}
+            >
+              {getVisibleApplications(APPLICATION_STATUS.IN_REVIEW).map((app) => (
+                <div 
+                  key={app.id}
+                  className={`kanban-card ${getCardColor(app)} p-4 rounded-md shadow-md mb-3 border-l-4 ${getDraggableClasses(app)} ${processingAppId === app.id ? 'processing' : ''}`}
+                  draggable={canDragCard(app)}
+                  onDragStart={canDragCard(app) ? (e) => handleDragStart(e, app) : undefined}
+                  onDragEnd={handleDragEnd}
+                  title={getDragTooltip(app)}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center">
+                    <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
+                    </div>
+                    <div className="flex items-center">
+                    {getApplicationTag(app.application_type, app.financing_type)}
+                      {requiresAttention(app) && (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 ml-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                          <title>Requiere atención: Sin cambios en 48+ horas</title>
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-600 mb-2">
+                    {app.company_name && <p>{app.company_name}</p>}
+                  </div>
+                  <div className="text-sm font-medium text-gray-900 mb-1">
+                    {formatCurrency(app.amount)}
+                  </div>
+                  <div className="flex flex-col mt-2 pt-2 border-t border-gray-100">
+                    {renderApprovalIndicators(app)}
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-xs text-gray-500">ID: {app.id.substring(0, 5)}...</span>
+                      <Link 
+                        to={`/applications/${app.id}`} 
+                        className="btn btn-xs btn-primary"
+                      >
+                        VER DETALLE
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {getApplicationsByStatus(APPLICATION_STATUS.IN_REVIEW).length > 3 && !expandedColumns[APPLICATION_STATUS.IN_REVIEW] && (
+                <button 
+                  onClick={() => toggleColumnExpand(APPLICATION_STATUS.IN_REVIEW)}
+                  className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
+                >
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.IN_REVIEW).length - 3} más
+                </button>
+              )}
+              {expandedColumns[APPLICATION_STATUS.IN_REVIEW] && getApplicationsByStatus(APPLICATION_STATUS.IN_REVIEW).length > 3 && (
+                <button 
+                  onClick={() => toggleColumnExpand(APPLICATION_STATUS.IN_REVIEW)}
+                  className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
+                >
+                  Ver menos
+                </button>
+              )}
+              {getApplicationsByStatus(APPLICATION_STATUS.IN_REVIEW).length === 0 && (
+                <div className="text-center py-4 text-gray-500 italic">
+                  No hay solicitudes
+                </div>
+              )}
+                </div>
+                </div>
+                
+          {/* Approved Applications */}
+          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full">
+            <div className="column-header mb-4">
+              <h3 className="text-lg font-bold flex items-center">
+                <span className="w-3 h-3 rounded-full bg-green-400 mr-2"></span>
+                {STATUS_LABELS[APPLICATION_STATUS.APPROVED]} ({getApplicationsByStatus(APPLICATION_STATUS.APPROVED).length})
+              </h3>
+                </div>
+            <div 
+              className="column-content overflow-y-auto custom-scrollbar p-1 rounded-md"
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, APPLICATION_STATUS.APPROVED)}
+            >
+              {getVisibleApplications(APPLICATION_STATUS.APPROVED).map((app) => (
+                <div 
+                  key={app.id}
+                  className={`kanban-card ${getCardColor(app)} p-4 rounded-md shadow-md mb-3 border-l-4 ${getDraggableClasses(app)} ${processingAppId === app.id ? 'processing' : ''}`}
+                  draggable={canDragCard(app)}
+                  onDragStart={canDragCard(app) ? (e) => handleDragStart(e, app) : undefined}
+                  onDragEnd={handleDragEnd}
+                  title={getDragTooltip(app)}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center">
+                    <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
+                    </div>
+                    <div className="flex items-center">
+                    {getApplicationTag(app.application_type, app.financing_type)}
+                      {requiresAttention(app) && (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 ml-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                          <title>Requiere atención: Sin cambios en 48+ horas</title>
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                </div>
+                  <div className="text-sm text-gray-600 mb-2">
+                    {app.company_name && <p>{app.company_name}</p>}
               </div>
+                  <div className="text-sm font-medium text-gray-900 mb-1">
+                    {formatCurrency(app.amount)}
+                  </div>
+                  <div className="flex flex-col mt-2 pt-2 border-t border-gray-100">
+                    {renderApprovalIndicators(app)}
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-xs text-gray-500">ID: {app.id.substring(0, 5)}...</span>
+                      <Link 
+                        to={`/applications/${app.id}`} 
+                        className="btn btn-xs btn-primary"
+                      >
+                        VER DETALLE
+                      </Link>
+              </div>
+                  </div>
+                </div>
+              ))}
+              {getApplicationsByStatus(APPLICATION_STATUS.APPROVED).length > 3 && !expandedColumns[APPLICATION_STATUS.APPROVED] && (
+                <button 
+                  onClick={() => toggleColumnExpand(APPLICATION_STATUS.APPROVED)}
+                  className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
+                >
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.APPROVED).length - 3} más
+                </button>
+              )}
+              {expandedColumns[APPLICATION_STATUS.APPROVED] && getApplicationsByStatus(APPLICATION_STATUS.APPROVED).length > 3 && (
+                <button 
+                  onClick={() => toggleColumnExpand(APPLICATION_STATUS.APPROVED)}
+                  className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
+                >
+                  Ver menos
+                </button>
+              )}
+              {getApplicationsByStatus(APPLICATION_STATUS.APPROVED).length === 0 && (
+                <div className="text-center py-4 text-gray-500 italic">
+                  No hay solicitudes
             </div>
           )}
         </div>
       </div>
       
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-4 pb-4 kanban-container p-4" style={{ minWidth: '1000px' }}>
-        {/* Modificar bucle de columnas para usar aplicaciones filtradas */}
-        {columns.map(column => {
-          // Filtrar aplicaciones para esta columna
-          const filteredApps = getFilteredApplications(column.applications);
-          
-          return (
+          {/* Ready for Disbursement (Por Dispersar) */}
+          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full">
+            <div className="column-header mb-4">
+              <h3 className="text-lg font-bold flex items-center">
+                <span className="w-3 h-3 rounded-full bg-purple-400 mr-2"></span>
+                {STATUS_LABELS[APPLICATION_STATUS.POR_DISPERSAR]} ({getApplicationsByStatus(APPLICATION_STATUS.POR_DISPERSAR).length})
+              </h3>
+            </div>
             <div 
-              key={column.id}
-              className={`bg-base-100 rounded-xl shadow-md border-t-4 border-${column.color} border-l border-r border-b flex flex-col h-full kanban-column`}
-              onDragOver={(e) => {
-                handleDragOver(e, column.id);
-              }}
-              onDragLeave={(e) => {
-                e.currentTarget.classList.remove('drag-over');
-              }}
-              onDrop={(e) => {
-                handleDrop(e, column.id);
-              }}
+              className="column-content overflow-y-auto custom-scrollbar p-1 rounded-md"
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, APPLICATION_STATUS.POR_DISPERSAR)}
             >
-              {/* Cabecera de columna con indicador de color */}
-              <div className={`text-center py-3 px-4 font-bold rounded-t-lg flex items-center justify-between bg-${column.color} bg-opacity-10`}>
-                <span className={`text-${column.color} font-bold text-lg`}>{column.title}</span>
-                <span className={`badge badge-${column.color} badge-lg`}>{filteredApps.length}</span>
+              {getVisibleApplications(APPLICATION_STATUS.POR_DISPERSAR).map((app) => (
+                <div 
+                  key={app.id}
+                  className={`kanban-card ${getCardColor(app)} p-4 rounded-md shadow-md mb-3 border-l-4 ${getDraggableClasses(app)} ${processingAppId === app.id ? 'processing' : ''}`}
+                  draggable={canDragCard(app)}
+                  onDragStart={canDragCard(app) ? (e) => handleDragStart(e, app) : undefined}
+                  onDragEnd={handleDragEnd}
+                  title={getDragTooltip(app)}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center">
+                    <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
+                    </div>
+                    <div className="flex items-center">
+                    {getApplicationTag(app.application_type, app.financing_type)}
+                      {requiresAttention(app) && (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 ml-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                          <title>Requiere atención: Sin cambios en 48+ horas</title>
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
               </div>
-              
-              <div className="p-3 space-y-3 min-h-[500px] max-h-[calc(100vh-220px)] overflow-y-auto custom-scrollbar flex-grow">
-                {filteredApps.length === 0 ? (
-                  <div className="flex items-center justify-center h-full opacity-50 border-2 border-dashed border-base-300 rounded-lg p-6">
-                    <div className="text-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <p className="text-sm mt-2">No hay solicitudes</p>
+                  <div className="text-sm text-gray-600 mb-2">
+                    {app.company_name && <p>{app.company_name}</p>}
+                    </div>
+                  <div className="text-sm font-medium text-gray-900 mb-1">
+                    {formatCurrency(app.amount)}
+                  </div>
+                  <div className="flex flex-col mt-2 pt-2 border-t border-gray-100">
+                    {renderApprovalIndicators(app)}
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-xs text-gray-500">ID: {app.id.substring(0, 5)}...</span>
+                      <Link 
+                        to={`/applications/${app.id}`} 
+                        className="btn btn-xs btn-primary"
+                      >
+                        VER DETALLE
+                      </Link>
                     </div>
                   </div>
-                ) : (
-                  filteredApps.map((app, index) => {
-                    const isCardDraggable = canDragCard(app) && app.id !== processingAppId;
-                    return (
+                </div>
+              ))}
+              {getApplicationsByStatus(APPLICATION_STATUS.POR_DISPERSAR).length > 3 && !expandedColumns[APPLICATION_STATUS.POR_DISPERSAR] && (
+                <button 
+                  onClick={() => toggleColumnExpand(APPLICATION_STATUS.POR_DISPERSAR)}
+                  className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
+                >
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.POR_DISPERSAR).length - 3} más
+                </button>
+              )}
+              {expandedColumns[APPLICATION_STATUS.POR_DISPERSAR] && getApplicationsByStatus(APPLICATION_STATUS.POR_DISPERSAR).length > 3 && (
+                <button 
+                  onClick={() => toggleColumnExpand(APPLICATION_STATUS.POR_DISPERSAR)}
+                  className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
+                >
+                  Ver menos
+                </button>
+              )}
+              {getApplicationsByStatus(APPLICATION_STATUS.POR_DISPERSAR).length === 0 && (
+                <div className="text-center py-4 text-gray-500 italic">
+                  No hay solicitudes
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Completed Applications */}
+          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full">
+            <div className="column-header mb-4">
+              <h3 className="text-lg font-bold flex items-center">
+                <span className="w-3 h-3 rounded-full bg-slate-400 mr-2"></span>
+                {STATUS_LABELS[APPLICATION_STATUS.COMPLETED]} ({getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length})
+              </h3>
+            </div>
+            <div 
+              className="column-content overflow-y-auto custom-scrollbar p-1 rounded-md"
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, APPLICATION_STATUS.COMPLETED)}
+            >
+              {getVisibleApplications(APPLICATION_STATUS.COMPLETED).map((app) => (
                       <div
                         key={app.id}
-                        data-tip={getDragTooltip(app)}
-                        className={`card shadow hover:shadow-lg transition-all ${getCardColor(app)} border-l-4 border-t border-r border-b hover:border-primary kanban-card relative ${app.id === processingAppId ? 'processing' : ''} ${app.isMoving ? 'opacity-90' : ''} ${getDraggableClasses(app)}`}
-                        draggable={isCardDraggable}
-                        onDragStart={isCardDraggable ? (e) => handleDragStart(e, app, index) : undefined}
-                        onDragEnd={isCardDraggable ? handleDragEnd : undefined}
-                        style={{
-                          animation: app.id === processingAppId ? 'processingPulse 1.5s infinite' : ''
-                        }}
-                      >
-                        <div className="card-body p-4">
+                  className={`kanban-card ${getCardColor(app)} p-4 rounded-md shadow-md mb-3 border-l-4 ${getDraggableClasses(app)} ${processingAppId === app.id ? 'processing' : ''}`}
+                  draggable={canDragCard(app)}
+                  onDragStart={canDragCard(app) ? (e) => handleDragStart(e, app) : undefined}
+                  onDragEnd={handleDragEnd}
+                  title={getDragTooltip(app)}
+                >
                           <div className="flex justify-between items-start mb-2">
-                            <div className="flex flex-col">
-                              <div className="font-semibold mb-1">{app.client_name}</div>
-                              {renderProductLabel(app.application_type || '', column.color)}
+                    <div className="flex items-center">
+                    <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
+                    </div>
+                    <div className="flex items-center">
+                    {getApplicationTag(app.application_type, app.financing_type)}
+                      {requiresAttention(app) && (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 ml-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                          <title>Requiere atención: Sin cambios en 48+ horas</title>
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
                             </div>
+                  <div className="text-sm text-gray-600 mb-2">
+                    {app.company_name && <p>{app.company_name}</p>}
                           </div>
-                          
-                          <div className="mt-1">
-                            {/* Info de la empresa */}
-                            <div className="text-sm text-gray-600 mb-2 flex items-center">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 inline flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                              </svg>
-                              <span className="truncate max-w-[180px] font-medium">
-                                {app.company_name || "Sin empresa"}
-                              </span>
+                  <div className="text-sm font-medium text-gray-900 mb-1">
+                    {formatCurrency(app.amount)}
+                            </div>
+                  <div className="flex flex-col mt-2 pt-2 border-t border-gray-100">
+                    {renderApprovalIndicators(app)}
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-xs text-gray-500">ID: {app.id.substring(0, 5)}...</span>
+                      <Link 
+                        to={`/applications/${app.id}`} 
+                        className="btn btn-xs btn-primary"
+                      >
+                        VER DETALLE
+                      </Link>
+                            </div>
+                  </div>
+                </div>
+              ))}
+              {getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length > 3 && !expandedColumns[APPLICATION_STATUS.COMPLETED] && (
+                <button 
+                  onClick={() => toggleColumnExpand(APPLICATION_STATUS.COMPLETED)}
+                  className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
+                >
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length - 3} más
+                </button>
+              )}
+              {expandedColumns[APPLICATION_STATUS.COMPLETED] && getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length > 3 && (
+                <button 
+                  onClick={() => toggleColumnExpand(APPLICATION_STATUS.COMPLETED)}
+                  className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
+                >
+                  Ver menos
+                </button>
+              )}
+              {getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length === 0 && (
+                <div className="text-center py-4 text-gray-500 italic">
+                  No hay solicitudes
+                </div>
+              )}
+            </div>
                             </div>
                             
-                            {/* Fecha de creación */}
-                            <div className="text-xs text-gray-500 mb-2 flex items-center">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 inline flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                              <span>
-                                {app.created_at ? formatDate(app.created_at, 'datetime') : 'N/A'}
-                              </span>
-                            </div>
-                            
-                            {/* Monto */}
-                            <div className="flex items-center mb-3">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              <span className="text-base font-bold text-primary">
-                                {formatCurrency(app.requested_amount || 0)}
-                              </span>
-                            </div>
-                            
-                            {/* Indicadores de estado de aprobación */}
-                            {renderApprovalIndicators(app)}
-                            
-                            <div className="card-actions justify-end mt-3">
-                              {/* Botón para marcar como completado/dispersado (solo para asesores y tarjetas en Por Dispersar) */}
-                              {isAdvisor() && app.status === APPLICATION_STATUS.POR_DISPERSAR && (
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation(); // Evitar navegación al detalle
-                                    e.preventDefault();
-                                    if (onStatusChange) {
-                                      setProcessingAppId(app.id);
-                                      onStatusChange(app, APPLICATION_STATUS.COMPLETED)
-                                        .then(() => {
-                                          setAutoTransitionMessage(`Solicitud ${app.id} marcada como Completada correctamente`);
-                                          setTimeout(() => setAutoTransitionMessage(null), 3000);
-                                        })
-                                        .catch(error => {
-                                          setErrorMessage(`Error al marcar como completado: ${error.message}`);
-                                        })
-                                        .finally(() => {
-                                          setProcessingAppId(null);
-                                        });
-                                    }
-                                  }}
-                                  className="btn btn-sm btn-accent w-full mb-2"
-                                >
-                                  Marcar como Dispersado
-                                </button>
-                              )}
-                              {/* Botón para mover a Por Dispersar cuando hay ambas aprobaciones pero no está en ese estado */}
-                              {isAdvisor() && 
-                               app.approvalStatus?.approvedByAdvisor && 
-                               app.approvalStatus?.approvedByCompany && 
-                               app.status !== APPLICATION_STATUS.POR_DISPERSAR &&
-                               app.status !== APPLICATION_STATUS.COMPLETED && (
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    if (onStatusChange && !processingAppId) {
-                                      setProcessingAppId(app.id);
-                                      onStatusChange(app, APPLICATION_STATUS.POR_DISPERSAR)
-                                        .then(() => {
-                                          setAutoTransitionMessage(`Solicitud movida a Por Dispersar`);
-                                          setTimeout(() => setAutoTransitionMessage(null), 3000);
-                                        })
-                                        .catch(error => {
-                                          console.error("Error al mover a Por Dispersar:", error);
-                                        })
-                                        .finally(() => {
-                                          setTimeout(() => setProcessingAppId(null), 500);
-                                        });
-                                    }
-                                  }}
-                                  className="btn btn-xs btn-accent w-full mt-2 mb-2"
-                                >
-                                  Mover a Por Dispersar
-                                </button>
-                              )}
-                              <Link to={`/applications/${app.id}`} className="btn btn-sm btn-primary w-full">
-                                Ver Detalle
+          {/* Rejected Applications */}
+          <div className="kanban-column bg-base-200 rounded-lg p-4 h-full">
+            <div className="column-header mb-4">
+              <h3 className="text-lg font-bold flex items-center">
+                <span className="w-3 h-3 rounded-full bg-red-400 mr-2"></span>
+                {STATUS_LABELS[APPLICATION_STATUS.REJECTED]} ({getApplicationsByStatus(APPLICATION_STATUS.REJECTED).length})
+              </h3>
+            </div>
+            <div 
+              className="column-content overflow-y-auto custom-scrollbar p-1 rounded-md"
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, APPLICATION_STATUS.REJECTED)}
+            >
+              {getVisibleApplications(APPLICATION_STATUS.REJECTED).map((app) => (
+                <div 
+                  key={app.id}
+                  className={`kanban-card ${getCardColor(app)} p-4 rounded-md shadow-md mb-3 border-l-4 ${getDraggableClasses(app)} ${processingAppId === app.id ? 'processing' : ''}`}
+                  draggable={canDragCard(app)}
+                  onDragStart={canDragCard(app) ? (e) => handleDragStart(e, app) : undefined}
+                  onDragEnd={handleDragEnd}
+                  title={getDragTooltip(app)}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center">
+                    <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
+                    </div>
+                    <div className="flex items-center">
+                    {getApplicationTag(app.application_type, app.financing_type)}
+                      {requiresAttention(app) && (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 ml-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                          <title>Requiere atención: Sin cambios en 48+ horas</title>
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-600 mb-2">
+                    {app.company_name && <p>{app.company_name}</p>}
+                  </div>
+                  <div className="text-sm font-medium text-gray-900 mb-1">
+                    {formatCurrency(app.amount)}
+                  </div>
+                  <div className="flex flex-col mt-2 pt-2 border-t border-gray-100">
+                    {renderApprovalIndicators(app)}
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-xs text-gray-500">ID: {app.id.substring(0, 5)}...</span>
+                      <Link 
+                        to={`/applications/${app.id}`} 
+                        className="btn btn-xs btn-primary"
+                      >
+                        VER DETALLE
                               </Link>
                             </div>
                           </div>
                         </div>
+              ))}
+              {getApplicationsByStatus(APPLICATION_STATUS.REJECTED).length > 3 && !expandedColumns[APPLICATION_STATUS.REJECTED] && (
+                <button 
+                  onClick={() => toggleColumnExpand(APPLICATION_STATUS.REJECTED)}
+                  className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
+                >
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.REJECTED).length - 3} más
+                </button>
+              )}
+              {expandedColumns[APPLICATION_STATUS.REJECTED] && getApplicationsByStatus(APPLICATION_STATUS.REJECTED).length > 3 && (
+                <button 
+                  onClick={() => toggleColumnExpand(APPLICATION_STATUS.REJECTED)}
+                  className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
+                >
+                  Ver menos
+                </button>
+              )}
+              {getApplicationsByStatus(APPLICATION_STATUS.REJECTED).length === 0 && (
+                <div className="text-center py-4 text-gray-500 italic">
+                  No hay solicitudes
                       </div>
-                    );
-                  })
                 )}
               </div>
             </div>
-          );
-        })}
       </div>
+      )}
     </div>
   );
 };

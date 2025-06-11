@@ -1,0 +1,91 @@
+/* Specific styles for the Kanban board in Applications page */
+
+/* Kanban columns need to have proper height and scroll behavior */
+.kanban-board-container .column-content,
+.applications-kanban .column-content,
+.applications-page-container .kanban-board-container .column-content,
+.column-content {
+  height: auto !important;
+  min-height: 300px !important;
+  max-height: calc(100vh - 250px) !important;
+  overflow-y: auto !important;
+  padding-right: 4px;
+  flex: 1 1 auto !important;
+  position: relative;
+}
+
+/* Make the entire kanban board container taller */
+.kanban-board-container {
+  min-height: calc(100vh - 120px);
+  margin-bottom: 20px;
+  padding-bottom: 40px;
+}
+
+/* Ensure kanban columns take up more space vertically */
+.kanban-column {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 180px);
+  height: 100%;
+}
+
+/* Ensure the Applications component has sufficient space */
+.applications-page-container {
+  min-height: calc(100vh - 80px);
+  padding-bottom: 40px;
+}
+
+/* Fix for the grid layout to ensure all columns have equal height */
+.applications-page-container .grid {
+  align-items: stretch;
+  min-height: calc(100vh - 180px);
+}
+
+/* Specific class for applications kanban board */
+.applications-kanban {
+  min-height: calc(100vh - 150px);
+}
+
+/* Specifically target the columns in applications kanban */
+.applications-kanban .kanban-column {
+  height: auto;
+  min-height: calc(100vh - 180px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Adjust custom scrollbar styling */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Ensures proper spacing for the kanban grid layout */
+.kanban-board-container .grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-3.xl\\:grid-cols-6.gap-4 {
+  min-height: calc(100vh - 180px);
+  align-items: stretch;
+}
+
+/* Add a higher z-index for cards being dragged */
+.card-moving {
+  z-index: 10;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Specifically target the KanbanBoard when in kanban view */
+.applications-page-container [class*="kanban-board"] {
+  min-height: calc(100vh - 180px);
+} 
