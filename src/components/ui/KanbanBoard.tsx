@@ -171,7 +171,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
     return filteredApps;
   };
   
-  // Get visible applications (limited to 5 by default)
+  // Get visible applications (limited to 3 by default)
   const getVisibleApplications = (status: string) => {
     let visibleApps = getApplicationsByStatus(status);
 
@@ -185,11 +185,11 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
       visibleApps = visibleApps.filter(app => requiresAttention(app));
     }
 
-    // Expand or collapse based on column state
+    // If expanded, show all applications in that column, otherwise show only 3
     if (expandedColumns[status]) {
-      return visibleApps;
+      return visibleApps; // Return all applications when expanded
     } else {
-      return visibleApps.slice(0, 3);
+      return visibleApps.slice(0, 3); // Show only 3 when collapsed
     }
   };
   
