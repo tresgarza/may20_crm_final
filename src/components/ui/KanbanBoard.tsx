@@ -1288,7 +1288,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
               </h3>
             </div>
             <div 
-              className="column-content h-[calc(100vh-300px)] overflow-y-auto custom-scrollbar p-1 rounded-md"
+              className="column-content overflow-y-auto custom-scrollbar p-1 rounded-md"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, APPLICATION_STATUS.NEW)}
@@ -1336,12 +1336,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   </div>
                 </div>
               ))}
-              {getApplicationsByStatus(APPLICATION_STATUS.NEW).length > 5 && !expandedColumns[APPLICATION_STATUS.NEW] && (
+              {getApplicationsByStatus(APPLICATION_STATUS.NEW).length > 3 && !expandedColumns[APPLICATION_STATUS.NEW] && (
                 <button 
                   onClick={() => toggleColumnExpand(APPLICATION_STATUS.NEW)}
                   className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
                 >
-                  Ver {getApplicationsByStatus(APPLICATION_STATUS.NEW).length - 5} más
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.NEW).length - 3} más
                 </button>
               )}
               {expandedColumns[APPLICATION_STATUS.NEW] && (
@@ -1369,7 +1369,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
               </h3>
             </div>
             <div 
-              className="column-content h-[calc(100vh-300px)] overflow-y-auto custom-scrollbar p-1 rounded-md"
+              className="column-content overflow-y-auto custom-scrollbar p-1 rounded-md"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, APPLICATION_STATUS.IN_REVIEW)}
@@ -1417,12 +1417,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   </div>
                 </div>
               ))}
-              {getApplicationsByStatus(APPLICATION_STATUS.IN_REVIEW).length > 5 && !expandedColumns[APPLICATION_STATUS.IN_REVIEW] && (
+              {getApplicationsByStatus(APPLICATION_STATUS.IN_REVIEW).length > 3 && !expandedColumns[APPLICATION_STATUS.IN_REVIEW] && (
                 <button 
                   onClick={() => toggleColumnExpand(APPLICATION_STATUS.IN_REVIEW)}
                   className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
                 >
-                  Ver {getApplicationsByStatus(APPLICATION_STATUS.IN_REVIEW).length - 5} más
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.IN_REVIEW).length - 3} más
                 </button>
               )}
               {expandedColumns[APPLICATION_STATUS.IN_REVIEW] && (
@@ -1450,7 +1450,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
               </h3>
                 </div>
             <div 
-              className="column-content h-[calc(100vh-300px)] overflow-y-auto custom-scrollbar p-1 rounded-md"
+              className="column-content overflow-y-auto custom-scrollbar p-1 rounded-md"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, APPLICATION_STATUS.APPROVED)}
@@ -1498,12 +1498,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   </div>
                 </div>
               ))}
-              {getApplicationsByStatus(APPLICATION_STATUS.APPROVED).length > 5 && !expandedColumns[APPLICATION_STATUS.APPROVED] && (
+              {getApplicationsByStatus(APPLICATION_STATUS.APPROVED).length > 3 && !expandedColumns[APPLICATION_STATUS.APPROVED] && (
                 <button 
                   onClick={() => toggleColumnExpand(APPLICATION_STATUS.APPROVED)}
                   className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
                 >
-                  Ver {getApplicationsByStatus(APPLICATION_STATUS.APPROVED).length - 5} más
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.APPROVED).length - 3} más
                 </button>
               )}
               {expandedColumns[APPLICATION_STATUS.APPROVED] && (
@@ -1531,7 +1531,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
               </h3>
             </div>
             <div 
-              className="column-content h-[calc(100vh-300px)] overflow-y-auto custom-scrollbar p-1 rounded-md"
+              className="column-content overflow-y-auto custom-scrollbar p-1 rounded-md"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, APPLICATION_STATUS.POR_DISPERSAR)}
@@ -1579,12 +1579,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   </div>
                 </div>
               ))}
-              {getApplicationsByStatus(APPLICATION_STATUS.POR_DISPERSAR).length > 5 && !expandedColumns[APPLICATION_STATUS.POR_DISPERSAR] && (
+              {getApplicationsByStatus(APPLICATION_STATUS.POR_DISPERSAR).length > 3 && !expandedColumns[APPLICATION_STATUS.POR_DISPERSAR] && (
                 <button 
                   onClick={() => toggleColumnExpand(APPLICATION_STATUS.POR_DISPERSAR)}
                   className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
                 >
-                  Ver {getApplicationsByStatus(APPLICATION_STATUS.POR_DISPERSAR).length - 5} más
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.POR_DISPERSAR).length - 3} más
                 </button>
               )}
               {expandedColumns[APPLICATION_STATUS.POR_DISPERSAR] && (
@@ -1612,7 +1612,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
               </h3>
             </div>
             <div 
-              className="column-content h-[calc(100vh-300px)] overflow-y-auto custom-scrollbar p-1 rounded-md"
+              className="column-content overflow-y-auto custom-scrollbar p-1 rounded-md"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, APPLICATION_STATUS.COMPLETED)}
@@ -1660,12 +1660,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   </div>
                 </div>
               ))}
-              {getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length > 5 && !expandedColumns[APPLICATION_STATUS.COMPLETED] && (
+              {getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length > 3 && !expandedColumns[APPLICATION_STATUS.COMPLETED] && (
                 <button 
                   onClick={() => toggleColumnExpand(APPLICATION_STATUS.COMPLETED)}
                   className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
                 >
-                  Ver {getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length - 5} más
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length - 3} más
                 </button>
               )}
               {expandedColumns[APPLICATION_STATUS.COMPLETED] && (
@@ -1693,7 +1693,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
               </h3>
             </div>
             <div 
-              className="column-content h-[calc(100vh-300px)] overflow-y-auto custom-scrollbar p-1 rounded-md"
+              className="column-content overflow-y-auto custom-scrollbar p-1 rounded-md"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, APPLICATION_STATUS.REJECTED)}
@@ -1741,12 +1741,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           </div>
                         </div>
               ))}
-              {getApplicationsByStatus(APPLICATION_STATUS.REJECTED).length > 5 && !expandedColumns[APPLICATION_STATUS.REJECTED] && (
+              {getApplicationsByStatus(APPLICATION_STATUS.REJECTED).length > 3 && !expandedColumns[APPLICATION_STATUS.REJECTED] && (
                 <button 
                   onClick={() => toggleColumnExpand(APPLICATION_STATUS.REJECTED)}
                   className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
                 >
-                  Ver {getApplicationsByStatus(APPLICATION_STATUS.REJECTED).length - 5} más
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.REJECTED).length - 3} más
                 </button>
               )}
               {expandedColumns[APPLICATION_STATUS.REJECTED] && (
