@@ -29,6 +29,13 @@
   height: 100%;
 }
 
+/* Fix to remove the fixed height and replace it with auto */
+.column-content[class*="h-[calc(100vh-300px)]"] {
+  height: auto !important;
+  max-height: calc(100vh - 250px) !important;
+  overflow-y: auto !important;
+}
+
 /* Ensure the Applications component has sufficient space */
 .applications-page-container {
   min-height: calc(100vh - 80px);
