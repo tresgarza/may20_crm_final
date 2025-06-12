@@ -9,8 +9,8 @@
 .applications-page-container .kanban-board-container .column-content,
 .column-content {
   height: auto !important;
-  min-height: 300px !important;
-  max-height: calc(100vh - 260px) !important;
+  min-height: 500px !important;
+  max-height: calc(100vh - 220px) !important;
   overflow-y: auto !important;
   padding-right: 4px;
   flex: 1 1 auto !important;
@@ -19,7 +19,7 @@
 
 /* Make the entire kanban board container taller */
 .kanban-board-container {
-  min-height: calc(100vh - 120px);
+  min-height: calc(100vh - 100px);
   margin-bottom: 20px;
   padding-bottom: 40px;
 }
@@ -28,14 +28,14 @@
 .kanban-column {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 220px);
+  min-height: calc(100vh - 180px);
   height: 100%;
 }
 
 /* Fix to remove the fixed height and replace it with auto */
 .column-content[class*="h-[calc(100vh-300px)]"] {
   height: auto !important;
-  max-height: calc(100vh - 260px) !important;
+  max-height: calc(100vh - 220px) !important;
   overflow-y: auto !important;
 }
 
@@ -52,18 +52,18 @@
 /* Fix for the grid layout to ensure all columns have equal height */
 .applications-page-container .grid {
   align-items: stretch;
-  min-height: calc(100vh - 180px);
+  min-height: calc(100vh - 160px);
 }
 
 /* Specific class for applications kanban board */
 .applications-kanban {
-  min-height: calc(100vh - 150px);
+  min-height: calc(100vh - 130px);
 }
 
 /* Specifically target the columns in applications kanban */
 .applications-kanban .kanban-column {
   height: auto;
-  min-height: calc(100vh - 180px);
+  min-height: calc(100vh - 160px);
   display: flex;
   flex-direction: column;
 }
@@ -199,7 +199,7 @@
 .applications-page-container {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 80px); /* Full viewport height minus the top nav (80px) */
+  min-height: calc(100vh - 70px);
 }
 
 /* 2. Content Box Wrapper - THE KEY FIX */
@@ -239,6 +239,7 @@
   min-width: 280px;
   display: flex;
   flex-direction: column;
+  max-height: calc(100vh - 160px);
 }
 
 /* 6. Column Content (The scrollable part) */
@@ -250,7 +251,8 @@
   background-color: #f9fafb; /* Light gray background for the column */
   border-radius: 0.5rem;
   padding: 0.75rem;
-  min-height: 500px; /* Minimum height for each column content area */
+  min-height: 500px;
+  max-height: calc(100vh - 220px);
 }
 
 /* 7. Card Styling */
