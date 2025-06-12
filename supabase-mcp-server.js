@@ -3,6 +3,14 @@ const url = require('url');
 
 console.log('Iniciando servidor MCP para Supabase...');
 
+// Crear un objeto mock de supabase para evitar errores
+const supabase = {
+  rpc: async (funcName, params) => {
+    console.log(`Mock supabase.rpc llamado con: ${funcName}`, params);
+    return { data: [], error: null };
+  }
+};
+
 // Puerto en el que escuchará el servidor
 const PORT = process.env.PORT || 3100;
 
