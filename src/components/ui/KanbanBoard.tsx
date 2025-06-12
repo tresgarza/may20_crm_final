@@ -185,11 +185,11 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
       visibleApps = visibleApps.filter(app => requiresAttention(app));
     }
 
-    // If expanded, show all applications in that column, otherwise show only 3
+    // If expanded, show all applications in that column, otherwise show only 5
     if (expandedColumns[status]) {
       return visibleApps; // Return all applications when expanded
     } else {
-      return visibleApps.slice(0, 3); // Show only 3 when collapsed
+      return visibleApps.slice(0, 5); // Show only 5 when collapsed
     }
   };
   
@@ -1336,12 +1336,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   </div>
                 </div>
               ))}
-              {getApplicationsByStatus(APPLICATION_STATUS.NEW).length > 3 && !expandedColumns[APPLICATION_STATUS.NEW] && (
+              {getApplicationsByStatus(APPLICATION_STATUS.NEW).length > 5 && !expandedColumns[APPLICATION_STATUS.NEW] && (
                 <button 
                   onClick={() => toggleColumnExpand(APPLICATION_STATUS.NEW)}
                   className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
                 >
-                  Ver {getApplicationsByStatus(APPLICATION_STATUS.NEW).length - 3} más
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.NEW).length - 5} más
                 </button>
               )}
               {expandedColumns[APPLICATION_STATUS.NEW] && (
@@ -1417,12 +1417,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   </div>
                 </div>
               ))}
-              {getApplicationsByStatus(APPLICATION_STATUS.IN_REVIEW).length > 3 && !expandedColumns[APPLICATION_STATUS.IN_REVIEW] && (
+              {getApplicationsByStatus(APPLICATION_STATUS.IN_REVIEW).length > 5 && !expandedColumns[APPLICATION_STATUS.IN_REVIEW] && (
                 <button 
                   onClick={() => toggleColumnExpand(APPLICATION_STATUS.IN_REVIEW)}
                   className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
                 >
-                  Ver {getApplicationsByStatus(APPLICATION_STATUS.IN_REVIEW).length - 3} más
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.IN_REVIEW).length - 5} más
                 </button>
               )}
               {expandedColumns[APPLICATION_STATUS.IN_REVIEW] && (
@@ -1498,12 +1498,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   </div>
                 </div>
               ))}
-              {getApplicationsByStatus(APPLICATION_STATUS.APPROVED).length > 3 && !expandedColumns[APPLICATION_STATUS.APPROVED] && (
+              {getApplicationsByStatus(APPLICATION_STATUS.APPROVED).length > 5 && !expandedColumns[APPLICATION_STATUS.APPROVED] && (
                 <button 
                   onClick={() => toggleColumnExpand(APPLICATION_STATUS.APPROVED)}
                   className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
                 >
-                  Ver {getApplicationsByStatus(APPLICATION_STATUS.APPROVED).length - 3} más
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.APPROVED).length - 5} más
                 </button>
               )}
               {expandedColumns[APPLICATION_STATUS.APPROVED] && (
@@ -1579,12 +1579,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   </div>
                 </div>
               ))}
-              {getApplicationsByStatus(APPLICATION_STATUS.POR_DISPERSAR).length > 3 && !expandedColumns[APPLICATION_STATUS.POR_DISPERSAR] && (
+              {getApplicationsByStatus(APPLICATION_STATUS.POR_DISPERSAR).length > 5 && !expandedColumns[APPLICATION_STATUS.POR_DISPERSAR] && (
                 <button 
                   onClick={() => toggleColumnExpand(APPLICATION_STATUS.POR_DISPERSAR)}
                   className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
                 >
-                  Ver {getApplicationsByStatus(APPLICATION_STATUS.POR_DISPERSAR).length - 3} más
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.POR_DISPERSAR).length - 5} más
                 </button>
               )}
               {expandedColumns[APPLICATION_STATUS.POR_DISPERSAR] && (
@@ -1660,12 +1660,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   </div>
                 </div>
               ))}
-              {getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length > 3 && !expandedColumns[APPLICATION_STATUS.COMPLETED] && (
+              {getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length > 5 && !expandedColumns[APPLICATION_STATUS.COMPLETED] && (
                 <button 
                   onClick={() => toggleColumnExpand(APPLICATION_STATUS.COMPLETED)}
                   className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
                 >
-                  Ver {getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length - 3} más
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length - 5} más
                 </button>
               )}
               {expandedColumns[APPLICATION_STATUS.COMPLETED] && (
@@ -1741,12 +1741,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           </div>
                         </div>
               ))}
-              {getApplicationsByStatus(APPLICATION_STATUS.REJECTED).length > 3 && !expandedColumns[APPLICATION_STATUS.REJECTED] && (
+              {getApplicationsByStatus(APPLICATION_STATUS.REJECTED).length > 5 && !expandedColumns[APPLICATION_STATUS.REJECTED] && (
                 <button 
                   onClick={() => toggleColumnExpand(APPLICATION_STATUS.REJECTED)}
                   className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
                 >
-                  Ver {getApplicationsByStatus(APPLICATION_STATUS.REJECTED).length - 3} más
+                  Ver {getApplicationsByStatus(APPLICATION_STATUS.REJECTED).length - 5} más
                 </button>
               )}
               {expandedColumns[APPLICATION_STATUS.REJECTED] && (
