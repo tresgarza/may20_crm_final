@@ -200,7 +200,6 @@ const Applications: React.FC = () => {
     return (
       <KanbanBoard 
         applications={applications} 
-        statusField="global_status"
         onStatusChange={async (app, newStatus) => {
           await fetchApplications();
         }}
