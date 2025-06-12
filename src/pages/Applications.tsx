@@ -9,8 +9,6 @@ import Alert from '../components/ui/Alert';
 import { APPLICATION_TYPE, APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
 import { APPLICATION_STATUS, STATUS_LABELS } from '../utils/constants/statuses';
 import { formatCurrency as formatCurrencyUtil, formatDate } from '../utils/formatters';
-import KanbanBoardAdvisor from '../components/ui/KanbanBoardAdvisor';
-import KanbanBoardCompany from '../components/ui/KanbanBoardCompany';
 import KanbanBoard from '../components/ui/KanbanBoard';
 import '../styles/kanban.css';
 
@@ -198,21 +196,16 @@ const Applications: React.FC = () => {
       );
     }
 
-    if (isAdvisor()) {
-      return <KanbanBoardAdvisor applications={applications} onRefresh={fetchApplications} />;
-    } else if (isCompanyAdmin()) {
-      return <KanbanBoardCompany applications={applications} onRefresh={fetchApplications} />;
-    } else {
-      return (
-        <KanbanBoard 
-          applications={applications} 
-          statusField="global_status"
-          onStatusChange={async (app, newStatus) => {
-            await fetchApplications();
-          }}
-        />
-      );
-    }
+    // Usar el mismo componente KanbanBoard para todos los roles
+    return (
+      <KanbanBoard 
+        applications={applications} 
+        statusField="global_status"
+        onStatusChange={async (app, newStatus) => {
+          await fetchApplications();
+        }}
+      />
+    );
   };
   
   const renderListView = () => {
@@ -409,10 +402,10 @@ const Applications: React.FC = () => {
         </div>
 
         {/* --- Contenedor Principal con Sombra (Crece para llenar el espacio) --- */}
-        <div className="kanban-content-wrapper bg-base-100 shadow-xl rounded-box">
+        <div className="kanban-content-wrapper">
           
           {/* --- Controles: Búsqueda y Filtros (No se estira) --- */}
-          <div className="p-6 pb-2 flex-shrink-0">
+          <div>
             <div className="flex justify-between items-center mb-4">
               <div className="form-control w-full max-w-sm">
                 <input
@@ -444,7 +437,7 @@ const Applications: React.FC = () => {
           </div>
 
           {/* --- Área del Board o Lista (Crece para llenar el espacio) --- */}
-          <div className="kanban-board-area p-6 pt-0">
+          <div className="kanban-board-area">
             {viewMode === 'kanban' ? (
               renderKanbanBoard()
             ) : (
