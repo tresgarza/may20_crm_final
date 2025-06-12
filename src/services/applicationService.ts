@@ -19,6 +19,7 @@ export interface Application {
   assigned_to: string;
   application_type: string;
   product_type?: string;  // Tipo de producto (préstamo personal, auto, etc.)
+  financing_type?: 'producto' | 'personal' | string;  // Tipo de financiamiento
   requested_amount: number;
   status: ApplicationStatus;
   status_previous?: string;
@@ -164,6 +165,8 @@ export const getApplications = async (filters?: ApplicationFilter, entityFilter?
       company_id: app.company_id || "",
       assigned_to: app.assigned_to || "",
       application_type: app.application_type || "",
+      product_type: app.product_type || "",
+      financing_type: app.financing_type || "",
       requested_amount: parseFloat(app.amount) || 0,
       status: mapStatusFromDB(app.status),
       created_at: app.created_at,
