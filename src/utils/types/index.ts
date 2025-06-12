@@ -72,6 +72,8 @@ export interface Application {
   approved_by_advisor?: boolean;
   approved_by_company?: boolean;
   isMoving?: boolean;
+  financing_type?: 'producto' | 'personal' | string;
+  product_type?: string;
 }
 
 export interface StatusHistory {

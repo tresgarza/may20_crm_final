@@ -90,23 +90,23 @@ const Dashboard: React.FC = () => {
         try {
           if (user.role === USER_ROLES.ADVISOR) {
             // Estadísticas específicas del asesor
-            dashboardData = await getAdvisorDashboardStats(user.id, false);
+            dashboardData = await getAdvisorDashboardStats(user.id);
           } else if (user.role === USER_ROLES.COMPANY_ADMIN && user.entityId) {
             // Estadísticas específicas de la empresa (entityId contiene el company_id)
-            dashboardData = await getCompanyDashboardStats(user.entityId, false);
+            dashboardData = await getCompanyDashboardStats(user.entityId);
           } else {
             // Estadísticas generales para admin del sistema
-            dashboardData = await getGeneralDashboardStats({ includeSimulations: false });
+            dashboardData = await getGeneralDashboardStats();
           }
         } catch (statsError) {
           console.error('Error fetching dashboard stats:', statsError);
           // Modified part for the fallback data
           dashboardData = {
             totalApplications: 0,
-            pendingApplications: 0,
-            approvedApplications: 0,
-            rejectedApplications: 0,
-            averageAmount: 0,
+            totalApproved: 0,
+            totalRejected: 0,
+            totalPending: 0,
+            avgAmount: 0,
             minAmount: 0,
             maxAmount: 0,
             recentApplications: [],
@@ -234,14 +234,14 @@ const Dashboard: React.FC = () => {
           />
           <MetricCard
             title="Solicitudes Aprobadas"
-            value={isAdvisorStats(stats) ? stats.approvedApplications : stats.approvedApplications}
+            value={stats.totalApproved || 0}
             previousValue={0}
             icon={<ClipboardDocumentCheckIcon className="h-5 w-5" />}
             color="green"
           />
           <MetricCard
             title="Monto Promedio"
-            value={stats.averageAmount}
+            value={stats.avgAmount}
             formatValue={formatCurrency}
             icon={<CurrencyDollarIcon className="h-5 w-5" />}
             color="indigo"
@@ -343,15 +343,15 @@ const Dashboard: React.FC = () => {
                 <div className="stats stats-vertical shadow">
                   <div className="stat">
                     <div className="stat-title">Solicitudes Aprobadas</div>
-                    <div className="stat-value text-success">{stats.approvedApplications}</div>
+                    <div className="stat-value text-success">{stats.totalApproved || 0}</div>
                   </div>
                   <div className="stat">
                     <div className="stat-title">Solicitudes Rechazadas</div>
-                    <div className="stat-value text-error">{stats.rejectedApplications}</div>
+                    <div className="stat-value text-error">{stats.totalRejected || 0}</div>
                   </div>
                   <div className="stat">
                     <div className="stat-title">Solicitudes Pendientes</div>
-                    <div className="stat-value text-warning">{stats.pendingApplications}</div>
+                    <div className="stat-value text-warning">{stats.totalPending || 0}</div>
                   </div>
                 </div>
               </div>
