@@ -43,10 +43,8 @@
 .applications-page-container {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
-  min-height: calc(100vh - 80px); /* Altura completa menos la barra superior */
-  height: 100%;
-  padding-bottom: 40px; /* Espacio adicional al final de la página */
+  flex: 1 1 0%;
+  min-height: 0;          /* crítico para que flex-grow funcione correctamente */
 }
 
 /* Fix for the grid layout to ensure all columns have equal height */
@@ -119,15 +117,17 @@
   height: 100%;
   overflow-x: auto;
   overflow-y: hidden;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
+  min-height: 0;
 }
 
 .kanban-column {
-  flex: 0 0 280px;
+  flex: 0 0 280px;        /* ancho fijo para las columnas */
   min-width: 250px;
   display: flex;
   flex-direction: column;
-  height: 100%; /* Asegura que ocupe todo el alto disponible */
+  height: 100%;
+  min-height: 0;
 }
 
 .column-header {
@@ -135,13 +135,13 @@
 }
 
 .column-content {
-  flex: 1 1 auto;
-  overflow-y: auto;
+  flex: 1 1 0%;
+  overflow-y: auto;       /* scroll INDIVIDUAL por columna */
   background-color: #f8fafc;
   border-radius: 8px;
   padding: 0.5rem;
   border: 1px solid #e2e8f0;
-  min-height: calc(100vh - 300px); /* Asegura que las columnas sean muy altas */
+  min-height: 0;
 }
 
 /* 7. Card Styling - Compact Version */
@@ -210,27 +210,19 @@
    it's tall enough to show more cards. */
 .kanban-content-wrapper,
 .kanban-board-area {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  min-height: calc(100vh - 160px); /* MUCHO más alto - casi toda la pantalla */
-  height: 100%;
-  overflow: hidden;
-  margin-bottom: 20px;
 }
 
 /* 3. Board/List Area */
 /* This class is on the div that contains either the Kanban or the List.
    It also needs to grow to fill the white box. */
 .kanban-board-area {
-  flex: 1 1 auto;
+  flex-grow: 1;
   display: flex;
-  padding: 1rem;
-  min-height: calc(100vh - 240px); /* Muy alto para asegurar que ocupe todo el espacio */
-  height: 100%;
+  min-height: calc(100vh - 280px); /* Ensure the board area itself is tall */
 }
 
 /* 4. Kanban Board */
@@ -244,24 +236,23 @@
 
 /* 5. Kanban Column */
 .kanban-column {
-  flex: 0 0 280px;
-  min-width: 250px;
+  flex-basis: 280px; /* Base width */
+  flex-shrink: 0;   /* Prevent columns from shrinking */
+  min-width: 280px;
   display: flex;
   flex-direction: column;
-  height: 100%; /* Asegura que ocupe todo el alto disponible */
 }
 
 /* 6. Column Content (The scrollable part) */
 /* This is where the magic happens. It grows to fill the column
    and handles its own internal scrolling for cards. */
 .column-content {
-  flex: 1 1 auto;
+  flex-grow: 1;
   overflow-y: auto;
-  background-color: #f8fafc;
-  border-radius: 8px;
-  padding: 0.5rem;
-  border: 1px solid #e2e8f0;
-  min-height: calc(100vh - 300px); /* Asegura que las columnas sean muy altas */
+  background-color: #f9fafb; /* Light gray background for the column */
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  min-height: 500px; /* Minimum height for each column content area */
 }
 
 /* 7. Card Styling */
@@ -525,4 +516,105 @@
     min-width: 240px;
     max-width: 260px;
   }
+}
+
+/*
+  Kanban Layout v5: Definitive Fix based on user's technical brief.
+  This version uses the correct flexbox inheritance pattern (flex-1 + min-h-0)
+  to ensure the kanban board and its columns expand to 100% of the available height.
+*/
+
+/* 1. Page Container (Child of <main>) */
+.applications-page-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-height: 0; /* CRITICAL: Allows flex children to shrink and grow properly */
+  padding: 1rem; /* Padding is applied here, not in MainLayout */
+}
+
+/* 2. Main Content Wrapper (White Box) & Board Area */
+.kanban-content-wrapper,
+.kanban-board-area {
+  flex: 1 1 0%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Hide overflow on wrappers */
+}
+
+/* Specific styling for the white box */
+.kanban-content-wrapper {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* 3. The Board Itself */
+.kanban-board {
+  display: flex;
+  gap: 1rem;
+  width: 100%;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1rem;
+}
+
+/* 4. Kanban Column */
+.kanban-column {
+  flex: 0 0 280px; /* Fixed width, no shrinking */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0; /* Allow column to fit within its flex parent */
+}
+
+/* 5. Column Content (Scrollable Area) */
+.column-content {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow-y: auto; /* INDIVIDUAL scroll per column */
+  background-color: #f8fafc;
+  border-radius: 8px;
+  padding: 0.5rem;
+  border: 1px solid #e2e8f0;
+}
+
+/* Modern Scrollbar for columns */
+.column-content::-webkit-scrollbar { width: 6px; }
+.column-content::-webkit-scrollbar-track { background: transparent; }
+.column-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+.column-content::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+
+/* 6. Compact Card Styling */
+.kanban-card {
+  padding: 4px 6px;
+  margin-bottom: 6px;
+  line-height: 1.2;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: grab;
+}
+
+.kanban-card h3 { font-size: 14px; font-weight: 600; margin: 0 0 2px; }
+.kanban-card p { font-size: 13px; margin: 0; color: #4b5563; }
+.kanban-card .badge { padding: 1px 5px; font-size: 11px; font-weight: 500; }
+
+.kanban-card:hover {
+  border-color: #9ca3af;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+}
+
+.kanban-card .action-btn {
+    font-size: .75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid #d1d5db;
+    background: white;
+    color: #374151;
+    cursor: pointer;
+    margin-top: 6px;
 } 
