@@ -18,7 +18,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       <Sidebar isOpen={isSidebarOpen} />
       <div className="lg:ml-64 flex flex-col min-h-screen">
         <Navbar toggleSidebar={toggleSidebar} />
-        <main className="flex-grow p-4">{children}</main>
+        <main className="flex-1 min-h-0 p-4">{children}</main>
       </div>
       
       {/* Backdrop for mobile sidebar */}
