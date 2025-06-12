@@ -101,11 +101,11 @@
 }
 
 /* Styles for the main Kanban container */
-.kanban-container {
-  transform: scale(0.8);
+.kanban-zoom-wrapper {
+  transform: scale(0.75);
   transform-origin: top left;
-  width: 125%;
-  height: 125%;
+  width: 133.33%; /* 100 / 0.75 */
+  height: 133.33%;
 }
 
 .kanban-board {

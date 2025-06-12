@@ -578,7 +578,15 @@ const Applications: React.FC = () => {
             </div>
           </div>
           
-          {viewMode === 'kanban' ? renderKanbanBoard() : renderListView()}
+          {viewMode === 'kanban' && (
+            <div className="p-4 kanban-zoom-wrapper">
+              {renderKanbanBoard()}
+            </div>
+          )}
+
+          {viewMode === 'list' && (
+            renderListView()
+          )}
         </div>
       </div>
     </MainLayout>
