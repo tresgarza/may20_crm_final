@@ -137,27 +137,46 @@
   padding: 0.5rem;
 }
 
+/* 7. Card Styling - Compact Version */
+/* Inspired by Pipedrive's density to show more cards per column. */
 .kanban-card {
-  padding: 1rem; /* Padding normal para legibilidad */
-  margin-bottom: 0.75rem;
   background-color: white;
-  border-radius: 6px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  border-left: 5px solid transparent;
+  border-radius: 0.375rem; /* 6px */
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  padding: 0.5rem 0.75rem; /* Reduced padding: 8px vertical, 12px horizontal */
+  margin-bottom: 0.5rem;   /* Reduced margin between cards */
   cursor: grab;
-  transition: all 0.2s ease-in-out;
+  border-left: 3px solid transparent; /* Subtle left border for status */
 }
 
-.kanban-card:last-child {
-  margin-bottom: 0;
+/* Reduce font size for the main title (client name) */
+.kanban-card h3 {
+  font-size: 0.9rem; /* 14.4px */
+  font-weight: 500;
+  margin-bottom: 0.125rem; /* Tiny margin below title */
 }
 
-.kanban-card .text-lg {
-  font-size: 1rem; /* Tamaño de fuente normal */
+/* Style for secondary info (amount, type, etc.) */
+.kanban-card p {
+  font-size: 0.8rem; /* 12.8px */
+  color: #6b7280; /* Gray-500 */
+  line-height: 1.2; /* Tighter line height */
+  margin: 0;
 }
 
-.kanban-card .text-sm {
-  font-size: 0.875rem; /* Tamaño de fuente normal */
+/* Container for status badges at the bottom of the card */
+.kanban-card .badge-container {
+  margin-top: 0.5rem; /* 8px */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem; /* 4px gap between badges */
+}
+
+/* Compact badges */
+.kanban-card .badge {
+  font-size: 0.65rem; /* 10.4px */
+  padding: 0.25rem 0.5rem;
+  height: auto;
 }
 
 /* 
@@ -225,15 +244,6 @@
 }
 
 /* 7. Card Styling */
-.kanban-card {
-  background-color: white;
-  border-radius: 0.375rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  padding: 1rem;
-  margin-bottom: 0.75rem;
-  cursor: grab;
-}
-
 .kanban-card:last-child {
   margin-bottom: 0;
 } 
