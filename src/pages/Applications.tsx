@@ -391,9 +391,9 @@ const Applications: React.FC = () => {
   
   return (
     <MainLayout>
-      <div className="p-6 applications-page-flex-container">
+      <div className="p-6 applications-page-container">
 
-        {/* --- Cabecera y Filtros --- */}
+        {/* --- Cabecera y Botones (No se estira) --- */}
         <div className="flex-shrink-0">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
             <div>
@@ -401,47 +401,32 @@ const Applications: React.FC = () => {
               <p className="text-gray-500">Gestiona todas las solicitudes en un solo lugar.</p>
             </div>
             {userCan(PERMISSIONS.CREATE_APPLICATION) && (
-              <button className="btn btn-primary mt-4 md:mt-0" onClick={() => navigate('/applications/new')}>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-                </svg>
-                Nueva Solicitud
-              </button>
+              <Link to="/new-application" className="btn btn-primary mt-4 md:mt-0">
+                + Nueva Solicitud
+              </Link>
             )}
           </div>
         </div>
 
-        {/* --- Área de Contenido Principal (el "recuadro azul") --- */}
-        <div className="mt-6 bg-base-100 shadow-xl rounded-box kanban-content-area-wrapper">
+        {/* --- Contenedor Principal con Sombra (Crece para llenar el espacio) --- */}
+        <div className="mt-6 bg-base-100 shadow-xl rounded-box kanban-content-wrapper">
           
-          {/* Controles: Búsqueda y cambio de vista */}
+          {/* --- Controles: Búsqueda y Filtros (No se estira) --- */}
           <div className="p-6 pb-2 flex-shrink-0">
             <div className="flex justify-between items-center mb-6">
               <div className="form-control w-full max-w-sm">
-                <div className="input-group">
-                  <input
-                    type="text"
-                    placeholder="Buscar por nombre, email o teléfono"
-                    className="input input-bordered w-full"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  <button className="btn btn-square">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  </button>
-                </div>
+                <input
+                  type="text"
+                  placeholder="Buscar por nombre, email o teléfono"
+                  className="input input-bordered w-full"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
               </div>
-              <div className="flex items-center gap-2">
-                <button className="btn btn-ghost" onClick={fetchApplications}>
-                  Actualizar
-                </button>
+              <div className="flex items-center gap-4">
+                <button className="btn btn-ghost" onClick={fetchApplications}>Actualizar</button>
                 <button className="btn btn-ghost" onClick={handleFilterToggle}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                    <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                  </svg>
+                  <i className="fas fa-filter mr-2"></i>
                   Mostrar Filtros
                 </button>
                 <div className="tabs tabs-boxed">
@@ -450,26 +435,17 @@ const Applications: React.FC = () => {
                 </div>
               </div>
             </div>
-            {isFilterExpanded && (
-              <div className="bg-base-200 p-4 rounded-lg mb-6">
-                 {/* ... Contenido de los filtros ... */}
-              </div>
-            )}
-            {error && <Alert type="error" message={error} onClose={() => setError(null)} className="mb-6" />}
           </div>
 
-          {/* El contenedor que se estira para el Kanban/Lista */}
-          <div className="px-6 pb-6 flex-grow">
+          {/* --- Área del Board o Lista (Crece para llenar el espacio) --- */}
+          <div className="px-6 pb-6 kanban-board-area">
             {viewMode === 'kanban' ? (
-              <div className="kanban-board-wrapper">
-                {renderKanbanBoard()}
-              </div>
+              renderKanbanBoard()
             ) : (
               renderListView()
             )}
           </div>
         </div>
-
       </div>
     </MainLayout>
   );
