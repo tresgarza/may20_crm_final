@@ -196,14 +196,15 @@
   min-height: calc(100vh - 80px); /* Full viewport height minus the top nav (80px) */
 }
 
-/* 2. Content Box Wrapper */
+/* 2. Content Box Wrapper - THE KEY FIX */
 /* This class wraps the main white box containing controls and the board.
-   'flex-grow: 1' is the key that makes this box expand vertically
-   to fill the available space in its parent. */
+   'flex-grow: 1' makes this box expand vertically, and min-height ensures
+   it's tall enough to show more cards. */
 .kanban-content-wrapper {
   flex-grow: 1;
-  display: flex; /* It's also a flex container for its own children. */
+  display: flex;
   flex-direction: column;
+  min-height: calc(100vh - 200px); /* MUCH taller minimum height for the white box */
 }
 
 /* 3. Board/List Area */
@@ -211,7 +212,8 @@
    It also needs to grow to fill the white box. */
 .kanban-board-area {
   flex-grow: 1;
-  display: flex; /* This is crucial for the board itself to have height. */
+  display: flex;
+  min-height: calc(100vh - 280px); /* Ensure the board area itself is tall */
 }
 
 /* 4. Kanban Board */
@@ -241,6 +243,7 @@
   background-color: #f9fafb; /* Light gray background for the column */
   border-radius: 0.5rem;
   padding: 0.75rem;
+  min-height: 500px; /* Minimum height for each column content area */
 }
 
 /* 7. Card Styling */
