@@ -391,11 +391,11 @@ const Applications: React.FC = () => {
   
   return (
     <MainLayout>
-      <div className="p-6 applications-page-container">
+      <div className="applications-page-container">
 
         {/* --- Cabecera y Botones (No se estira) --- */}
         <div className="flex-shrink-0">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
             <div>
               <h1 className="text-3xl font-bold">Solicitudes de Crédito</h1>
               <p className="text-gray-500">Gestiona todas las solicitudes en un solo lugar.</p>
@@ -409,11 +409,11 @@ const Applications: React.FC = () => {
         </div>
 
         {/* --- Contenedor Principal con Sombra (Crece para llenar el espacio) --- */}
-        <div className="mt-6 bg-base-100 shadow-xl rounded-box kanban-content-wrapper">
+        <div className="kanban-content-wrapper">
           
           {/* --- Controles: Búsqueda y Filtros (No se estira) --- */}
-          <div className="p-6 pb-2 flex-shrink-0">
-            <div className="flex justify-between items-center mb-6">
+          <div>
+            <div className="flex justify-between items-center mb-4">
               <div className="form-control w-full max-w-sm">
                 <input
                   type="text"
@@ -424,21 +424,27 @@ const Applications: React.FC = () => {
                 />
               </div>
               <div className="flex items-center gap-4">
-                <button className="btn btn-ghost" onClick={fetchApplications}>Actualizar</button>
-                <button className="btn btn-ghost" onClick={handleFilterToggle}>
+                <button className="btn btn-ghost btn-sm" onClick={fetchApplications}>
+                  Actualizar
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={handleFilterToggle}>
                   <i className="fas fa-filter mr-2"></i>
                   Mostrar Filtros
                 </button>
                 <div className="tabs tabs-boxed">
-                  <a className={`tab ${viewMode === 'kanban' ? 'tab-active' : ''}`} onClick={() => setViewMode('kanban')}>Kanban</a>
-                  <a className={`tab ${viewMode === 'list' ? 'tab-active' : ''}`} onClick={() => setViewMode('list')}>Lista</a>
+                  <a className={`tab tab-sm ${viewMode === 'kanban' ? 'tab-active' : ''}`} onClick={() => setViewMode('kanban')}>
+                    Kanban
+                  </a>
+                  <a className={`tab tab-sm ${viewMode === 'list' ? 'tab-active' : ''}`} onClick={() => setViewMode('list')}>
+                    Lista
+                  </a>
                 </div>
               </div>
             </div>
           </div>
 
           {/* --- Área del Board o Lista (Crece para llenar el espacio) --- */}
-          <div className="px-6 pb-6 kanban-board-area">
+          <div className="kanban-board-area">
             {viewMode === 'kanban' ? (
               renderKanbanBoard()
             ) : (
