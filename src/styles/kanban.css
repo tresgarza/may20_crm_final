@@ -161,62 +161,70 @@
 }
 
 /* 
-  Kanban Layout v3: A robust, full-height flexbox implementation.
-  This approach ensures the Kanban board fills the entire vertical space
-  of its container, with scrolling handled inside each column.
+  Kanban Layout v4: A top-down, full-height Flexbox model.
+  This is a robust approach to ensure the Kanban board fills the entire 
+  vertical space of its container, with scrolling handled inside each column.
 */
 
-/* Main container for the entire page content below the top nav bar */
-.applications-page-container {
+/* This class is applied to the main page container in Applications.tsx.
+   It sets up the primary flex container for the whole page view. */
+.applications-page-flex-container {
   display: flex;
   flex-direction: column;
-  /* Occupies full viewport height minus the top navigation bar (adjust if nav height changes) */
-  height: calc(100vh - 80px); 
+  /* Full viewport height minus the top nav bar (assuming 80px). */
+  height: calc(100vh - 80px);
 }
 
-/* Wrapper for the main content area (the "blue box" in the screenshot) */
-.kanban-main-content {
-  flex-grow: 1; /* This is key: it makes the container grow to fill available space */
+/* This class is for the main content area (the "blue box").
+   The flex-grow property is the key to making it expand vertically. */
+.kanban-content-area-wrapper {
+  flex-grow: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* Prevents the container itself from scrolling */
+  overflow: hidden; /* Prevents this container from having a scrollbar. */
 }
 
-/* The actual board containing all the columns */
+/* This is a wrapper directly around the Kanban board itself. */
+.kanban-board-wrapper {
+  height: 100%;
+  display: flex;
+}
+
+/* The board containing all the columns. */
 .kanban-board {
-  flex-grow: 1; /* The board also grows to fill its parent */
   display: flex;
   gap: 1rem;
-  padding: 1rem;
-  overflow-x: auto; /* Allows horizontal scrolling if columns overflow */
+  width: 100%;
+  height: 100%;
+  overflow-x: auto; /* Allows horizontal scrolling for many columns. */
 }
 
-/* A single Kanban column */
+/* A single Kanban column. */
 .kanban-column {
-  flex: 1 1 280px; /* Flex-grow, flex-shrink, and base width */
-  min-width: 280px;
   display: flex;
   flex-direction: column;
-  max-height: 100%; /* Ensures columns don't exceed the board's height */
+  min-width: 280px;
+  flex-basis: 280px;
+  flex-grow: 1;
+  height: 100%;
 }
 
-/* The scrollable area inside a column that contains the cards */
+/* The scrollable content area inside each column. */
 .column-content {
   flex-grow: 1;
-  overflow-y: auto; /* The scroll magic happens here, inside the column */
+  overflow-y: auto; /* The vertical scrollbar appears here! */
   background-color: #f9fafb;
   border-radius: 0.5rem;
   padding: 0.75rem;
 }
 
-/* Styling for individual cards */
+/* Standard card styling for legibility. */
 .kanban-card {
   background-color: white;
   border-radius: 0.375rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   padding: 1rem;
   margin-bottom: 0.75rem;
-  border-left: 5px solid transparent;
   cursor: grab;
 }
 
