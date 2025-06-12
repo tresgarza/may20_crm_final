@@ -10,7 +10,7 @@
 .column-content {
   height: auto !important;
   min-height: 300px !important;
-  max-height: calc(100vh - 250px) !important;
+  max-height: calc(100vh - 210px) !important;
   overflow-y: auto !important;
   padding-right: 4px;
   flex: 1 1 auto !important;
@@ -35,7 +35,7 @@
 /* Fix to remove the fixed height and replace it with auto */
 .column-content[class*="h-[calc(100vh-300px)]"] {
   height: auto !important;
-  max-height: calc(100vh - 250px) !important;
+  max-height: calc(100vh - 210px) !important;
   overflow-y: auto !important;
 }
 
