@@ -315,10 +315,10 @@ const Applications: React.FC = () => {
                 <td>{application.client_name || 'N/A'}</td>
                 <td>{application.company_name || 'N/A'}</td>
                 <td>
-                  <span className={`badge ${application.financing_type === 'producto' ? 'badge-primary' : application.financing_type === 'personal' ? 'badge-secondary' : 'badge-primary'} badge-outline`}>
-                  {application.financing_type === 'producto' ? (
+                  <span className={`badge ${application.product_type === 'producto' ? 'badge-primary' : application.product_type === 'personal' ? 'badge-secondary' : 'badge-primary'} badge-outline`}>
+                  {application.product_type === 'producto' ? (
                     'Financiamiento de Producto'
-                  ) : application.financing_type === 'personal' ? (
+                  ) : application.product_type === 'personal' ? (
                     'Crédito Personal'
                   ) : application.application_type === 'selected_plans' && application.product_type
                     ? getApplicationTypeLabel(application.product_type)
