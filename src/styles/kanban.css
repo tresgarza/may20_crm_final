@@ -10,7 +10,7 @@
 .column-content {
   height: auto !important;
   min-height: 300px !important;
-  max-height: calc(100vh - 140px) !important;
+  max-height: calc(100vh - 260px) !important;
   overflow-y: auto !important;
   padding-right: 4px;
   flex: 1 1 auto !important;
@@ -28,14 +28,14 @@
 .kanban-column {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 180px);
+  min-height: calc(100vh - 220px);
   height: 100%;
 }
 
 /* Fix to remove the fixed height and replace it with auto */
 .column-content[class*="h-[calc(100vh-300px)]"] {
   height: auto !important;
-  max-height: calc(100vh - 140px) !important;
+  max-height: calc(100vh - 260px) !important;
   overflow-y: auto !important;
 }
 
@@ -101,14 +101,22 @@
 }
 
 /* Styles for the main Kanban container */
-.kanban-zoom-wrapper {
-  transform: scale(0.75);
-  transform-origin: top left;
-  width: 133.33%; /* 100 / 0.75 */
-  height: 133.33%;
-}
-
 .kanban-board {
   display: flex;
   gap: 1rem;
+}
+
+.kanban-card {
+  padding: 0.75rem;
+  transition: all 0.2s ease-in-out;
+  border-left: 5px solid transparent;
+  cursor: grab;
+}
+
+.kanban-card .text-lg {
+  font-size: 0.9rem;
+}
+
+.kanban-card .text-sm {
+  font-size: 0.75rem;
 } 

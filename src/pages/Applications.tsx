@@ -579,7 +579,7 @@ const Applications: React.FC = () => {
           </div>
           
           {viewMode === 'kanban' && (
-            <div className="p-4 kanban-zoom-wrapper">
+            <div className="p-4">
               {renderKanbanBoard()}
             </div>
           )}
