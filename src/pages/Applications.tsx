@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PERMISSIONS } from '../utils/constants/permissions';
 import { usePermissions } from '../contexts/PermissionsContext';
@@ -8,59 +8,78 @@ import { getApplications, Application as ApplicationType, ApplicationFilter } fr
 import Alert from '../components/ui/Alert';
 import { APPLICATION_TYPE, APPLICATION_TYPE_LABELS } from '../utils/constants/applications';
 import { APPLICATION_STATUS, STATUS_LABELS } from '../utils/constants/statuses';
-import { formatCurrency, formatDate } from '../utils/formatters';
+import { formatCurrency as formatCurrencyUtil, formatDate } from '../utils/formatters';
+import KanbanBoardAdvisor from '../components/ui/KanbanBoardAdvisor';
+import KanbanBoardCompany from '../components/ui/KanbanBoardCompany';
+import KanbanBoard from '../components/ui/KanbanBoard';
+import '../styles/kanban.css';
 
 const Applications: React.FC = () => {
   const { userCan } = usePermissions();
   const { user } = useAuth();
-  const { getEntityFilter, shouldFilterByEntity } = usePermissions();
+  const { getEntityFilter, shouldFilterByEntity, isAdvisor, isCompanyAdmin } = usePermissions();
   const navigate = useNavigate();
   
   const [applications, setApplications] = useState<ApplicationType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('selected_plans');
   const [dateFromFilter, setDateFromFilter] = useState<string>('');
   const [dateToFilter, setDateToFilter] = useState<string>('');
   const [amountMinFilter, setAmountMinFilter] = useState<string>('');
   const [amountMaxFilter, setAmountMaxFilter] = useState<string>('');
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [sortField, setSortField] = useState<string>('created_at');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  
+  const fetchApplications = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const entityFilter = shouldFilterByEntity() ? getEntityFilter() : null;
+      
+      const filters: ApplicationFilter = {
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        searchQuery: searchQuery || undefined,
+        application_type: 'selected_plans',
+        dateFrom: dateFromFilter || undefined,
+        dateTo: dateToFilter || undefined,
+        amountMin: amountMinFilter ? parseFloat(amountMinFilter) : undefined,
+        amountMax: amountMaxFilter ? parseFloat(amountMaxFilter) : undefined
+      };
+      
+      console.log('Aplicando filtros:', JSON.stringify(filters, null, 2));
+      
+      const data = await getApplications(filters, entityFilter);
+      
+      console.log(`Solicitudes recuperadas: ${data.length}`);
+      if (data.length > 0) {
+        console.log('Tipos de solicitudes:', new Set(data.map(app => app.application_type)));
+        
+        // Verificar si hay alguna aplicación que no sea 'selected_plans'
+        const nonSelectedPlans = data.filter(app => app.application_type !== 'selected_plans');
+        if (nonSelectedPlans.length > 0) {
+          console.warn(`ADVERTENCIA: Se encontraron ${nonSelectedPlans.length} solicitudes que no son de tipo 'selected_plans':`);
+          console.warn(nonSelectedPlans.map(app => ({ id: app.id, type: app.application_type })));
+        }
+      }
+      
+      setApplications(data);
+    } catch (error: any) {
+      console.error('Error fetching applications:', error);
+      setError('Error al cargar las solicitudes: ' + (error.message || 'Error desconocido'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchQuery, statusFilter, typeFilter, dateFromFilter, dateToFilter, amountMinFilter, amountMaxFilter, shouldFilterByEntity, getEntityFilter]);
   
   useEffect(() => {
-    const fetchApplications = async () => {
-      setIsLoading(true);
-      setError(null);
-      
-      try {
-        // Aplicar filtros según el rol del usuario
-        const entityFilter = shouldFilterByEntity() ? getEntityFilter() : null;
-        
-        // Crear objeto de filtros para la búsqueda
-        const filters: ApplicationFilter = {
-          status: statusFilter !== 'all' ? statusFilter : undefined,
-          searchQuery: searchQuery || undefined,
-          application_type: typeFilter !== 'all' ? typeFilter : undefined,
-          dateFrom: dateFromFilter || undefined,
-          dateTo: dateToFilter || undefined,
-          amountMin: amountMinFilter ? parseFloat(amountMinFilter) : undefined,
-          amountMax: amountMaxFilter ? parseFloat(amountMaxFilter) : undefined
-        };
-        
-        // Obtener las aplicaciones del servicio
-        const data = await getApplications(filters, entityFilter);
-        setApplications(data);
-      } catch (error: any) {
-        console.error('Error fetching applications:', error);
-        setError('Error al cargar las solicitudes: ' + (error.message || 'Error desconocido'));
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
     fetchApplications();
-  }, [searchQuery, statusFilter, typeFilter, dateFromFilter, dateToFilter, amountMinFilter, amountMaxFilter, shouldFilterByEntity, getEntityFilter]);
+  }, [fetchApplications]);
   
   const handleFilterToggle = () => {
     setIsFilterExpanded(!isFilterExpanded);
@@ -69,11 +88,51 @@ const Applications: React.FC = () => {
   const handleClearFilters = () => {
     setSearchQuery('');
     setStatusFilter('all');
-    setTypeFilter('all');
+    setTypeFilter('selected_plans');
     setDateFromFilter('');
     setDateToFilter('');
     setAmountMinFilter('');
     setAmountMaxFilter('');
+  };
+  
+  // Función para ordenar las aplicaciones
+  const handleSort = (field: string) => {
+    // Si se hace clic en el mismo campo, invertir la dirección del ordenamiento
+    if (field === sortField) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Si se hace clic en un campo diferente, establecerlo como el nuevo campo de ordenamiento
+      // y establecer la dirección a ascendente por defecto
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+  
+  // Función para obtener las aplicaciones ordenadas
+  const getSortedApplications = () => {
+    // Clonar el array para no modificar el original
+    const sortedApps = [...applications];
+    
+    // Ordenar según el campo y dirección actual
+    return sortedApps.sort((a, b) => {
+      let aValue = a[sortField as keyof ApplicationType];
+      let bValue = b[sortField as keyof ApplicationType];
+      
+      // Manejar valores nulos o undefined
+      if (aValue === null || aValue === undefined) aValue = '';
+      if (bValue === null || bValue === undefined) bValue = '';
+      
+      // Convertir a string para comparación (excepto números)
+      if (typeof aValue !== 'number') aValue = String(aValue).toLowerCase();
+      if (typeof bValue !== 'number') bValue = String(bValue).toLowerCase();
+      
+      // Ordenar según la dirección
+      if (sortDirection === 'asc') {
+        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+      } else {
+        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+      }
+    });
   };
   
   const getStatusClass = (status: string) => {
@@ -110,15 +169,211 @@ const Applications: React.FC = () => {
   };
   
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CL', {
-      style: 'currency',
-      currency: 'CLP',
-    }).format(amount);
+    return formatCurrencyUtil(amount);
   };
   
-  // Función para obtener la etiqueta del tipo de aplicación
   const getApplicationTypeLabel = (type: string): string => {
     return APPLICATION_TYPE_LABELS[type as keyof typeof APPLICATION_TYPE_LABELS] || type;
+  };
+  
+  const renderKanbanBoard = () => {
+    if (isLoading) {
+      return (
+        <div className="flex justify-center items-center h-64">
+          <div className="loader animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="alert alert-error">
+          <div className="flex-1">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mx-2" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <label>{error}</label>
+          </div>
+        </div>
+      );
+    }
+
+    if (isAdvisor()) {
+      return <KanbanBoardAdvisor applications={applications} onRefresh={fetchApplications} />;
+    } else if (isCompanyAdmin()) {
+      return <KanbanBoardCompany applications={applications} onRefresh={fetchApplications} />;
+    } else {
+      return (
+        <KanbanBoard 
+          applications={applications} 
+          statusField="global_status"
+          onStatusChange={async (app, newStatus) => {
+            await fetchApplications();
+          }}
+        />
+      );
+    }
+  };
+  
+  const renderListView = () => {
+    if (isLoading) {
+      return (
+        <div className="flex justify-center items-center h-64">
+          <div className="loader animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="alert alert-error">
+          <div className="flex-1">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mx-2" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <label>{error}</label>
+          </div>
+        </div>
+      );
+    }
+
+    if (applications.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <h3 className="mt-4 text-xl font-medium text-gray-600">No se encontraron solicitudes</h3>
+          <p className="mt-2 text-gray-500">Intenta cambiar los filtros de búsqueda</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="overflow-x-auto">
+        <table className="table table-zebra w-full">
+          <thead>
+            <tr>
+              <th onClick={() => handleSort('client_name')} className="cursor-pointer">
+                <div className="flex items-center">
+                  Cliente
+                  {sortField === 'client_name' && (
+                    <span className="ml-2 text-primary">
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </span>
+                  )}
+                </div>
+              </th>
+              <th onClick={() => handleSort('company_name')} className="cursor-pointer">
+                <div className="flex items-center">
+                  Empresa
+                  {sortField === 'company_name' && (
+                    <span className="ml-2 text-primary">
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </span>
+                  )}
+                </div>
+              </th>
+              <th onClick={() => handleSort('application_type')} className="cursor-pointer">
+                <div className="flex items-center">
+                  Tipo
+                  {sortField === 'application_type' && (
+                    <span className="ml-2 text-primary">
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </span>
+                  )}
+                </div>
+              </th>
+              <th onClick={() => handleSort('amount')} className="cursor-pointer">
+                <div className="flex items-center">
+                  Monto
+                  {sortField === 'amount' && (
+                    <span className="ml-2 text-primary">
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </span>
+                  )}
+                </div>
+              </th>
+              <th onClick={() => handleSort('status')} className="cursor-pointer">
+                <div className="flex items-center">
+                  Estado
+                  {sortField === 'status' && (
+                    <span className="ml-2 text-primary">
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </span>
+                  )}
+                </div>
+              </th>
+              <th onClick={() => handleSort('created_at')} className="cursor-pointer">
+                <div className="flex items-center">
+                  Fecha y Hora
+                  {sortField === 'created_at' && (
+                    <span className="ml-2 text-primary">
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </span>
+                  )}
+                </div>
+              </th>
+              <th className="text-center">Detalle</th>
+            </tr>
+          </thead>
+          <tbody>
+            {getSortedApplications().map((application) => (
+              <tr key={application.id} className="hover cursor-pointer" onClick={() => navigate(`/applications/${application.id}`)}>
+                <td>{application.client_name || 'N/A'}</td>
+                <td>{application.company_name || 'N/A'}</td>
+                <td>
+                  <span className={`badge ${application.financing_type === 'producto' ? 'badge-primary' : application.financing_type === 'personal' ? 'badge-secondary' : 'badge-primary'} badge-outline`}>
+                  {application.financing_type === 'producto' ? (
+                    'Financiamiento de Producto'
+                  ) : application.financing_type === 'personal' ? (
+                    'Crédito Personal'
+                  ) : application.application_type === 'selected_plans' && application.product_type
+                    ? getApplicationTypeLabel(application.product_type)
+                    : getApplicationTypeLabel(application.application_type)}
+                  </span>
+                </td>
+                <td>{formatCurrency(Number(application.amount || 0))}</td>
+                <td>
+                  <span
+                    className={`badge badge-${
+                      application.status === APPLICATION_STATUS.APPROVED
+                        ? 'success'
+                        : application.status === APPLICATION_STATUS.REJECTED
+                        ? 'error'
+                        : application.status === APPLICATION_STATUS.NEW
+                        ? 'warning'
+                        : application.status === APPLICATION_STATUS.IN_REVIEW
+                        ? 'info'
+                        : application.status === APPLICATION_STATUS.COMPLETED
+                        ? 'success'
+                        : application.status === APPLICATION_STATUS.POR_DISPERSAR
+                        ? 'warning'
+                        : 'ghost'
+                    }`}
+                  >
+                    {STATUS_LABELS[application.status as keyof typeof STATUS_LABELS] || application.status}
+                  </span>
+                </td>
+                <td>{application.created_at ? formatDate(application.created_at, 'datetime') : 'N/A'}</td>
+                <td className="text-center">
+                  <button 
+                    className="btn btn-primary btn-sm"
+                    onClick={(e) => {
+                      e.stopPropagation(); // Evitar que el onClick del tr se active también
+                      navigate(`/applications/${application.id}`);
+                    }}
+                    title={`Ver detalles de la solicitud ${application.id}`}
+                  >
+                    {application.id.substring(0, 5)}...
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
   };
   
   if (!userCan(PERMISSIONS.VIEW_APPLICATIONS)) {
@@ -136,77 +391,30 @@ const Applications: React.FC = () => {
   
   return (
     <MainLayout>
-      <div className="p-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-          <h1 className="text-2xl font-bold mb-4 md:mb-0">Solicitudes de Crédito</h1>
-          
-          <div className="flex gap-2">
-            <Link to="/applications/kanban" className="btn btn-outline">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-              </svg>
-              Vista Kanban
-            </Link>
-            
+      <div className="applications-page-container">
+
+        {/* --- Cabecera y Botones (No se estira) --- */}
+        <div className="flex-shrink-0">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
+            <div>
+              <h1 className="text-3xl font-bold">Solicitudes de Crédito</h1>
+              <p className="text-gray-500">Gestiona todas las solicitudes en un solo lugar.</p>
+            </div>
             {userCan(PERMISSIONS.CREATE_APPLICATION) && (
-              <Link to="/applications/new" className="btn btn-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-                </svg>
-                Nueva Solicitud
+              <Link to="/new-application" className="btn btn-primary mt-4 md:mt-0">
+                + Nueva Solicitud
               </Link>
             )}
-            
-            <button 
-              className="btn btn-outline"
-              onClick={() => {
-                setIsLoading(true);
-                const entityFilter = shouldFilterByEntity() ? getEntityFilter() : null;
-                // Crear objeto de filtros para la búsqueda
-                const filters: ApplicationFilter = {
-                  status: statusFilter !== 'all' ? statusFilter : undefined,
-                  searchQuery: searchQuery || undefined,
-                  application_type: typeFilter !== 'all' ? typeFilter : undefined,
-                  dateFrom: dateFromFilter || undefined,
-                  dateTo: dateToFilter || undefined,
-                  amountMin: amountMinFilter ? parseFloat(amountMinFilter) : undefined,
-                  amountMax: amountMaxFilter ? parseFloat(amountMaxFilter) : undefined
-                };
-                getApplications(filters, entityFilter)
-                  .then(data => {
-                    setApplications(data);
-                    setIsLoading(false);
-                  })
-                  .catch(error => {
-                    console.error('Error al sincronizar aplicaciones:', error);
-                    setError('Error al sincronizar: ' + (error.message || 'Error desconocido'));
-                    setIsLoading(false);
-                  });
-              }}
-              title="Sincronizar datos"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Sincronizar
-            </button>
-            
-            <button 
-              className="btn btn-outline" 
-              onClick={handleFilterToggle}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-              </svg>
-              {isFilterExpanded ? 'Ocultar Filtros' : 'Mostrar Filtros'}
-            </button>
           </div>
         </div>
-        
-        <div className="bg-base-100 shadow-xl rounded-box p-6 mb-6">
-          <div className="flex flex-col gap-4 mb-6">
-            <div className="form-control w-full">
-              <div className="input-group">
+
+        {/* --- Contenedor Principal con Sombra (Crece para llenar el espacio) --- */}
+        <div className="kanban-content-wrapper bg-base-100 shadow-xl rounded-box">
+          
+          {/* --- Controles: Búsqueda y Filtros (No se estira) --- */}
+          <div className="p-6 pb-2 flex-shrink-0">
+            <div className="flex justify-between items-center mb-4">
+              <div className="form-control w-full max-w-sm">
                 <input
                   type="text"
                   placeholder="Buscar por nombre, email o teléfono"
@@ -214,201 +422,35 @@ const Applications: React.FC = () => {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
-                <button className="btn btn-square">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
+              </div>
+              <div className="flex items-center gap-4">
+                <button className="btn btn-ghost btn-sm" onClick={fetchApplications}>
+                  Actualizar
                 </button>
+                <button className="btn btn-ghost btn-sm" onClick={handleFilterToggle}>
+                  <i className="fas fa-filter mr-2"></i>
+                  Mostrar Filtros
+                </button>
+                <div className="tabs tabs-boxed">
+                  <a className={`tab tab-sm ${viewMode === 'kanban' ? 'tab-active' : ''}`} onClick={() => setViewMode('kanban')}>
+                    Kanban
+                  </a>
+                  <a className={`tab tab-sm ${viewMode === 'list' ? 'tab-active' : ''}`} onClick={() => setViewMode('list')}>
+                    Lista
+                  </a>
+                </div>
               </div>
             </div>
-            
-            {isFilterExpanded && (
-              <div className="bg-base-200 p-4 rounded-lg">
-                <h3 className="text-lg font-semibold mb-4">Filtros Avanzados</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text">Estado</span>
-                    </label>
-                    <select
-                      className="select select-bordered w-full"
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                    >
-                      <option value="all">Todos los estados</option>
-                      {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                        <option key={value} value={value}>{label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text">Tipo de Aplicación</span>
-                    </label>
-                    <select
-                      className="select select-bordered w-full"
-                      value={typeFilter}
-                      onChange={(e) => setTypeFilter(e.target.value)}
-                    >
-                      <option value="all">Todos los tipos</option>
-                      {Object.entries(APPLICATION_TYPE_LABELS).map(([value, label]) => (
-                        <option key={value} value={value}>{label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text">Fecha Desde</span>
-                    </label>
-                    <input
-                      type="date"
-                      className="input input-bordered w-full"
-                      value={dateFromFilter}
-                      onChange={(e) => setDateFromFilter(e.target.value)}
-                    />
-                  </div>
-                  
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text">Fecha Hasta</span>
-                    </label>
-                    <input
-                      type="date"
-                      className="input input-bordered w-full"
-                      value={dateToFilter}
-                      onChange={(e) => setDateToFilter(e.target.value)}
-                    />
-                  </div>
-                  
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text">Monto Mínimo</span>
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="0"
-                      className="input input-bordered w-full"
-                      value={amountMinFilter}
-                      onChange={(e) => setAmountMinFilter(e.target.value)}
-                    />
-                  </div>
-                  
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text">Monto Máximo</span>
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="0"
-                      className="input input-bordered w-full"
-                      value={amountMaxFilter}
-                      onChange={(e) => setAmountMaxFilter(e.target.value)}
-                    />
-                  </div>
-                </div>
-                
-                <div className="flex justify-end">
-                  <button 
-                    className="btn btn-ghost"
-                    onClick={handleClearFilters}
-                  >
-                    Limpiar Filtros
-                  </button>
-                </div>
-              </div>
+          </div>
+
+          {/* --- Área del Board o Lista (Crece para llenar el espacio) --- */}
+          <div className="kanban-board-area p-6 pt-0">
+            {viewMode === 'kanban' ? (
+              renderKanbanBoard()
+            ) : (
+              renderListView()
             )}
           </div>
-          
-          {error && (
-            <Alert 
-              type="error" 
-              message={error}
-              onClose={() => setError(null)}
-              className="mb-6"
-            />
-          )}
-          
-          {isLoading ? (
-            <div className="flex justify-center items-center h-64">
-              <span className="loading loading-spinner loading-lg"></span>
-            </div>
-          ) : applications.length === 0 ? (
-            <div className="text-center py-12">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <h3 className="mt-4 text-xl font-medium text-gray-600">No se encontraron solicitudes</h3>
-              <p className="mt-2 text-gray-500">Intenta cambiar los filtros de búsqueda</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="table table-zebra w-full">
-                <thead>
-                  <tr>
-                    <th>Cliente</th>
-                    <th>Empresa</th>
-                    <th>Tipo</th>
-                    <th>Monto</th>
-                    <th>Estado</th>
-                    <th>Fecha y Hora</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {applications.map((application) => (
-                    <tr key={application.id} className="hover cursor-pointer" onClick={() => navigate(`/applications/${application.id}`)}>
-                      <td>{application.client_name || 'N/A'}</td>
-                      <td>{application.company_name || 'N/A'}</td>
-                      <td>
-                        {application.application_type === 'selected_plans' && application.product_type
-                          ? getApplicationTypeLabel(application.product_type)
-                          : getApplicationTypeLabel(application.application_type)}
-                      </td>
-                      <td>{formatCurrency(Number(application.amount || 0))}</td>
-                      <td>
-                        <span
-                          className={`badge badge-${
-                            application.status === 'approved'
-                              ? 'success'
-                              : application.status === 'rejected'
-                              ? 'error'
-                              : application.status === 'pending'
-                              ? 'warning'
-                              : application.status === 'in_review'
-                              ? 'info'
-                              : 'ghost'
-                          }`}
-                        >
-                          {application.status}
-                        </span>
-                      </td>
-                      <td>{application.created_at ? formatDate(application.created_at, 'datetime') : 'N/A'}</td>
-                      <td>
-                        <div className="dropdown dropdown-end">
-                          <label tabIndex={0} className="btn btn-ghost btn-circle">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
-                            </svg>
-                          </label>
-                          <ul tabIndex={0} className="dropdown-content menu menu-compact mt-3 p-2 shadow bg-base-100 rounded-box w-52">
-                            <li>
-                              <Link to={`/applications/${application.id}`} className="justify-between">
-                                Ver Detalle
-                                <span className="text-info">⌘T</span>
-                              </Link>
-                            </li>
-                          </ul>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
       </div>
     </MainLayout>
