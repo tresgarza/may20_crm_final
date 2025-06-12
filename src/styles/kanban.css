@@ -43,8 +43,10 @@
 .applications-page-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 80px); /* Ajusta la altura total menos la cabecera */
-  padding-bottom: 40px;
+  flex: 1 1 0%;
+  min-height: 0;
+  padding: 1rem;
+  gap: 1rem;
 }
 
 /* Fix for the grid layout to ensure all columns have equal height */
@@ -205,19 +207,20 @@
    'flex-grow: 1' makes this box expand vertically, and min-height ensures
    it's tall enough to show more cards. */
 .kanban-content-wrapper {
-  flex-grow: 1;
+  flex: 1 1 0%;
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 200px); /* MUCH taller minimum height for the white box */
+  min-height: 0; /* critical for flex children */
 }
 
 /* 3. Board/List Area */
 /* This class is on the div that contains either the Kanban or the List.
    It also needs to grow to fill the white box. */
 .kanban-board-area {
-  flex-grow: 1;
+  flex: 1 1 0%;
   display: flex;
-  min-height: calc(100vh - 280px); /* Ensure the board area itself is tall */
+  padding: 1rem 1.5rem 1.5rem;
+  min-height: 0;
 }
 
 /* 4. Kanban Board */
