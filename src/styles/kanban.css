@@ -98,4 +98,17 @@
 /* Specifically target the KanbanBoard when in kanban view */
 .applications-page-container [class*="kanban-board"] {
   min-height: calc(100vh - 180px);
+}
+
+/* Styles for the main Kanban container */
+.kanban-container {
+  transform: scale(0.8);
+  transform-origin: top left;
+  width: 125%;
+  height: 125%;
+}
+
+.kanban-board {
+  display: flex;
+  gap: 1rem;
 } 
