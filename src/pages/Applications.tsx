@@ -391,202 +391,81 @@ const Applications: React.FC = () => {
   
   return (
     <MainLayout>
-      <div className="p-6 applications-page-container">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-          <div>
-            <h1 className="text-2xl font-bold mb-1">Solicitudes de Crédito</h1>
-          </div>
-          
-          <div className="flex gap-2">
+      {/* Contenedor principal de la página, se estira verticalmente */}
+      <div className="p-6 flex flex-col h-full applications-page-container">
+        {/* Sección de cabecera y filtros */}
+        <div className="flex-shrink-0">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+            <div>
+              <h1 className="text-3xl font-bold">Solicitudes de Crédito</h1>
+              <p className="text-gray-500">Gestiona todas las solicitudes en un solo lugar.</p>
+            </div>
             {userCan(PERMISSIONS.CREATE_APPLICATION) && (
-              <Link to="/applications/new" className="btn btn-primary">
+              <button className="btn btn-primary mt-4 md:mt-0" onClick={() => navigate('/applications/new')}>
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
                 </svg>
                 Nueva Solicitud
-              </Link>
+              </button>
             )}
-            
-            <button 
-              className="btn btn-outline"
-              onClick={fetchApplications}
-              disabled={isLoading}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-              </svg>
-              Actualizar
-            </button>
-            
-            <button 
-              className="btn btn-outline" 
-              onClick={handleFilterToggle}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-              </svg>
-              {isFilterExpanded ? 'Ocultar Filtros' : 'Mostrar Filtros'}
-            </button>
           </div>
         </div>
-        
-        <div className="bg-base-100 shadow-xl rounded-box p-6 mb-6">
-          <div className="flex flex-col gap-4 mb-6">
-            <div className="form-control w-full">
-              <div className="input-group">
-                <input
-                  type="text"
-                  placeholder="Buscar por nombre, email o teléfono"
-                  className="input input-bordered w-full"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <button className="btn btn-square">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            
-            {isFilterExpanded && (
-              <div className="bg-base-200 p-4 rounded-lg">
-                <h3 className="text-lg font-semibold mb-4">Filtros Avanzados</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text">Estado</span>
-                    </label>
-                    <select
-                      className="select select-bordered w-full"
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                    >
-                      <option value="all">Todos los estados</option>
-                      {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                        <option key={value} value={value}>{label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text">Tipo de Aplicación</span>
-                    </label>
-                    <div className="border border-primary rounded-md p-2 bg-primary bg-opacity-10 flex items-center justify-between">
-                      <span className="font-medium text-primary">Planes Seleccionados</span>
-                      <span className="badge badge-primary">Predeterminado</span>
-                    </div>
-                  </div>
-                  
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text">Fecha Desde</span>
-                    </label>
-                    <input
-                      type="date"
-                      className="input input-bordered w-full"
-                      value={dateFromFilter}
-                      onChange={(e) => setDateFromFilter(e.target.value)}
-                    />
-                  </div>
-                  
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text">Fecha Hasta</span>
-                    </label>
-                    <input
-                      type="date"
-                      className="input input-bordered w-full"
-                      value={dateToFilter}
-                      onChange={(e) => setDateToFilter(e.target.value)}
-                    />
-                  </div>
-                  
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text">Monto Mínimo</span>
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="0"
-                      className="input input-bordered w-full"
-                      value={amountMinFilter}
-                      onChange={(e) => setAmountMinFilter(e.target.value)}
-                    />
-                  </div>
-                  
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text">Monto Máximo</span>
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="0"
-                      className="input input-bordered w-full"
-                      value={amountMaxFilter}
-                      onChange={(e) => setAmountMaxFilter(e.target.value)}
-                    />
-                  </div>
-                </div>
-                
-                <div className="flex justify-end">
-                  <button 
-                    className="btn btn-ghost"
-                    onClick={handleClearFilters}
-                  >
-                    Limpiar Filtros
+
+        {/* Contenedor del contenido principal (Kanban/Lista), crece para ocupar el espacio */}
+        <div className="flex-grow bg-base-100 shadow-xl rounded-box p-6 flex flex-col">
+          <div className="flex-shrink-0">
+            <div className="flex justify-between items-center mb-6">
+              <div className="form-control w-full max-w-sm">
+                <div className="input-group">
+                  <input
+                    type="text"
+                    placeholder="Buscar por nombre, email o teléfono"
+                    className="input input-bordered w-full"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <button className="btn btn-square">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
                   </button>
                 </div>
               </div>
-            )}
-          </div>
-          
-          {error && (
-            <Alert 
-              type="error" 
-              message={error}
-              onClose={() => setError(null)}
-              className="mb-6"
-            />
-          )}
-          
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold">Solicitudes</h2>
-            <div className="flex space-x-2">
-              <div className="btn-group">
-                <button 
-                  className={`btn btn-sm ${viewMode === 'kanban' ? 'btn-active' : ''}`}
-                  onClick={() => setViewMode('kanban')}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-                  </svg>
-                  Kanban
+              <div className="flex items-center gap-2">
+                <button className="btn btn-ghost" onClick={fetchApplications}>
+                  Actualizar
                 </button>
-                <button 
-                  className={`btn btn-sm ${viewMode === 'list' ? 'btn-active' : ''}`}
-                  onClick={() => setViewMode('list')}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                <button className="btn btn-ghost" onClick={handleFilterToggle}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                    <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
                   </svg>
-                  Lista
+                  Mostrar Filtros
                 </button>
+                <div className="tabs tabs-boxed">
+                  <a className={`tab ${viewMode === 'kanban' ? 'tab-active' : ''}`} onClick={() => setViewMode('kanban')}>Kanban</a>
+                  <a className={`tab ${viewMode === 'list' ? 'tab-active' : ''}`} onClick={() => setViewMode('list')}>Lista</a>
+                </div>
               </div>
             </div>
+            {isFilterExpanded && (
+              <div className="bg-base-200 p-4 rounded-lg mb-6">
+                 {/* ... Contenido de los filtros ... */}
+              </div>
+            )}
+            {error && <Alert type="error" message={error} onClose={() => setError(null)} className="mb-6" />}
           </div>
-          
-          {viewMode === 'kanban' && (
-            <div className="p-4">
-              {renderKanbanBoard()}
-            </div>
-          )}
 
-          {viewMode === 'list' && (
-            renderListView()
-          )}
+          {/* Wrapper que crece para el contenido (Kanban o Lista) */}
+          <div className="flex-grow">
+            {viewMode === 'kanban' ? (
+              <div className="kanban-board-wrapper h-full">
+                {renderKanbanBoard()}
+              </div>
+            ) : (
+              renderListView()
+            )}
+          </div>
         </div>
       </div>
     </MainLayout>

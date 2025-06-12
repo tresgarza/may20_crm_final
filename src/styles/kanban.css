@@ -41,7 +41,9 @@
 
 /* Ensure the Applications component has sufficient space */
 .applications-page-container {
-  min-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 80px); /* Ajusta la altura total menos la cabecera */
   padding-bottom: 40px;
 }
 
@@ -101,22 +103,59 @@
 }
 
 /* Styles for the main Kanban container */
+.kanban-board-wrapper {
+  flex-grow: 1;
+  overflow-y: hidden; /* El scroll estará en las columnas */
+  display: flex;
+  flex-direction: column;
+}
+
 .kanban-board {
   display: flex;
   gap: 1rem;
+  flex-grow: 1; /* El tablero crece para ocupar el espacio */
+  padding: 1rem;
+}
+
+.kanban-column {
+  display: flex;
+  flex-direction: column;
+  flex-basis: 0; /* Distribución equitativa */
+  flex-grow: 1;
+  min-width: 250px;
+}
+
+.column-header {
+  padding-bottom: 0.5rem;
+}
+
+.column-content {
+  flex-grow: 1;
+  overflow-y: auto; /* Scroll vertical SOLO en el contenido de la columna */
+  background-color: #f9fafb;
+  border-radius: 8px;
+  padding: 0.5rem;
 }
 
 .kanban-card {
-  padding: 0.75rem;
-  transition: all 0.2s ease-in-out;
+  padding: 1rem; /* Padding normal para legibilidad */
+  margin-bottom: 0.75rem;
+  background-color: white;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   border-left: 5px solid transparent;
   cursor: grab;
+  transition: all 0.2s ease-in-out;
+}
+
+.kanban-card:last-child {
+  margin-bottom: 0;
 }
 
 .kanban-card .text-lg {
-  font-size: 0.9rem;
+  font-size: 1rem; /* Tamaño de fuente normal */
 }
 
 .kanban-card .text-sm {
-  font-size: 0.75rem;
+  font-size: 0.875rem; /* Tamaño de fuente normal */
 } 
