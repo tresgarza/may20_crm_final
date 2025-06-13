@@ -36,6 +36,8 @@
   border: 1px solid #e2e8f0;
   flex: 1;
   min-width: 220px;
+  position: relative;
+  z-index: 1;
 }
 
 /* Fix to remove the fixed height and replace it with auto */
@@ -251,6 +253,8 @@
   flex-direction: column;
   max-height: calc(100vh - 120px);
   background-color: #f0f7ff;
+  position: relative;
+  z-index: 1;
 }
 
 /* 6. Column Content (The scrollable part) */
@@ -338,6 +342,8 @@
   flex-direction: column;
   height: 100%;
   background-color: #f0f7ff;
+  position: relative;
+  z-index: 1;
 }
 
 /* 8. Column Header - Compact */
@@ -606,6 +612,22 @@
   border-radius: 6px;
   border: 1px solid #e2e8f0;
   min-height: calc(100vh - 140px);
+  position: relative;
+  z-index: 1;
+}
+
+/* Corregir el problema de superposición */
+.grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-3.xl\\:grid-cols-6.gap-4 {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-3.xl\\:grid-cols-6.gap-4 > div {
+  height: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 /* Column header */
