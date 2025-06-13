@@ -38,6 +38,7 @@
   min-width: 220px;
   position: relative;
   z-index: 1;
+  flex-shrink: 0;
 }
 
 /* Fix to remove the fixed height and replace it with auto */
@@ -344,6 +345,7 @@
   background-color: #f0f7ff;
   position: relative;
   z-index: 1;
+  flex-shrink: 0;
 }
 
 /* 8. Column Header - Compact */
@@ -614,20 +616,14 @@
   min-height: calc(100vh - 140px);
   position: relative;
   z-index: 1;
+  flex-shrink: 0;
 }
 
-/* Corregir el problema de superposición */
+/* Corregir el problema de superposición - Versión flex */
 .grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-3.xl\\:grid-cols-6.gap-4 {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  display: flex;
   gap: 0.5rem;
   width: 100%;
-}
-
-.grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-3.xl\\:grid-cols-6.gap-4 > div {
-  height: 100%;
-  position: relative;
-  z-index: 1;
 }
 
 /* Column header */
