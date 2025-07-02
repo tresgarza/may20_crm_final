@@ -936,7 +936,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
          app.approvalStatus?.approvedByCompany && (
           <div className="flex items-center">
             <div className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-500 text-white">
-              Aprobación Completa
+              Firma Pendiente
           </div>
           </div>
         )}
