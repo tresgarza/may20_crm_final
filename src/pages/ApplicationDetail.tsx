@@ -30,6 +30,7 @@ import { supabase, getServiceClient } from '../lib/supabaseClient';
 import RequestSignatureButton from '../components/RequestSignatureButton';
 import DocumentSignatureStatus from '../components/DocumentSignatureStatus';
 import DocuSignPanel from '../components/DocuSignPanel';
+import CommentSection from '../components/comments/CommentSection';
 
 // Helper function for status badge styling - moved outside component so it's accessible to all components
 const getStatusBadgeClass = (status: string) => {
@@ -1834,6 +1835,11 @@ const ApplicationDetail = () => {
                     </div>
                   </div>
               </div>
+
+              {/* Sección de comentarios */}
+              {application && (
+                <CommentSection applicationId={application.id} />
+              )}
           </>
         ) : (
           <div className="text-center p-10">
