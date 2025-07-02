@@ -66,6 +66,10 @@ export interface Application {
   product_title?: string;
   product_image?: string;
   product_price?: number;  // Precio del producto (para financing_type='producto')
+
+  // Campo de pago / comisión
+  credito_solicitado?: number;
+  payment_frequency?: string;
 }
 
 export interface ApplicationFilter {
@@ -133,11 +137,11 @@ export const getApplications = async (filters?: ApplicationFilter, entityFilter?
       
       // Filtros de monto
       if (filters.amountMin) {
-        query = query.gte('amount', filters.amountMin);
+        query = query.gte('credito_solicitado', filters.amountMin);
       }
       
       if (filters.amountMax) {
-        query = query.lte('amount', filters.amountMax);
+        query = query.lte('credito_solicitado', filters.amountMax);
       }
       
       // Búsqueda por texto
@@ -216,7 +220,7 @@ export const getApplications = async (filters?: ApplicationFilter, entityFilter?
         client_phone: app.client_phone,
         client_address: app.client_address,
         dni: app.dni,
-        amount: parseFloat(app.amount) || 0,
+        amount: app.credito_solicitado ? parseFloat(app.credito_solicitado) : (app.amount ? parseFloat(app.amount) : 0),
         term: app.term ? parseInt(app.term) : undefined,
         interest_rate: app.interest_rate ? parseFloat(app.interest_rate) : undefined,
         monthly_payment: app.monthly_payment ? parseFloat(app.monthly_payment) : undefined,
@@ -227,6 +231,10 @@ export const getApplications = async (filters?: ApplicationFilter, entityFilter?
         product_title: app.product_title || null,
         product_image: app.product_image || null,
         product_price: app.product_price ? parseFloat(app.product_price.toString()) : undefined,
+
+        // NUEVOS CAMPOS
+        credito_solicitado: app.credito_solicitado ? parseFloat(app.credito_solicitado) : undefined,
+        payment_frequency: app.payment_frequency || null,
       };
     }) as Application[];
   } catch (error) {

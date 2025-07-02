@@ -955,12 +955,28 @@ const ApplicationDetail = () => {
   };
   
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-MX', {
+    return amount.toLocaleString('es-MX', {
       style: 'currency',
-      currency: 'MXN',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
+      currency: 'MXN'
+    });
+  };
+  
+  // Devuelve etiqueta legible para frecuencia de pago
+  const getPaymentFrequencyLabel = (freq: string | null | undefined): string => {
+    if (!freq) return '';
+    const normalized = freq.toLowerCase();
+    switch (normalized) {
+      case 'monthly':
+        return 'meses';
+      case 'biweekly':
+      case 'quincenal':
+      case 'fortnightly':
+        return 'quincenas';
+      case 'weekly':
+        return 'semanas';
+      default:
+        return normalized; // Devuelve como está si no se reconoce
+    }
   };
   
   // Obtener la etiqueta legible para el tipo de aplicación
@@ -1132,13 +1148,16 @@ const ApplicationDetail = () => {
                     
                     <div>
                       <p className="text-sm text-gray-500">Monto Solicitado</p>
-                      <p className="font-medium">{formatCurrency(application.amount || 0)}</p>
+                      <p className="font-medium">{formatCurrency(application.credito_solicitado || application.amount || 0)}</p>
                     </div>
 
                     {application.term && (
                       <div>
-                        <p className="text-sm text-gray-500">Plazo (meses)</p>
-                        <p className="font-medium">{application.term}</p>
+                        <p className="text-sm text-gray-500">Plazo</p>
+                        <p className="font-medium">
+                          {application.term}{' '}
+                          {getPaymentFrequencyLabel(application.payment_frequency) || 'periodos'}
+                        </p>
                       </div>
                     )}
 
