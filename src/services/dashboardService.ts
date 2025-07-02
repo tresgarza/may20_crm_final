@@ -192,6 +192,18 @@ const executeQuery = async (
       
     console.log(`Query returned ${data?.length || 0} results. Count: ${count || 'N/A'}`);
     
+    // Normalizar montos: usar credito_solicitado cuando exista
+    if (data && data.length > 0) {
+      data.forEach((item: any) => {
+        if (item.credito_solicitado !== undefined && item.credito_solicitado !== null) {
+          item.amount = parseFloat(item.credito_solicitado);
+        } else if (typeof item.amount === 'string') {
+          // Asegurar que amount sea numérico
+          item.amount = parseFloat(item.amount);
+        }
+      });
+    }
+    
     // Process results based on query type
     if (queryType === 'COUNT' || queryType === 'COUNT_DISTINCT_CLIENTS' || queryType === 'COUNT_DISTINCT_COMPANIES') {
       // For count queries, return the count as a total

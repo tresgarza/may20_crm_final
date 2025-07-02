@@ -188,7 +188,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
     // If expanded, show all applications in that column, otherwise show only 5
     if (expandedColumns[status]) {
       return visibleApps; // Return all applications when expanded
-    } else {
+          } else {
       return visibleApps.slice(0, 5); // Show only 5 when collapsed
     }
   };
@@ -357,7 +357,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                  application.approvalStatus?.approvedByCompany === true;
         }
         if (newStatus === APPLICATION_STATUS.REJECTED) return true;
-        return false;
+      return false;
       } else if (applicationStatus === APPLICATION_STATUS.APPROVED) {
         // From APPROVED, can move to IN_REVIEW, POR_DISPERSAR or REJECTED
         return newStatus === APPLICATION_STATUS.IN_REVIEW || 
@@ -371,7 +371,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                newStatus === APPLICATION_STATUS.REJECTED;
       } else if (applicationStatus === APPLICATION_STATUS.COMPLETED) {
         // Completed applications cannot be moved
-        return false;
+      return false;
       } else if (applicationStatus === APPLICATION_STATUS.REJECTED) {
         // Permitir mover desde REJECTED a otros estados para reactivar
         return newStatus === APPLICATION_STATUS.NEW || 
@@ -389,7 +389,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
         // From IN_REVIEW, can move to NEW or APPROVED or REJECTED
         if (newStatus === APPLICATION_STATUS.NEW) return true;
         if (newStatus === APPLICATION_STATUS.APPROVED) {
-          if (isAdvisor()) {
+    if (isAdvisor()) {
             return application.approvalStatus?.approvedByAdvisor === true;
           }
           else if (isCompanyAdmin()) {
@@ -428,7 +428,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                newStatus === APPLICATION_STATUS.APPROVED;
       }
     }
-      
+    
     // Default: allow movement between states that don't have specific rules
     return true;
   };
@@ -496,16 +496,16 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
         setErrorMessage(`No se permite cambiar el estado de "${STATUS_LABELS[application.status as keyof typeof STATUS_LABELS]}" a "${STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS]}"`);
         setTimeout(() => setErrorMessage(null), 5000);
       }
-      return;
-    }
-    
+          return;
+        }
+        
     // Bail if there's no status change handler
     if (!onStatusChange) {
       setWarnMessage('No tienes permisos para cambiar el estado de las solicitudes');
       setTimeout(() => setWarnMessage(null), 3000);
-      return;
-    }
-    
+          return;
+        }
+        
     // Mark that we're processing this application
     setProcessingAppId(applicationId);
     
@@ -663,7 +663,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
               
               // Si estamos moviendo directo de NEW a APPROVED, actualizar el indicador de aprobación del asesor
               if (app.status === APPLICATION_STATUS.NEW && newStatus === APPLICATION_STATUS.APPROVED) {
-                updatedApp.approvalStatus = {
+          updatedApp.approvalStatus = {
                   ...app.approvalStatus,
                   approvedByAdvisor: true,
                     isFullyApproved: app.approvalStatus?.approvedByCompany === true,
@@ -752,7 +752,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
         setSuccessMessage(`Solicitud movida a "${STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS]}"`);
       }
       
-      setTimeout(() => {
+          setTimeout(() => {
         setSuccessMessage(null);
       }, 3000);
     } catch (error) {
@@ -760,7 +760,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
       setErrorMessage(`Error al actualizar el estado: ${error instanceof Error ? error.message : 'Error desconocido'}`);
       setTimeout(() => setErrorMessage(null), 5000);
     } finally {
-      setProcessingAppId(null);
+            setProcessingAppId(null);
     }
   };
   
@@ -927,7 +927,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
         console.log(`App ${app.id} - No hay información clara, mostrando rechazo genérico`);
       }
     }
-
+    
     return (
       <div className="flex flex-col gap-1 mb-2">
         {/* Only show "Complete" badge when both are approved and status is APPROVED */}
@@ -938,7 +938,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
             <div className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-500 text-white">
               Aprobación Completa
           </div>
-        </div>
+          </div>
         )}
 
         {/* Show rejection message when applicable */}
@@ -949,7 +949,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
             </div>
           </div>
         )}
-
+        
         {/* Individual approval badges */}
         <div className="flex items-center">
           <div className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${advisorBadgeClass} text-white mr-1`}>
@@ -977,11 +977,11 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                          financingType === 'personal' ? 'bg-purple-100 text-purple-800' : 
                          'bg-blue-100 text-blue-800';
       
-      return (
+    return (
         <span className={`application-tag ${bgColorClass}`}>
           {financingLabel}
-        </span>
-      );
+      </span>
+    );
     }
     
     // Funcionamiento original para otros tipos
@@ -1203,14 +1203,14 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const requiresAttention = (app: ApplicationWithApproval): boolean => {
     // Skip applications that are rejected or completed
     if (app.status === APPLICATION_STATUS.REJECTED || app.status === APPLICATION_STATUS.COMPLETED) {
-      return false;
-    }
-    
+        return false;
+      }
+      
     // Check if the application has updated_at
     if (!app.updated_at) {
-      return false;
-    }
-    
+        return false;
+      }
+      
     // Calculate time since last update
     const lastUpdateTime = new Date(app.updated_at).getTime();
     const currentTime = new Date().getTime();
@@ -1312,10 +1312,10 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 ml-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
                           <title>Requiere atención: Sin cambios en 48+ horas</title>
                           <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
+                </svg>
                       )}
-                    </div>
-          </div>
+              </div>
+            </div>
                   <div className="text-sm text-gray-600 mb-2">
                     {app.company_name && <p>{app.company_name}</p>}
                   </div>
@@ -1337,12 +1337,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 </div>
               ))}
               {getApplicationsByStatus(APPLICATION_STATUS.NEW).length > 5 && !expandedColumns[APPLICATION_STATUS.NEW] && (
-                <button 
+            <button 
                   onClick={() => toggleColumnExpand(APPLICATION_STATUS.NEW)}
                   className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
-                >
+            >
                   Ver {getApplicationsByStatus(APPLICATION_STATUS.NEW).length - 5} más
-                </button>
+            </button>
               )}
               {expandedColumns[APPLICATION_STATUS.NEW] && (
                 <button 
@@ -1358,8 +1358,8 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 </div>
               )}
             </div>
-                </div>
-                
+          </div>
+          
           {/* In Review Applications */}
           <div className="kanban-column bg-base-200 rounded-lg p-4 h-full">
             <div className="column-header mb-4">
@@ -1386,7 +1386,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center">
                     <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
-                    </div>
+                </div>
                     <div className="flex items-center">
                     {getApplicationTag(app.application_type, app.financing_type)}
                       {requiresAttention(app) && (
@@ -1467,7 +1467,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center">
                     <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
-                    </div>
+                </div>
                     <div className="flex items-center">
                     {getApplicationTag(app.application_type, app.financing_type)}
                       {requiresAttention(app) && (
@@ -1476,7 +1476,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                         </svg>
                       )}
-                    </div>
+              </div>
                 </div>
                   <div className="text-sm text-gray-600 mb-2">
                     {app.company_name && <p>{app.company_name}</p>}
@@ -1548,17 +1548,17 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center">
                     <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
-                    </div>
+              </div>
                     <div className="flex items-center">
                     {getApplicationTag(app.application_type, app.financing_type)}
                       {requiresAttention(app) && (
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 ml-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
                           <title>Requiere atención: Sin cambios en 48+ horas</title>
                           <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
+                      </svg>
                       )}
                     </div>
-              </div>
+                  </div>
                   <div className="text-sm text-gray-600 mb-2">
                     {app.company_name && <p>{app.company_name}</p>}
                     </div>
@@ -1629,25 +1629,25 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center">
                     <h4 className="font-semibold text-gray-800">{app.client_name || "Cliente sin nombre"}</h4>
-                    </div>
+                            </div>
                     <div className="flex items-center">
                     {getApplicationTag(app.application_type, app.financing_type)}
                       {requiresAttention(app) && (
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 ml-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
                           <title>Requiere atención: Sin cambios en 48+ horas</title>
                           <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
+                              </svg>
                       )}
-                    </div>
+                            </div>
                             </div>
                   <div className="text-sm text-gray-600 mb-2">
                     {app.company_name && <p>{app.company_name}</p>}
-                          </div>
+                            </div>
                   <div className="text-sm font-medium text-gray-900 mb-1">
                     {formatCurrency(app.amount)}
                             </div>
                   <div className="flex flex-col mt-2 pt-2 border-t border-gray-100">
-                    {renderApprovalIndicators(app)}
+                            {renderApprovalIndicators(app)}
                     <div className="flex justify-between items-center mt-2">
                       <span className="text-xs text-gray-500">ID: {app.id.substring(0, 5)}...</span>
                       <Link 
@@ -1661,21 +1661,21 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 </div>
               ))}
               {getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length > 5 && !expandedColumns[APPLICATION_STATUS.COMPLETED] && (
-                <button 
+                                <button 
                   onClick={() => toggleColumnExpand(APPLICATION_STATUS.COMPLETED)}
                   className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
                 >
                   Ver {getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length - 5} más
-                </button>
-              )}
+                                </button>
+                              )}
               {expandedColumns[APPLICATION_STATUS.COMPLETED] && (
-                <button 
+                                <button 
                   onClick={() => toggleColumnExpand(APPLICATION_STATUS.COMPLETED)}
                   className="w-full py-2 text-sm text-primary hover:text-primary-focus hover:bg-base-200 rounded-md text-center transition-colors"
                 >
                   Ver menos
-                </button>
-              )}
+                                </button>
+                              )}
               {getApplicationsByStatus(APPLICATION_STATUS.COMPLETED).length === 0 && (
                 <div className="text-center py-4 text-gray-500 italic">
                   No hay solicitudes
