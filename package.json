@@ -54,7 +54,8 @@
     "mcp": "node supabase-mcp-server.js",
     "mcp:official": "npx -y @supabase/mcp-server-supabase@latest --access-token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbnlnbnRma3JsZWlzZXVjaXdxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczOTk5MjQwNiwiZXhwIjoyMDU1NTY4NDA2fQ.TwhEGW9DK4DTQQRquT6Z9UW8T8UjLX-hp9uKdRjWAhs",
     "dev": "concurrently \"npm run mcp\" \"PORT=3001 npm start\"",
-    "dev:official": "concurrently \"npm run mcp:official\" \"PORT=3001 npm start\""
+    "dev:official": "concurrently \"npm run mcp:official\" \"PORT=3001 npm start\"",
+    "mcp:context7": "npx -y @upstash/context7-mcp"
   },
   "eslintConfig": {
     "extends": [

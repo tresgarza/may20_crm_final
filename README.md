@@ -504,3 +504,30 @@ Si el Dashboard no muestra datos correctamente:
 ## Licencia
 
 Propiedad de Fincentiva. Todos los derechos reservados.
+
+## Context7 MCP
+
+Se incluye `context7.json` y un script npm:
+
+```bash
+npm run mcp:context7
+```
+
+Esto levanta un servidor MCP local que expone:
+* `/health`  – estado del servicio
+* `/metrics` – métricas Prometheus
+
+Úsalo con editores compatibles (Cursor, VS Code) añadiendo en tu `settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp" // puerto default
+    }
+  }
+}
+```
+
+Con ello obtienes contexto de código actualizado para LLMs sin afectar la lógica de la app.

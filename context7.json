@@ -1,0 +1,24 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "Fincentiva CRM",
+  "description": "CRM + Supabase project for loan management. Context7 configured to index only source code and Supabase functions, excluding build artefacts and node_modules.",
+  "folders": [
+    "src",
+    "supabase/functions",
+    "scripts"
+  ],
+  "excludeFolders": [
+    "node_modules",
+    "build",
+    "logs",
+    "public/sounds"
+  ],
+  "rules": [
+    "Use Supabase RLS policies for every new table",
+    "Do not commit secrets or API keys to the repo",
+    "Prefer service-layer abstractions instead of direct DB calls inside components",
+    "Follow clean architecture: components → services → utils",
+    "Run ESLint and Prettier before pushing"
+  ],
+  "previousVersions": []
+} 
