@@ -735,13 +735,11 @@ export const approveByAdvisor = async (
       updated_at: new Date().toISOString()
     };
     
-    // Solo actualizar el estado global si la empresa ya ha aprobado
-    if (application.approved_by_company === true) {
-      // Cuando ambos aprueban, automáticamente pasa a POR_DISPERSAR
-      updateData.status = APPLICATION_STATUS.POR_DISPERSAR;
-      updateData.global_status = APPLICATION_STATUS.POR_DISPERSAR;
-      updateData.advisor_status = APPLICATION_STATUS.POR_DISPERSAR;
-      updateData.company_status = APPLICATION_STATUS.POR_DISPERSAR;
+    // Si el asesor ya aprobó, marcar el estado principal/global como APPROVED (pero NO mover a por_dispersar)
+    if (application.approved_by_advisor === true) {
+      updateData.status = APPLICATION_STATUS.APPROVED;
+      updateData.global_status = APPLICATION_STATUS.APPROVED;
+      console.log('Ambos aprobaron, manteniendo estado APPROVED (sin mover a POR_DISPERSAR)');
     }
     
     // Actualizar la aplicación
@@ -826,13 +824,11 @@ export const approveByCompany = async (
       updated_at: new Date().toISOString()
     };
     
-    // Solo actualizar el estado global si el asesor ya ha aprobado
+    // Si el asesor ya aprobó, marcar el estado principal/global como APPROVED (pero NO mover a por_dispersar)
     if (application.approved_by_advisor === true) {
-      // Cuando ambos aprueban, automáticamente pasa a POR_DISPERSAR
-      updateData.status = APPLICATION_STATUS.POR_DISPERSAR;
-      updateData.global_status = APPLICATION_STATUS.POR_DISPERSAR;
-      updateData.advisor_status = APPLICATION_STATUS.POR_DISPERSAR;
-      updateData.company_status = APPLICATION_STATUS.POR_DISPERSAR;
+      updateData.status = APPLICATION_STATUS.APPROVED;
+      updateData.global_status = APPLICATION_STATUS.APPROVED;
+      console.log('Ambos aprobaron, manteniendo estado APPROVED (sin mover a POR_DISPERSAR)');
     }
     
     // Actualizar la aplicación
@@ -913,13 +909,10 @@ export const cancelCompanyApproval = async (
       updated_at: new Date().toISOString()
     };
     
-    // Solo actualizar el estado global si estaba basado en la aprobación completa
-    if (application.status === APPLICATION_STATUS.APPROVED && 
-        application.advisor_status === APPLICATION_STATUS.APPROVED && 
-        application.company_status === APPLICATION_STATUS.APPROVED) {
-      // Revertir al estado de revisión ya que una parte retiró su aprobación
-      updateData.status = APPLICATION_STATUS.IN_REVIEW;
-      updateData.global_status = APPLICATION_STATUS.IN_REVIEW;
+    // Si el asesor ya aprobó, marcar el estado principal/global como APPROVED (pero NO mover a por_dispersar)
+    if (application.approved_by_advisor === true) {
+      updateData.status = APPLICATION_STATUS.APPROVED;
+      updateData.global_status = APPLICATION_STATUS.APPROVED;
     }
     
     // Actualizar la aplicación
@@ -1447,28 +1440,22 @@ export const updateApplicationStatusField = async (
         updatePayload['approval_date_advisor'] = new Date().toISOString();
         updatePayload['rejected_by_advisor'] = false; // Ensure rejection flag is removed
         
-        // Check if company has already approved
+        // Si la empresa ya aprobó, simplemente dejar global_status y status como APPROVED
         if (application.approved_by_company === true) {
-          // If both have approved, move to POR_DISPERSAR
-          updatePayload['status'] = APPLICATION_STATUS.POR_DISPERSAR;
-          updatePayload['global_status'] = APPLICATION_STATUS.POR_DISPERSAR;
-          updatePayload['advisor_status'] = APPLICATION_STATUS.POR_DISPERSAR;
-          updatePayload['company_status'] = APPLICATION_STATUS.POR_DISPERSAR;
-          console.log('Ambos aprobaron, moviendo automáticamente a POR_DISPERSAR');
+          updatePayload['status'] = APPLICATION_STATUS.APPROVED;
+          updatePayload['global_status'] = APPLICATION_STATUS.APPROVED;
+          console.log('Ambos aprobaron, manteniendo estado APPROVED (sin mover a POR_DISPERSAR)');
         }
       } else if (statusField === 'company_status') {
         updatePayload['approved_by_company'] = true;
         updatePayload['approval_date_company'] = new Date().toISOString();
         updatePayload['rejected_by_company'] = false; // Ensure rejection flag is removed
         
-        // Check if advisor has already approved
-        if (application.approved_by_advisor === true) {
-          // If both have approved, move to POR_DISPERSAR
-          updatePayload['status'] = APPLICATION_STATUS.POR_DISPERSAR;
-          updatePayload['global_status'] = APPLICATION_STATUS.POR_DISPERSAR;
-          updatePayload['advisor_status'] = APPLICATION_STATUS.POR_DISPERSAR;
-          updatePayload['company_status'] = APPLICATION_STATUS.POR_DISPERSAR;
-          console.log('Ambos aprobaron, moviendo automáticamente a POR_DISPERSAR');
+        // Si la empresa ya aprobó, simplemente dejar global_status y status como APPROVED
+        if (application.approved_by_company === true) {
+          updatePayload['status'] = APPLICATION_STATUS.APPROVED;
+          updatePayload['global_status'] = APPLICATION_STATUS.APPROVED;
+          console.log('Ambos aprobaron, manteniendo estado APPROVED (sin mover a POR_DISPERSAR)');
         }
       }
     }
