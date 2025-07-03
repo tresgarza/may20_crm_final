@@ -1096,428 +1096,326 @@ const ApplicationDetail = () => {
           </div>
         ) : application ? (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Información básica */}
-              <div className="card bg-base-100 shadow-xl col-span-2">
-                <div className="card-body">
-                  <h2 className="card-title text-lg border-b pb-2 mb-4">Información de la Solicitud</h2>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">ID de Solicitud</p>
-                      <p className="font-medium">{application.id}</p>
-                    </div>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+              
+              {/* --- COLUMNA IZQUIERDA --- */}
+              <div className="md:col-span-3 flex flex-col gap-6">
+                {/* 1. Detalles de la Solicitud */}
+                <div className="card bg-base-100 shadow-xl">
+                  <div className="card-body">
+                    <h2 className="card-title text-lg border-b pb-2 mb-4">Información de la Solicitud</h2>
                     
-                    <div>
-                      <p className="text-sm text-gray-500">Fecha de Creación</p>
-                      <p className="font-medium">{formatDate(application.created_at, 'short')}</p>
-                    </div>
-                    
-                    <div>
-                      <p className="text-sm text-gray-500">Tipo de Solicitud</p>
-                      <p className="font-medium">
-                        {(() => {
-                          const appType = application.application_type;
-                          if (!appType) return 'No especificado';
-                          
-                          if (appType === 'selected_plans') return 'Planes Seleccionados';
-                          if (appType === 'product_simulations') return 'Simulación de Producto';
-                          if (appType === 'cash_requests') return 'Solicitud de Efectivo';
-                          if (appType === 'auto_loan') return 'Crédito Automotriz';
-                          if (appType === 'car_backed_loan') return 'Crédito con Garantía Automotriz';
-                          if (appType === 'personal_loan') return 'Préstamo Personal';
-                          if (appType === 'cash_advance') return 'Adelanto de Efectivo';
-                          
-                          return appType
-                            .split('_')
-                            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                            .join(' ');
-                        })()}
-                        {isProductFinancing(application) && (
-                          <span className="badge badge-primary ml-2 text-xs">Producto</span>
-                        )}
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <p className="text-sm text-gray-500">Estado</p>
-                      <p>
-                        <span className={`badge ${getStatusBadgeClass(application.status)}`}>
-                          {STATUS_LABELS[application.status as keyof typeof STATUS_LABELS] || application.status}
-                        </span>
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <p className="text-sm text-gray-500">Monto Solicitado</p>
-                      <p className="font-medium">{formatCurrency(application.credito_solicitado || application.amount || 0)}</p>
-                    </div>
-
-                    {application.term && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <p className="text-sm text-gray-500">Plazo</p>
+                        <p className="text-sm text-gray-500">ID de Solicitud</p>
+                        <p className="font-medium">{application.id}</p>
+                      </div>
+                      
+                      <div>
+                        <p className="text-sm text-gray-500">Fecha de Creación</p>
+                        <p className="font-medium">{formatDate(application.created_at, 'short')}</p>
+                      </div>
+                      
+                      <div>
+                        <p className="text-sm text-gray-500">Tipo de Solicitud</p>
                         <p className="font-medium">
-                          {application.term}{' '}
-                          {getPaymentFrequencyLabel(application.payment_frequency) || 'periodos'}
-                        </p>
-                      </div>
-                    )}
-
-                    {application.interest_rate && (
-                      <div>
-                        <p className="text-sm text-gray-500">Tasa de Interés</p>
-                        <p className="font-medium">{application.interest_rate}%</p>
-                      </div>
-                    )}
-
-                    {application.monthly_payment && (
-                      <div>
-                        <p className="text-sm text-gray-500">Pago Mensual</p>
-                        <p className="font-medium">{formatCurrency(application.monthly_payment)}</p>
-                      </div>
-                    )}
-
-                    {application.financing_type && (
-                      <div>
-                        <p className="text-sm text-gray-500">Tipo de Financiamiento</p>
-                        <p className="font-medium flex items-center">
-                          {application.financing_type === 'producto' ? (
-                            <>
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                              </svg>
-                              Financiamiento de Producto
-                            </>
-                          ) : application.financing_type === 'personal' ? (
-                            <>
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                              </svg>
-                              Crédito Personal
-                            </>
-                          ) : (
-                            application.financing_type
+                          {(() => {
+                            const appType = application.application_type;
+                            if (!appType) return 'No especificado';
+                            
+                            if (appType === 'selected_plans') return 'Planes Seleccionados';
+                            if (appType === 'product_simulations') return 'Simulación de Producto';
+                            if (appType === 'cash_requests') return 'Solicitud de Efectivo';
+                            if (appType === 'auto_loan') return 'Crédito Automotriz';
+                            if (appType === 'car_backed_loan') return 'Crédito con Garantía Automotriz';
+                            if (appType === 'personal_loan') return 'Préstamo Personal';
+                            if (appType === 'cash_advance') return 'Adelanto de Efectivo';
+                            
+                            return appType
+                              .split('_')
+                              .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                              .join(' ');
+                          })()}
+                          {isProductFinancing(application) && (
+                            <span className="badge badge-primary ml-2 text-xs">Producto</span>
                           )}
                         </p>
                       </div>
-                    )}
-
-                    {application.product_type && (
+                      
                       <div>
-                        <p className="text-sm text-gray-500">Tipo de Producto</p>
-                        <p className="font-medium">{getProductTypeLabel(application.product_type)}</p>
+                        <p className="text-sm text-gray-500">Estado</p>
+                        <p>
+                          <span className={`badge ${getStatusBadgeClass(application.status)}`}>
+                            {STATUS_LABELS[application.status as keyof typeof STATUS_LABELS] || application.status}
+                          </span>
+                        </p>
                       </div>
-                    )}
-
-                    {application.dispersal_date && (
+                      
                       <div>
-                        <p className="text-sm text-gray-500">Fecha de Dispersión</p>
-                        <p className="font-medium">{formatDate(application.dispersal_date, 'short')}</p>
+                        <p className="text-sm text-gray-500">Monto Solicitado</p>
+                        <p className="font-medium">{formatCurrency(application.credito_solicitado || application.amount || 0)}</p>
                       </div>
-                    )}
-                  </div>
 
-                  {isProductFinancing(application) && (
-                    <div className="mt-6 pt-4 border-t">
-                      <h3 className="font-semibold mb-4 flex items-center">
-                        <span>Detalles del Producto</span>
-                        {application.financing_type === 'producto' && (
-                          <span className="badge badge-primary ml-2 text-xs">Financiamiento de Producto</span>
-                        )}
-                      </h3>
-                      {application.financing_type === 'producto' ? (
-                        (!application.product_title && !application.product_url && !application.product_image) ? (
-                          <div className="p-4 bg-blue-50 rounded-lg">
-                            <div className="flex items-start">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500 mr-2 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              <div>
-                                <p className="text-blue-800 font-medium">Información del producto no disponible</p>
-                                <p className="text-blue-600 text-sm mt-1">Esta solicitud está marcada como financiamiento de producto pero no contiene datos específicos del producto.</p>
-                              </div>
-                            </div>
-                            <div className="mt-4">
-                              <p className="text-sm text-gray-700">Monto del Financiamiento</p>
-                              <p className="font-medium text-lg">{formatCurrency(application.amount || 0)}</p>
-                            </div>
-                          </div>
-                        ) : (
-                      <div className="flex flex-col md:flex-row gap-4">
-                            {application.product_image ? (
-                          <div className="w-full md:w-1/3">
-                            <img 
-                              src={application.product_image} 
-                              alt={application.product_title || "Producto"} 
-                              className="rounded-lg object-cover w-full h-40"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=Sin+Imagen';
-                              }}
-                            />
-                          </div>
-                            ) : (
-                              <div className="w-full md:w-1/3">
-                                <div className="bg-gray-200 rounded-lg w-full h-40 flex items-center justify-center text-gray-500">
-                                  Sin imagen disponible
-                                </div>
-                              </div>
-                        )}
-                        <div className="w-full md:w-2/3">
-                              {application.product_title ? (
-                            <p className="font-medium text-lg mb-2">{application.product_title}</p>
-                              ) : (
-                                <p className="text-gray-500 text-lg mb-2">Título del producto no disponible</p>
-                          )}
-                              
-                              {application.product_url ? (
-                            <a 
-                              href={application.product_url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                                  className="text-blue-500 hover:underline text-sm flex items-center"
-                            >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                  </svg>
-                              Ver producto en sitio web
-                            </a>
-                              ) : (
-                                <p className="text-gray-500 text-sm">URL del producto no disponible</p>
-                          )}
-                              
-                              <div className="mt-4">
-                                <p className="text-sm text-gray-500">Monto del Financiamiento</p>
-                                <p className="font-medium">{formatCurrency(application.amount || 0)}</p>
-                        </div>
-                      </div>
-                          </div>
-                        )
-                      ) : (
-                        <div className="p-4 bg-gray-100 rounded-lg text-center">
-                          <p className="text-gray-500">No aplica - Esta solicitud no es de financiamiento de producto</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  
-                  {approvalStatus && (
-                    <div className="mt-6 pt-4 border-t">
-                      <h3 className="font-semibold mb-4">Estado de Aprobación</h3>
-                      
-                      {approvalStatus.isFullyApproved && (
-                        <div className="mb-4 p-3 bg-success text-white rounded-lg">
-                          <div className="flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                            <span className="font-medium">Solicitud completamente aprobada</span>
-                          </div>
-                          <p className="text-sm mt-1">Esta solicitud ha sido aprobada tanto por el asesor como por la empresa</p>
-                        </div>
-                      )}
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div className="border rounded-lg p-3">
-                          <div className="flex items-center justify-between">
-                            <p className="font-medium">Estado Asesor</p>
-                            {approvalStatus.approvedByAdvisor ? (
-                              <span className="badge badge-success">Aprobado</span>
-                            ) : (
-                              <span className="badge badge-warning">Pendiente</span>
-                            )}
-                          </div>
-                          {application && application.advisor_status && (
-                            <div className="flex items-center mt-2">
-                              <p className="text-xs text-gray-500 mr-2">Estado en vista de Asesor:</p>
-                              <span className={`badge badge-sm ${getStatusBadgeClass(application.advisor_status)}`}>
-                                {STATUS_LABELS[application.advisor_status as keyof typeof STATUS_LABELS] || application.advisor_status}
-                              </span>
-                            </div>
-                          )}
-                          {approvalStatus.approvalDateAdvisor && (
-                            <p className="text-xs text-gray-500 mt-1">
-                              Fecha de aprobación: {formatDate(approvalStatus.approvalDateAdvisor, 'short')}
-                            </p>
-                          )}
-                        </div>
-                        
-                        <div className="border rounded-lg p-3">
-                          <div className="flex items-center justify-between">
-                            <p className="font-medium">Estado Empresa</p>
-                            {approvalStatus.approvedByCompany ? (
-                              <span className="badge badge-success">Aprobado</span>
-                            ) : (
-                              <span className="badge badge-warning">Pendiente</span>
-                            )}
-                          </div>
-                          {application && application.company_status && (
-                            <div className="flex items-center mt-2">
-                              <p className="text-xs text-gray-500 mr-2">Estado en vista de Empresa:</p>
-                              <span className={`badge badge-sm ${getStatusBadgeClass(application.company_status)}`}>
-                                {STATUS_LABELS[application.company_status as keyof typeof STATUS_LABELS] || application.company_status}
-                              </span>
-                            </div>
-                          )}
-                          {approvalStatus.approvalDateCompany && (
-                            <p className="text-xs text-gray-500 mt-1">
-                              Fecha de aprobación: {formatDate(approvalStatus.approvalDateCompany, 'short')}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {application && application.global_status && (
-                        <div className="border rounded-lg p-3 mt-2">
-                          <div className="flex items-center justify-between">
-                            <p className="font-medium">Estado Global del Proceso</p>
-                            <span className={`badge ${getStatusBadgeClass(application.global_status)}`}>
-                              {STATUS_LABELS[application.global_status as keyof typeof STATUS_LABELS] || application.global_status}
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Este es el estado consolidado que refleja el progreso global de la solicitud en el sistema.
+                      {application.term && (
+                        <div>
+                          <p className="text-sm text-gray-500">Plazo</p>
+                          <p className="font-medium">
+                            {application.term}{' '}
+                            {getPaymentFrequencyLabel(application.payment_frequency) || 'periodos'}
                           </p>
                         </div>
                       )}
-                      
-                      {application && (isCompanyAdmin() || isAdvisor()) && userCan(PERMISSIONS.VIEW_REPORTS) && (
-                        <div className="mt-4 pt-4 border-t border-dashed">
-                          <div className="bg-base-300 p-3 rounded-lg">
-                            <h4 className="text-sm font-bold mb-2">Debug: Todos los estados (Solo administradores)</h4>
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div>
-                                <span className="font-bold">Estado Principal:</span> {application.status}
-                              </div>
-                              <div>
-                                <span className="font-bold">Estado Asesor:</span> {application.advisor_status || 'No definido'}
-                              </div>
-                              <div>
-                                <span className="font-bold">Estado Empresa:</span> {application.company_status || 'No definido'}
-                              </div>
-                              <div>
-                                <span className="font-bold">Estado Global:</span> {application.global_status || 'No definido'}
-                              </div>
-                            </div>
-                          </div>
+
+                      {application.interest_rate && (
+                        <div>
+                          <p className="text-sm text-gray-500">Tasa de Interés</p>
+                          <p className="font-medium">{application.interest_rate}%</p>
+                        </div>
+                      )}
+
+                      {application.monthly_payment && (
+                        <div>
+                          <p className="text-sm text-gray-500">Pago Mensual</p>
+                          <p className="font-medium">{formatCurrency(application.monthly_payment)}</p>
+                        </div>
+                      )}
+
+                      {application.financing_type && (
+                        <div>
+                          <p className="text-sm text-gray-500">Tipo de Financiamiento</p>
+                          <p className="font-medium flex items-center">
+                            {application.financing_type === 'producto' ? (
+                              <>
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                                </svg>
+                                Financiamiento de Producto
+                              </>
+                            ) : application.financing_type === 'personal' ? (
+                              <>
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                                </svg>
+                                Crédito Personal
+                              </>
+                            ) : (
+                              application.financing_type
+                            )}
+                          </p>
+                        </div>
+                      )}
+
+                      {application.product_type && (
+                        <div>
+                          <p className="text-sm text-gray-500">Tipo de Producto</p>
+                          <p className="font-medium">{getProductTypeLabel(application.product_type)}</p>
+                        </div>
+                      )}
+
+                      {application.dispersal_date && (
+                        <div>
+                          <p className="text-sm text-gray-500">Fecha de Dispersión</p>
+                          <p className="font-medium">{formatDate(application.dispersal_date, 'short')}</p>
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
-              </div>
 
-              {/* Pestañas para Documentos e Historial */}
-              <div className="card bg-base-100 shadow-xl col-span-2 mt-6">
-                <div className="card-body">
-                  <div className="tabs tabs-boxed mb-4">
-                    <a 
-                      className={`tab ${activeTab === 'documentos' ? 'tab-active' : ''}`}
-                      onClick={() => setActiveTab('documentos')}
-                    >
-                      Documentos
-                    </a> 
-                    <a 
-                      className={`tab ${activeTab === 'historial' ? 'tab-active' : ''}`}
-                      onClick={() => setActiveTab('historial')}
-                    >
-                      Historial
-                    </a>
-                  </div>
-
-                  {/* Contenido de las pestañas */}
-                  <div>
-                    {activeTab === 'documentos' && (
-                      <div>
-                        {/* Sección para documentos */}
-                        <h2 className="card-title text-lg mb-4 border-b pb-2 flex justify-between items-center">
-                          <span>
-                            Documentos de la Solicitud
-                            {documents.length > 0 && (
-                              <span className="text-sm font-normal badge badge-outline ml-2">
-                                {documents.length} {documents.length === 1 ? 'documento' : 'documentos'}
-                              </span>
-                            )}
-                          </span>
-                          
-                          {userCan(PERMISSIONS.UPLOAD_DOCUMENTS) && (
-                            <button 
-                              className="btn btn-sm btn-primary"
-                              onClick={() => setIsUploadModalOpen(true)}
-                            >
-                              Subir Documento
-                            </button>
+                    {isProductFinancing(application) && (
+                      <div className="mt-6 pt-4 border-t">
+                        <h3 className="font-semibold mb-4 flex items-center">
+                          <span>Detalles del Producto</span>
+                          {application.financing_type === 'producto' && (
+                            <span className="badge badge-primary ml-2 text-xs">Financiamiento de Producto</span>
                           )}
-                        </h2>
-                        
-                        {loadingDocuments ? (
-                          <div className="flex justify-center items-center h-48">
-                            <span className="loading loading-spinner loading-lg"></span>
-                          </div>
-                        ) : documentError ? (
-                          <div className="p-4 bg-error text-white text-center rounded-lg">
-                            <p>{documentError}</p>
-                          </div>
-                        ) : documents.length === 0 ? (
-                          <div className="p-4 bg-base-200 text-center rounded-lg">
-                            <p>No hay documentos disponibles para esta solicitud.</p>
-                          </div>
-                        ) : (
-                          <div className="overflow-x-auto">
-                            <table className="table w-full">
-                              <thead>
-                                <tr>
-                                  <th>Nombre</th>
-                                  <th>Categoría</th>
-                                  <th>Tamaño</th>
-                                  <th>Fecha</th>
-                                  <th>Acciones</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {documents.map((doc) => (
-                                  <tr key={doc.id}>
-                                    <td>{doc.file_name}</td>
-                                    <td>{doc.category || 'Sin categoría'}</td>
-                                    <td>{formatFileSize(doc.file_size)}</td>
-                                    <td>{formatDate(doc.created_at, 'short')}</td>
-                                    <td>
-                                      <button 
-                                        className="btn btn-sm btn-primary"
-                                        onClick={() => setViewingDocument(doc)}
-                                      >
-                                        Ver
-                                      </button>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-
-                        {/* Panel de Firma Digital */}
-                        {application && userCan(PERMISSIONS.UPLOAD_DOCUMENTS) && (
-                          <div className="mt-8">
-                             <DocuSignPanel
-                                applicationId={application.id}
-                                initialEnvelopeId={(application as any).docusign_envelope_id}
-                                initialSentTo={(application as any).docusign_sent_to}
-                                initialStatus={(application as any).docusign_manual_status}
-                                clientEmail={application.client_email as any}
-                                sandbox={false}
-                                onSaved={() => {
-                                  addNotification({
-                                    title: 'DocuSign',
-                                    message: 'Datos de DocuSign guardados correctamente',
-                                    type: NotificationType.SUCCESS,
-                                  });
+                        </h3>
+                        {application.financing_type === 'producto' ? (
+                          (!application.product_title && !application.product_url && !application.product_image) ? (
+                            <div className="p-4 bg-blue-50 rounded-lg">
+                              <div className="flex items-start">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500 mr-2 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <div>
+                                  <p className="text-blue-800 font-medium">Información del producto no disponible</p>
+                                  <p className="text-blue-600 text-sm mt-1">Esta solicitud está marcada como financiamiento de producto pero no contiene datos específicos del producto.</p>
+                                </div>
+                              </div>
+                              <div className="mt-4">
+                                <p className="text-sm text-gray-700">Monto del Financiamiento</p>
+                                <p className="font-medium text-lg">{formatCurrency(application.amount || 0)}</p>
+                              </div>
+                            </div>
+                          ) : (
+                        <div className="flex flex-col md:flex-row gap-4">
+                              {application.product_image ? (
+                            <div className="w-full md:w-1/3">
+                              <img 
+                                src={application.product_image} 
+                                alt={application.product_title || "Producto"} 
+                                className="rounded-lg object-cover w-full h-40"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=Sin+Imagen';
                                 }}
                               />
+                            </div>
+                              ) : (
+                                <div className="w-full md:w-1/3">
+                                  <div className="bg-gray-200 rounded-lg w-full h-40 flex items-center justify-center text-gray-500">
+                                    Sin imagen disponible
+                                  </div>
+                                </div>
+                          )}
+                          <div className="w-full md:w-2/3">
+                                {application.product_title ? (
+                              <p className="font-medium text-lg mb-2">{application.product_title}</p>
+                                ) : (
+                                  <p className="text-gray-500 text-lg mb-2">Título del producto no disponible</p>
+                            )}
+                                
+                                {application.product_url ? (
+                              <a 
+                                href={application.product_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                    className="text-blue-500 hover:underline text-sm flex items-center"
+                              >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                Ver producto en sitio web
+                              </a>
+                                ) : (
+                                  <p className="text-gray-500 text-sm">URL del producto no disponible</p>
+                            )}
+                                
+                                <div className="mt-4">
+                                  <p className="text-sm text-gray-500">Monto del Financiamiento</p>
+                                  <p className="font-medium">{formatCurrency(application.amount || 0)}</p>
+                          </div>
+                        </div>
+                            </div>
+                          )
+                        ) : (
+                          <div className="p-4 bg-gray-100 rounded-lg text-center">
+                            <p className="text-gray-500">No aplica - Esta solicitud no es de financiamiento de producto</p>
                           </div>
                         )}
                       </div>
                     )}
+                    {approvalStatus && (
+                      <div className="mt-6 pt-4 border-t">
+                        <h3 className="font-semibold mb-4">Estado de Aprobación</h3>
+                        
+                        {approvalStatus.isFullyApproved && (
+                          <div className="mb-4 p-3 bg-success text-white rounded-lg">
+                            <div className="flex items-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
+                              <span className="font-medium">Solicitud completamente aprobada</span>
+                            </div>
+                            <p className="text-sm mt-1">Esta solicitud ha sido aprobada tanto por el asesor como por la empresa</p>
+                          </div>
+                        )}
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                          <div className="border rounded-lg p-3">
+                            <div className="flex items-center justify-between">
+                              <p className="font-medium">Estado Asesor</p>
+                              {approvalStatus.approvedByAdvisor ? (
+                                <span className="badge badge-success">Aprobado</span>
+                              ) : (
+                                <span className="badge badge-warning">Pendiente</span>
+                              )}
+                            </div>
+                            {application && application.advisor_status && (
+                              <div className="flex items-center mt-2">
+                                <p className="text-xs text-gray-500 mr-2">Estado en vista de Asesor:</p>
+                                <span className={`badge badge-sm ${getStatusBadgeClass(application.advisor_status)}`}>
+                                  {STATUS_LABELS[application.advisor_status as keyof typeof STATUS_LABELS] || application.advisor_status}
+                                </span>
+                              </div>
+                            )}
+                            {approvalStatus.approvalDateAdvisor && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                Fecha de aprobación: {formatDate(approvalStatus.approvalDateAdvisor, 'short')}
+                              </p>
+                            )}
+                          </div>
+                          
+                          <div className="border rounded-lg p-3">
+                            <div className="flex items-center justify-between">
+                              <p className="font-medium">Estado Empresa</p>
+                              {approvalStatus.approvedByCompany ? (
+                                <span className="badge badge-success">Aprobado</span>
+                              ) : (
+                                <span className="badge badge-warning">Pendiente</span>
+                              )}
+                            </div>
+                            {application && application.company_status && (
+                              <div className="flex items-center mt-2">
+                                <p className="text-xs text-gray-500 mr-2">Estado en vista de Empresa:</p>
+                                <span className={`badge badge-sm ${getStatusBadgeClass(application.company_status)}`}>
+                                  {STATUS_LABELS[application.company_status as keyof typeof STATUS_LABELS] || application.company_status}
+                                </span>
+                              </div>
+                            )}
+                            {approvalStatus.approvalDateCompany && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                Fecha de aprobación: {formatDate(approvalStatus.approvalDateCompany, 'short')}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {application && application.global_status && (
+                          <div className="border rounded-lg p-3 mt-2">
+                            <div className="flex items-center justify-between">
+                              <p className="font-medium">Estado Global del Proceso</p>
+                              <span className={`badge ${getStatusBadgeClass(application.global_status)}`}>
+                                {STATUS_LABELS[application.global_status as keyof typeof STATUS_LABELS] || application.global_status}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Este es el estado consolidado que refleja el progreso global de la solicitud en el sistema.
+                            </p>
+                          </div>
+                        )}
+                        
+                        {application && (isCompanyAdmin() || isAdvisor()) && userCan(PERMISSIONS.VIEW_REPORTS) && (
+                          <div className="mt-4 pt-4 border-t border-dashed">
+                            <div className="bg-base-300 p-3 rounded-lg">
+                              <h4 className="text-sm font-bold mb-2">Debug: Todos los estados (Solo administradores)</h4>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div>
+                                  <span className="font-bold">Estado Principal:</span> {application.status}
+                                </div>
+                                <div>
+                                  <span className="font-bold">Estado Asesor:</span> {application.advisor_status || 'No definido'}
+                                </div>
+                                <div>
+                                  <span className="font-bold">Estado Empresa:</span> {application.company_status || 'No definido'}
+                                </div>
+                                <div>
+                                  <span className="font-bold">Estado Global:</span> {application.global_status || 'No definido'}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
+                {/* 2. Pestañas de Historial y Documentos */}
+                <div className="card bg-base-100 shadow-xl">
+                  <div className="card-body">
+                    <div className="tabs tabs-boxed mb-4">
+                      <a className={`tab ${activeTab === 'historial' ? 'tab-active' : ''}`} onClick={() => setActiveTab('historial')}>Historial</a>
+                      <a className={`tab ${activeTab === 'documentos' ? 'tab-active' : ''}`} onClick={() => setActiveTab('documentos')}>Documentos</a>
+                    </div>
+                    {/* Contenido de Pestañas */}
                     {activeTab === 'historial' && (
                       <div>
                         {/* Historial de la solicitud */}
@@ -1658,22 +1556,110 @@ const ApplicationDetail = () => {
                         )}
                       </div>
                     )}
+                    {activeTab === 'documentos' && (
+                      <div>
+                        {/* Sección para documentos */}
+                        <h2 className="card-title text-lg mb-4 border-b pb-2 flex justify-between items-center">
+                          <span>
+                            Documentos de la Solicitud
+                            {documents.length > 0 && (
+                              <span className="text-sm font-normal badge badge-outline ml-2">
+                                {documents.length} {documents.length === 1 ? 'documento' : 'documentos'}
+                              </span>
+                            )}
+                          </span>
+                          
+                          {userCan(PERMISSIONS.UPLOAD_DOCUMENTS) && (
+                            <button 
+                              className="btn btn-sm btn-primary"
+                              onClick={() => setIsUploadModalOpen(true)}
+                            >
+                              Subir Documento
+                            </button>
+                          )}
+                        </h2>
+                        
+                        {loadingDocuments ? (
+                          <div className="flex justify-center items-center h-48">
+                            <span className="loading loading-spinner loading-lg"></span>
+                          </div>
+                        ) : documentError ? (
+                          <div className="p-4 bg-error text-white text-center rounded-lg">
+                            <p>{documentError}</p>
+                          </div>
+                        ) : documents.length === 0 ? (
+                          <div className="p-4 bg-base-200 text-center rounded-lg">
+                            <p>No hay documentos disponibles para esta solicitud.</p>
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="table w-full">
+                              <thead>
+                                <tr>
+                                  <th>Nombre</th>
+                                  <th>Categoría</th>
+                                  <th>Tamaño</th>
+                                  <th>Fecha</th>
+                                  <th>Acciones</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {documents.map((doc) => (
+                                  <tr key={doc.id}>
+                                    <td>{doc.file_name}</td>
+                                    <td>{doc.category || 'Sin categoría'}</td>
+                                    <td>{formatFileSize(doc.file_size)}</td>
+                                    <td>{formatDate(doc.created_at, 'short')}</td>
+                                    <td>
+                                      <button 
+                                        className="btn btn-sm btn-primary"
+                                        onClick={() => setViewingDocument(doc)}
+                                      >
+                                        Ver
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {/* Panel de Firma Digital */}
+                        {application && userCan(PERMISSIONS.UPLOAD_DOCUMENTS) && (
+                          <div className="mt-8">
+                             <DocuSignPanel
+                                applicationId={application.id}
+                                initialEnvelopeId={(application as any).docusign_envelope_id}
+                                initialSentTo={(application as any).docusign_sent_to}
+                                initialStatus={(application as any).docusign_manual_status}
+                                clientEmail={application.client_email as any}
+                                sandbox={false}
+                                onSaved={() => {
+                                  addNotification({
+                                    title: 'DocuSign',
+                                    message: 'Datos de DocuSign guardados correctamente',
+                                    type: NotificationType.SUCCESS,
+                                  });
+                                }}
+                              />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
-              
-              {/* Columna derecha con información de cliente, empresa y asesor */}
-              <div className="flex flex-col gap-6">
-                {/* ------------------- COMENTARIOS ------------------- */}
-                {application && (
-                  <div className="card bg-base-100 shadow-xl">
-                    <div className="card-body">
-                      <CommentSection applicationId={application.id} />
-                    </div>
-                  </div>
-                )}
 
-                {/* Información del cliente */}
+              {/* --- COLUMNA DERECHA --- */}
+              <div className="md:col-span-2 flex flex-col gap-6">
+                {/* 1. Comentarios */}
+                <div className="card bg-base-100 shadow-xl">
+                  <div className="card-body">
+                    <CommentSection applicationId={application.id} />
+                  </div>
+                </div>
+                {/* 2. Información del Cliente */}
                 <div className="card bg-base-100 shadow-md p-4">
                   {/* Buttons for approval */}
                   {(application && approvalStatus &&
@@ -1774,8 +1760,7 @@ const ApplicationDetail = () => {
                     </div>
                   </div>
                 </div>
-
-                {/* Información de la empresa */}
+                {/* 3. Información de la Empresa */}
                 {(application.company_id || application.company_name) && (
                   <div className="card bg-base-100 shadow-xl">
                     <div className="card-body">
@@ -1810,8 +1795,7 @@ const ApplicationDetail = () => {
                     </div>
                   </div>
                 )}
-
-                {/* Información del asesor */}
+                {/* 4. Asesor Asignado */}
                 {application.assigned_to && (
                   <div className="card bg-base-100 shadow-xl">
                     <div className="card-body">
