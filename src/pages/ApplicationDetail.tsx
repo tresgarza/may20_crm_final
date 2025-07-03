@@ -1039,6 +1039,9 @@ const ApplicationDetail = () => {
     }
   };
   
+  // 1. Add state for active tab
+  const [activeTab, setActiveTab] = useState('documentos');
+  
   if (!userCan(PERMISSIONS.VIEW_APPLICATIONS)) {
     return (
       <MainLayout>
@@ -1403,6 +1406,262 @@ const ApplicationDetail = () => {
                 </div>
               </div>
 
+              {/* Pestañas para Documentos e Historial */}
+              <div className="card bg-base-100 shadow-xl col-span-2 mt-6">
+                <div className="card-body">
+                  <div className="tabs tabs-boxed mb-4">
+                    <a 
+                      className={`tab ${activeTab === 'documentos' ? 'tab-active' : ''}`}
+                      onClick={() => setActiveTab('documentos')}
+                    >
+                      Documentos
+                    </a> 
+                    <a 
+                      className={`tab ${activeTab === 'historial' ? 'tab-active' : ''}`}
+                      onClick={() => setActiveTab('historial')}
+                    >
+                      Historial
+                    </a>
+                  </div>
+
+                  {/* Contenido de las pestañas */}
+                  <div>
+                    {activeTab === 'documentos' && (
+                      <div>
+                        {/* Sección para documentos */}
+                        <h2 className="card-title text-lg mb-4 border-b pb-2 flex justify-between items-center">
+                          <span>
+                            Documentos de la Solicitud
+                            {documents.length > 0 && (
+                              <span className="text-sm font-normal badge badge-outline ml-2">
+                                {documents.length} {documents.length === 1 ? 'documento' : 'documentos'}
+                              </span>
+                            )}
+                          </span>
+                          
+                          {userCan(PERMISSIONS.UPLOAD_DOCUMENTS) && (
+                            <button 
+                              className="btn btn-sm btn-primary"
+                              onClick={() => setIsUploadModalOpen(true)}
+                            >
+                              Subir Documento
+                            </button>
+                          )}
+                        </h2>
+                        
+                        {loadingDocuments ? (
+                          <div className="flex justify-center items-center h-48">
+                            <span className="loading loading-spinner loading-lg"></span>
+                          </div>
+                        ) : documentError ? (
+                          <div className="p-4 bg-error text-white text-center rounded-lg">
+                            <p>{documentError}</p>
+                          </div>
+                        ) : documents.length === 0 ? (
+                          <div className="p-4 bg-base-200 text-center rounded-lg">
+                            <p>No hay documentos disponibles para esta solicitud.</p>
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="table w-full">
+                              <thead>
+                                <tr>
+                                  <th>Nombre</th>
+                                  <th>Categoría</th>
+                                  <th>Tamaño</th>
+                                  <th>Fecha</th>
+                                  <th>Acciones</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {documents.map((doc) => (
+                                  <tr key={doc.id}>
+                                    <td>{doc.file_name}</td>
+                                    <td>{doc.category || 'Sin categoría'}</td>
+                                    <td>{formatFileSize(doc.file_size)}</td>
+                                    <td>{formatDate(doc.created_at, 'short')}</td>
+                                    <td>
+                                      <button 
+                                        className="btn btn-sm btn-primary"
+                                        onClick={() => setViewingDocument(doc)}
+                                      >
+                                        Ver
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {/* Panel de Firma Digital */}
+                        {application && userCan(PERMISSIONS.UPLOAD_DOCUMENTS) && (
+                          <div className="mt-8">
+                             <DocuSignPanel
+                                applicationId={application.id}
+                                initialEnvelopeId={(application as any).docusign_envelope_id}
+                                initialSentTo={(application as any).docusign_sent_to}
+                                initialStatus={(application as any).docusign_manual_status}
+                                clientEmail={application.client_email as any}
+                                sandbox={false}
+                                onSaved={() => {
+                                  addNotification({
+                                    title: 'DocuSign',
+                                    message: 'Datos de DocuSign guardados correctamente',
+                                    type: NotificationType.SUCCESS,
+                                  });
+                                }}
+                              />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {activeTab === 'historial' && (
+                      <div>
+                        {/* Historial de la solicitud */}
+                        <div className="flex items-center justify-between border-b pb-2 mb-4">
+                          <h2 className="card-title text-lg">
+                            Historial de la Solicitud
+                            {filteredHistory.length > 0 && (
+                              <span className="text-sm font-normal badge badge-outline ml-2">
+                                {filteredHistory.length} {filteredHistory.length === 1 ? 'entrada' : 'entradas'}
+                              </span>
+                            )}
+                          </h2>
+                          
+                          {history.length > 0 && (
+                            <div className="flex gap-2">
+                              <select 
+                                className="select select-sm select-bordered w-auto"
+                                value={historyFilter}
+                                onChange={(e) => setHistoryFilter(e.target.value)}
+                              >
+                                <option value="all">Todos los eventos</option>
+                                <option value="status">Cambios de estado</option>
+                                <option value="approval">Aprobaciones</option>
+                              </select>
+                              
+                              <select 
+                                className="select select-sm select-bordered w-auto"
+                                value={userFilter}
+                                onChange={(e) => setUserFilter(e.target.value)}
+                              >
+                                <option value="all">Todos los usuarios</option>
+                                <option value="advisor">Asesores</option>
+                                <option value="company">Empresa</option>
+                                <option value="admin">Admin</option>
+                              </select>
+                        </div>
+                          )}
+                      </div>
+                        
+                        {loadingHistory && historyPage === 1 ? (
+                          <div className="flex justify-center items-center h-48">
+                            <span className="loading loading-spinner loading-lg"></span>
+                    </div>
+                        ) : historyError ? (
+                          <div className="p-4 bg-error text-white text-center rounded-lg">
+                            <p>{historyError}</p>
+                  </div>
+                        ) : filteredHistory.length === 0 ? (
+                          <div className="p-4 bg-base-200 text-center rounded-lg">
+                            <p>No hay historial disponible para esta solicitud específica.</p>
+                          </div>
+                        ) : (
+                          <>
+                            <ol className="relative border-s border-gray-200 dark:border-gray-700 ms-3 mt-4">
+                              {filteredHistory.map((item, index) => {
+                                let userType = 'Sistema';
+                                let userBadgeClass = 'badge-ghost';
+                                
+                                if (item.user_role) {
+                                  const role = item.user_role.toLowerCase();
+                                  if (role.includes('advisor') || role.includes('asesor')) {
+                                    userType = 'Asesor';
+                                    userBadgeClass = 'badge-info';
+                                  } else if (role.includes('company') || role.includes('empresa')) {
+                                    userType = 'Empresa';
+                                    userBadgeClass = 'badge-secondary';
+                                  } else if (role.includes('admin')) {
+                                    userType = 'Admin';
+                                    userBadgeClass = 'badge-accent';
+                                  }
+                                } else if (item.comment) {
+                                  const comment = item.comment.toLowerCase();
+                                  if (comment.includes('por asesor')) {
+                                    userType = 'Asesor';
+                                    userBadgeClass = 'badge-info';
+                                  } else if (comment.includes('por empresa') || comment.includes('por administrador de empresa')) {
+                                    userType = 'Empresa';
+                                    userBadgeClass = 'badge-secondary';
+                                  } else if (comment.includes('por admin')) {
+                                    userType = 'Admin';
+                                    userBadgeClass = 'badge-accent';
+                                  }
+                                }
+                                
+                                return (
+                                  <li className="mb-4 ms-6" key={item.id || `history-${id}-${index}`}>
+                                    <span className={getTimelineBadgeClass(item.status)} />
+                                    <div className="bg-base-200 rounded-lg shadow-sm p-3">
+                                      <div className="flex justify-between mb-1">
+                                        <div className="flex items-center gap-2">
+                                          <div className="flex flex-col">
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-sm font-medium">
+                                                {item.user_name || 'Sistema'}
+                                              </span>
+                </div>
+                                            {item.user_email && (
+                                              <span className="text-xs text-gray-500">{item.user_email}</span>
+                                            )}
+                                          </div>
+                                          <span className={`badge ${getStatusBadgeClass(item.status)} ml-2`}>
+                                            {STATUS_LABELS[item.status as keyof typeof STATUS_LABELS] || item.status}
+                                          </span>
+                                        </div>
+                                        <div className="flex flex-col items-end">
+                                          <time className="text-xs text-gray-500">
+                                            {formatDate(item.created_at, 'long')}
+                                          </time>
+                                          <span className={`badge badge-sm ${userBadgeClass} mt-1`}>
+                                            {userType}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <p className="text-sm mt-1">{item.comment}</p>
+                                    </div>
+                                  </li>
+                                );
+                              })}
+                            </ol>
+                            
+                            {historyHasMore && (
+                              <div className="text-center mt-4">
+                      <button 
+                                  className="btn btn-outline btn-sm"
+                                  onClick={loadMoreHistory}
+                                  disabled={loadingHistory}
+                      >
+                                  {loadingHistory ? (
+                          <>
+                                      <span className="loading loading-spinner loading-xs"></span>
+                                      Cargando...
+                          </>
+                                  ) : 'Cargar más historial'}
+                      </button>
+                    </div>
+                  )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
               {/* Columna derecha con información de cliente, empresa y asesor */}
               <div className="flex flex-col gap-6">
                 {/* ------------------- COMENTARIOS ------------------- */}
@@ -1586,249 +1845,6 @@ const ApplicationDetail = () => {
                 )}
               </div>
             </div>
-
-            {/* Sección para documentos */}
-            <div className="mt-8">
-              <div className="card bg-base-100 shadow-xl">
-                <div className="card-body">
-                  <h2 className="card-title text-lg mb-4 border-b pb-2 flex justify-between items-center">
-                    <span>
-                      Documentos de la Solicitud
-                      {documents.length > 0 && (
-                        <span className="text-sm font-normal badge badge-outline ml-2">
-                          {documents.length} {documents.length === 1 ? 'documento' : 'documentos'}
-                        </span>
-                      )}
-                    </span>
-                    
-                    {userCan(PERMISSIONS.UPLOAD_DOCUMENTS) && (
-                      <button 
-                        className="btn btn-sm btn-primary"
-                        onClick={() => setIsUploadModalOpen(true)}
-                      >
-                        Subir Documento
-                      </button>
-                    )}
-                  </h2>
-                  
-                  {loadingDocuments ? (
-                    <div className="flex justify-center items-center h-48">
-                      <span className="loading loading-spinner loading-lg"></span>
-                    </div>
-                  ) : documentError ? (
-                    <div className="p-4 bg-error text-white text-center rounded-lg">
-                      <p>{documentError}</p>
-                    </div>
-                  ) : documents.length === 0 ? (
-                    <div className="p-4 bg-base-200 text-center rounded-lg">
-                      <p>No hay documentos disponibles para esta solicitud.</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="table w-full">
-                        <thead>
-                          <tr>
-                            <th>Nombre</th>
-                            <th>Categoría</th>
-                            <th>Tamaño</th>
-                            <th>Fecha</th>
-                            <th>Acciones</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {documents.map((doc) => (
-                            <tr key={doc.id}>
-                              <td>{doc.file_name}</td>
-                              <td>{doc.category || 'Sin categoría'}</td>
-                              <td>{formatFileSize(doc.file_size)}</td>
-                              <td>{formatDate(doc.created_at, 'short')}</td>
-                              <td>
-                                <button 
-                                  className="btn btn-sm btn-primary"
-                                  onClick={() => setViewingDocument(doc)}
-                                >
-                                  Ver
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* NUEVA SECCIÓN: Documentos para firma digital */}
-            {application && userCan(PERMISSIONS.UPLOAD_DOCUMENTS) && (
-              <div className="mt-8">
-                <div className="card bg-base-100 shadow-xl">
-                  <div className="card-body">
-                    {application && (
-                      <DocuSignPanel
-                        applicationId={application.id}
-                        initialEnvelopeId={(application as any).docusign_envelope_id}
-                        initialSentTo={(application as any).docusign_sent_to}
-                        initialStatus={(application as any).docusign_manual_status}
-                        clientEmail={application.client_email as any}
-                        sandbox={false}
-                        onSaved={() => {
-                          addNotification({
-                            title: 'DocuSign',
-                            message: 'Datos de DocuSign guardados correctamente',
-                            type: NotificationType.SUCCESS,
-                          });
-                        }}
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Historial de la solicitud */}
-            <div className="mt-8">
-              <div className="card bg-base-100 shadow-xl">
-                <div className="card-body">
-                  <div className="flex items-center justify-between border-b pb-2 mb-4">
-                    <h2 className="card-title text-lg">
-                      Historial de la Solicitud
-                      {filteredHistory.length > 0 && (
-                        <span className="text-sm font-normal badge badge-outline ml-2">
-                          {filteredHistory.length} {filteredHistory.length === 1 ? 'entrada' : 'entradas'}
-                        </span>
-                      )}
-                    </h2>
-                    
-                    {history.length > 0 && (
-                      <div className="flex gap-2">
-                        <select 
-                          className="select select-sm select-bordered w-auto"
-                          value={historyFilter}
-                          onChange={(e) => setHistoryFilter(e.target.value)}
-                        >
-                          <option value="all">Todos los eventos</option>
-                          <option value="status">Cambios de estado</option>
-                          <option value="approval">Aprobaciones</option>
-                        </select>
-                        
-                        <select 
-                          className="select select-sm select-bordered w-auto"
-                          value={userFilter}
-                          onChange={(e) => setUserFilter(e.target.value)}
-                        >
-                          <option value="all">Todos los usuarios</option>
-                          <option value="advisor">Asesores</option>
-                          <option value="company">Empresa</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                  </div>
-                    )}
-                </div>
-                  
-                  {loadingHistory && historyPage === 1 ? (
-                    <div className="flex justify-center items-center h-48">
-                      <span className="loading loading-spinner loading-lg"></span>
-              </div>
-                  ) : historyError ? (
-                    <div className="p-4 bg-error text-white text-center rounded-lg">
-                      <p>{historyError}</p>
-            </div>
-                  ) : filteredHistory.length === 0 ? (
-                    <div className="p-4 bg-base-200 text-center rounded-lg">
-                      <p>No hay historial disponible para esta solicitud específica.</p>
-                    </div>
-                  ) : (
-                    <>
-                      <ol className="relative border-s border-gray-200 dark:border-gray-700 ms-3 mt-4">
-                        {filteredHistory.map((item, index) => {
-                          let userType = 'Sistema';
-                          let userBadgeClass = 'badge-ghost';
-                          
-                          if (item.user_role) {
-                            const role = item.user_role.toLowerCase();
-                            if (role.includes('advisor') || role.includes('asesor')) {
-                              userType = 'Asesor';
-                              userBadgeClass = 'badge-info';
-                            } else if (role.includes('company') || role.includes('empresa')) {
-                              userType = 'Empresa';
-                              userBadgeClass = 'badge-secondary';
-                            } else if (role.includes('admin')) {
-                              userType = 'Admin';
-                              userBadgeClass = 'badge-accent';
-                            }
-                          } else if (item.comment) {
-                            const comment = item.comment.toLowerCase();
-                            if (comment.includes('por asesor')) {
-                              userType = 'Asesor';
-                              userBadgeClass = 'badge-info';
-                            } else if (comment.includes('por empresa') || comment.includes('por administrador de empresa')) {
-                              userType = 'Empresa';
-                              userBadgeClass = 'badge-secondary';
-                            } else if (comment.includes('por admin')) {
-                              userType = 'Admin';
-                              userBadgeClass = 'badge-accent';
-                            }
-                          }
-                          
-                          return (
-                            <li className="mb-4 ms-6" key={item.id || `history-${id}-${index}`}>
-                              <span className={getTimelineBadgeClass(item.status)} />
-                              <div className="bg-base-200 rounded-lg shadow-sm p-3">
-                                <div className="flex justify-between mb-1">
-                                  <div className="flex items-center gap-2">
-                                    <div className="flex flex-col">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-sm font-medium">
-                                          {item.user_name || 'Sistema'}
-                                        </span>
-          </div>
-                                      {item.user_email && (
-                                        <span className="text-xs text-gray-500">{item.user_email}</span>
-                                      )}
-                                    </div>
-                                    <span className={`badge ${getStatusBadgeClass(item.status)} ml-2`}>
-                                      {STATUS_LABELS[item.status as keyof typeof STATUS_LABELS] || item.status}
-                                    </span>
-                                  </div>
-                                  <div className="flex flex-col items-end">
-                                    <time className="text-xs text-gray-500">
-                                      {formatDate(item.created_at, 'long')}
-                                    </time>
-                                    <span className={`badge badge-sm ${userBadgeClass} mt-1`}>
-                                      {userType}
-                                    </span>
-                                  </div>
-                                </div>
-                                <p className="text-sm mt-1">{item.comment}</p>
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ol>
-                      
-                      {historyHasMore && (
-                        <div className="text-center mt-4">
-                <button 
-                            className="btn btn-outline btn-sm"
-                            onClick={loadMoreHistory}
-                            disabled={loadingHistory}
-                >
-                            {loadingHistory ? (
-                    <>
-                                <span className="loading loading-spinner loading-xs"></span>
-                                Cargando...
-                    </>
-                            ) : 'Cargar más historial'}
-                </button>
-              </div>
-            )}
-                    </>
-                  )}
-                    </div>
-                  </div>
-              </div>
           </>
         ) : (
           <div className="text-center p-10">
