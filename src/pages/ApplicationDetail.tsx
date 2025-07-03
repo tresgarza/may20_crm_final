@@ -1117,32 +1117,6 @@ const ApplicationDetail = () => {
                       </div>
                       
                       <div>
-                        <p className="text-sm text-gray-500">Tipo de Solicitud</p>
-                        <p className="font-medium">
-                          {(() => {
-                            const appType = application.application_type;
-                            if (!appType) return 'No especificado';
-                            
-                            if (appType === 'selected_plans') return 'Planes Seleccionados';
-                            if (appType === 'product_simulations') return 'Simulación de Producto';
-                            if (appType === 'cash_requests') return 'Solicitud de Efectivo';
-                            if (appType === 'auto_loan') return 'Crédito Automotriz';
-                            if (appType === 'car_backed_loan') return 'Crédito con Garantía Automotriz';
-                            if (appType === 'personal_loan') return 'Préstamo Personal';
-                            if (appType === 'cash_advance') return 'Adelanto de Efectivo';
-                            
-                            return appType
-                              .split('_')
-                              .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                              .join(' ');
-                          })()}
-                          {isProductFinancing(application) && (
-                            <span className="badge badge-primary ml-2 text-xs">Producto</span>
-                          )}
-                        </p>
-                      </div>
-                      
-                      <div>
                         <p className="text-sm text-gray-500">Estado</p>
                         <p>
                           <span className={`badge ${getStatusBadgeClass(application.status)}`}>
