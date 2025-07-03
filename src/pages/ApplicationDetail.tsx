@@ -1838,7 +1838,9 @@ const ApplicationDetail = () => {
 
               {/* Sección de comentarios */}
               {application && (
-                <CommentSection applicationId={application.id} />
+                <div className="mt-4">
+                  <CommentSection applicationId={application.id} />
+                </div>
               )}
           </>
         ) : (
