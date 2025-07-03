@@ -1173,16 +1173,22 @@ export const getComments = async (applicationId: string, entityFilter?: Record<s
     }
   }
   
-  const query = `
-    SELECT c.*, u.id as user_id, u.name as user_name, u.email as user_email
-    FROM ${TABLES.COMMENTS} c
-    LEFT JOIN users u ON c.user_id = u.id
-    WHERE c.application_id = '${applicationId}'
-    ORDER BY c.created_at DESC
-  `;
-  
   try {
-    return await executeQuery(query);
+    const { data, error } = await supabase
+      .from(`${TABLES.COMMENTS}`)
+      .select('*, users:user_id(id, name, email)')
+      .eq('application_id', applicationId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Formatear para mantener la misma estructura que antes
+    return (data || []).map((c: any) => ({
+      ...c,
+      user_id: c.user_id,
+      user_name: c.users?.name || null,
+      user_email: c.users?.email || null,
+    }));
   } catch (error) {
     console.error(`Error fetching comments for application ${applicationId}:`, error);
     throw error;
