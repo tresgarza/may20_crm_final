@@ -1411,179 +1411,192 @@ const ApplicationDetail = () => {
                   )}
                 </div>
               </div>
-              
-              {/* Información del cliente */}
-              <div className="card bg-base-100 shadow-md p-4 mb-4">
-                {/* Buttons for approval - now at the top of the card */}
-                {(application && approvalStatus && 
-                  ((isAdvisor() && !approvalStatus.approvedByAdvisor) || 
-                   (isCompanyAdmin() && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS)))) && (
-                  <div className="flex justify-center space-x-3 mb-4 pb-3 border-b">
-                    {application && approvalStatus && isAdvisor() && !approvalStatus.approvedByAdvisor && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && (
-                      <button 
-                        onClick={handleAdvisorApproval} 
-                        disabled={approving}
-                        className="btn btn-primary"
-                      >
-                        {approving ? (
-                          <>
-                            <span className="loading loading-spinner loading-xs mr-1"></span>
-                            Procesando...
-                          </>
-                        ) : 'Aprobar como Asesor'}
-                      </button>
-                    )}
-                    
-                    {application && approvalStatus && isCompanyAdmin() && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && !approvalStatus.approvedByCompany && (
-                      <button 
-                        onClick={handleCompanyApproval} 
-                        disabled={approving}
-                        className="btn btn-primary"
-                      >
-                        {approving ? (
-                          <>
-                            <span className="loading loading-spinner loading-xs mr-1"></span>
-                            Procesando...
-                          </>
-                        ) : 'Aprobar como Empresa'}
-                      </button>
-                    )}
-                    
-                    {application && approvalStatus && isCompanyAdmin() && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && approvalStatus.approvedByCompany && (
-                      <button 
-                        onClick={handleCancelCompanyApproval} 
-                        disabled={approving}
-                        className="btn btn-outline btn-error"
-                      >
-                        {approving ? (
-                          <>
-                            <span className="loading loading-spinner loading-xs mr-1"></span>
-                            Procesando...
-                          </>
-                        ) : 'Cancelar Aprobación'}
-                      </button>
-                    )}
-                  </div>
-                )}
-                
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">
-                    Información del Cliente
-                  </h3>
-                </div>
-                
-                <div className="mb-4">
-                  <div className="flex flex-col space-y-2">
-                    <div className="flex justify-between items-center">
-                      <div className="text-sm text-gray-500">
-                        Nombre:
-                      </div>
-                      <div className="font-semibold">
-                        {application.client_name || 'No disponible'}
-                      </div>
-                    </div>
-                    
-                    <div className="flex justify-between items-center">
-                      <div className="text-sm text-gray-500">
-                        Email:
-                      </div>
-                      <div>
-                        {application.client_email || 'No disponible'}
-                      </div>
-                    </div>
-                    
-                    <div className="flex justify-between items-center">
-                      <div className="text-sm text-gray-500">
-                        Teléfono:
-                      </div>
-                      <div>
-                        {application.client_phone || 'No disponible'}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-4">
-                    <ClientProfileButton
-                      clientId={application.client_id}
-                      clientName={application.client_name}
-                      applicationId={application.id}
-                      useSync={true}
-                      className="mt-2"
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              {/* Información de la empresa */}
-              {(application.company_id || application.company_name) && (
-                <div className="card bg-base-100 shadow-xl">
+
+              {/* ------------------- COMENTARIOS ------------------- */}
+              {application && (
+                <div className="card bg-base-100 shadow-xl mt-8">
                   <div className="card-body">
-                    <h2 className="card-title text-lg border-b pb-2 mb-4">Información de la Empresa</h2>
-                    
-                    <div className="space-y-4">
-                      {application.company_name && (
-                        <div>
-                          <p className="text-sm text-gray-500">Nombre de la Empresa</p>
-                          <p className="font-medium">{application.company_name}</p>
-                        </div>
+                    <CommentSection applicationId={application.id} />
+                  </div>
+                </div>
+              )}
+              
+              {/* Columna derecha con información de cliente, empresa y asesor */}
+              <div className="flex flex-col gap-6">
+
+                {/* Información del cliente */}
+                <div className="card bg-base-100 shadow-md p-4">
+                  {/* Buttons for approval - now at the top of the card */}
+                  {(application && approvalStatus && 
+                    ((isAdvisor() && !approvalStatus.approvedByAdvisor) || 
+                     (isCompanyAdmin() && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS)))) && (
+                    <div className="flex justify-center space-x-3 mb-4 pb-3 border-b">
+                      {application && approvalStatus && isAdvisor() && !approvalStatus.approvedByAdvisor && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && (
+                        <button 
+                          onClick={handleAdvisorApproval} 
+                          disabled={approving}
+                          className="btn btn-primary"
+                        >
+                          {approving ? (
+                            <>
+                              <span className="loading loading-spinner loading-xs mr-1"></span>
+                              Procesando...
+                            </>
+                          ) : 'Aprobar como Asesor'}
+                        </button>
                       )}
                       
-                      {application.company_id && (
-                        <div>
-                          <p className="text-sm text-gray-500">ID de la Empresa</p>
-                          <p className="font-medium">{application.company_id}</p>
-                        </div>
+                      {application && approvalStatus && isCompanyAdmin() && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && !approvalStatus.approvedByCompany && (
+                        <button 
+                          onClick={handleCompanyApproval} 
+                          disabled={approving}
+                          className="btn btn-primary"
+                        >
+                          {approving ? (
+                            <>
+                              <span className="loading loading-spinner loading-xs mr-1"></span>
+                              Procesando...
+                            </>
+                          ) : 'Aprobar como Empresa'}
+                        </button>
                       )}
-
-                      {/* Botón para ver detalles de la empresa si tiene permisos */}
-                      {userCan(PERMISSIONS.VIEW_COMPANIES) && (
-                        <div className="pt-2 mt-2 border-t">
-                          <Link 
-                            to={`/companies/${application.company_id}`} 
-                            className="btn btn-sm btn-outline btn-primary w-full"
-                          >
-                            Ver Detalles de la Empresa
-                          </Link>
-                        </div>
+                      
+                      {application && approvalStatus && isCompanyAdmin() && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && approvalStatus.approvedByCompany && (
+                        <button 
+                          onClick={handleCancelCompanyApproval} 
+                          disabled={approving}
+                          className="btn btn-outline btn-error"
+                        >
+                          {approving ? (
+                            <>
+                              <span className="loading loading-spinner loading-xs mr-1"></span>
+                              Procesando...
+                            </>
+                          ) : 'Cancelar Aprobación'}
+                        </button>
                       )}
                     </div>
+                  )}
+                  
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">
+                      Información del Cliente
+                    </h3>
                   </div>
-                </div>
-              )}
-              
-              {/* Información del asesor */}
-              {application.assigned_to && (
-                <div className="card bg-base-100 shadow-xl">
-                  <div className="card-body">
-                    <h2 className="card-title text-lg border-b pb-2 mb-4">Asesor Asignado</h2>
-                    
-                    <div className="space-y-4">
-                      {application.advisor_name && (
-                        <div>
-                          <p className="text-sm text-gray-500">Nombre del Asesor</p>
-                          <p className="font-medium">{application.advisor_name}</p>
+                  
+                  <div className="mb-4">
+                    <div className="flex flex-col space-y-2">
+                      <div className="flex justify-between items-center">
+                        <div className="text-sm text-gray-500">
+                          Nombre:
                         </div>
-                      )}
-                      <div>
-                        <p className="text-sm text-gray-500">ID del Asesor</p>
-                        <p className="font-medium">{application.assigned_to}</p>
+                        <div className="font-semibold">
+                          {application.client_name || 'No disponible'}
+                        </div>
                       </div>
-
-                      {/* Botón para ver detalles del asesor si tiene permisos */}
-                      {userCan(PERMISSIONS.VIEW_ADVISORS) && (
-                        <div className="pt-2 mt-2 border-t">
-                          <Link 
-                            to={`/advisors/${application.assigned_to}`} 
-                            className="btn btn-sm btn-outline btn-primary w-full"
-                          >
-                            Ver Perfil del Asesor
-                          </Link>
+                      
+                      <div className="flex justify-between items-center">
+                        <div className="text-sm text-gray-500">
+                          Email:
                         </div>
-                      )}
+                        <div>
+                          {application.client_email || 'No disponible'}
+                        </div>
+                      </div>
+                      
+                      <div className="flex justify-between items-center">
+                        <div className="text-sm text-gray-500">
+                          Teléfono:
+                        </div>
+                        <div>
+                          {application.client_phone || 'No disponible'}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4">
+                      <ClientProfileButton
+                        clientId={application.client_id}
+                        clientName={application.client_name}
+                        applicationId={application.id}
+                        useSync={true}
+                        className="mt-2"
+                      />
                     </div>
                   </div>
                 </div>
-              )}
+
+                {/* Información de la empresa */}
+                {(application.company_id || application.company_name) && (
+                  <div className="card bg-base-100 shadow-xl">
+                    <div className="card-body">
+                      <h2 className="card-title text-lg border-b pb-2 mb-4">Información de la Empresa</h2>
+                      
+                      <div className="space-y-4">
+                        {application.company_name && (
+                          <div>
+                            <p className="text-sm text-gray-500">Nombre de la Empresa</p>
+                            <p className="font-medium">{application.company_name}</p>
+                          </div>
+                        )}
+                        
+                        {application.company_id && (
+                          <div>
+                            <p className="text-sm text-gray-500">ID de la Empresa</p>
+                            <p className="font-medium">{application.company_id}</p>
+                          </div>
+                        )}
+
+                        {/* Botón para ver detalles de la empresa si tiene permisos */}
+                        {userCan(PERMISSIONS.VIEW_COMPANIES) && (
+                          <div className="pt-2 mt-2 border-t">
+                            <Link 
+                              to={`/companies/${application.company_id}`} 
+                              className="btn btn-sm btn-outline btn-primary w-full"
+                            >
+                              Ver Detalles de la Empresa
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Información del asesor */}
+                {application.assigned_to && (
+                  <div className="card bg-base-100 shadow-xl">
+                    <div className="card-body">
+                      <h2 className="card-title text-lg border-b pb-2 mb-4">Asesor Asignado</h2>
+                      
+                      <div className="space-y-4">
+                        {application.advisor_name && (
+                          <div>
+                            <p className="text-sm text-gray-500">Nombre del Asesor</p>
+                            <p className="font-medium">{application.advisor_name}</p>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-sm text-gray-500">ID del Asesor</p>
+                          <p className="font-medium">{application.assigned_to}</p>
+                        </div>
+
+                        {/* Botón para ver detalles del asesor si tiene permisos */}
+                        {userCan(PERMISSIONS.VIEW_ADVISORS) && (
+                          <div className="pt-2 mt-2 border-t">
+                            <Link 
+                              to={`/advisors/${application.assigned_to}`} 
+                              className="btn btn-sm btn-outline btn-primary w-full"
+                            >
+                              Ver Perfil del Asesor
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Sección para documentos */}
@@ -1835,15 +1848,7 @@ const ApplicationDetail = () => {
                     </div>
                   </div>
               </div>
-
-              {/* Sección de comentarios */}
-              {application && (
-                <div className="card bg-base-100 shadow-xl mt-6">
-                  <div className="card-body">
-                    <CommentSection applicationId={application.id} />
-                  </div>
-                </div>
-              )}
+            </div>
           </>
         ) : (
           <div className="text-center p-10">
