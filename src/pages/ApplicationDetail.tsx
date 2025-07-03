@@ -1040,7 +1040,7 @@ const ApplicationDetail = () => {
   };
   
   // 1. Add state for active tab
-  const [activeTab, setActiveTab] = useState('documentos');
+  const [activeTab, setActiveTab] = useState('historial'); // Cambiado de 'documentos' a 'historial'
   
   if (!userCan(PERMISSIONS.VIEW_APPLICATIONS)) {
     return (
