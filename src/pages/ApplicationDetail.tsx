@@ -1117,7 +1117,6 @@ const ApplicationDetail = () => {
                           const appType = application.application_type;
                           if (!appType) return 'No especificado';
                           
-                          // Check for common types
                           if (appType === 'selected_plans') return 'Planes Seleccionados';
                           if (appType === 'product_simulations') return 'Simulación de Producto';
                           if (appType === 'cash_requests') return 'Solicitud de Efectivo';
@@ -1126,7 +1125,6 @@ const ApplicationDetail = () => {
                           if (appType === 'personal_loan') return 'Préstamo Personal';
                           if (appType === 'cash_advance') return 'Adelanto de Efectivo';
                           
-                          // Format nicely as fallback
                           return appType
                             .split('_')
                             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
@@ -1216,7 +1214,6 @@ const ApplicationDetail = () => {
                     )}
                   </div>
 
-                  {/* Detalles del producto/artículo si están disponibles */}
                   {isProductFinancing(application) && (
                     <div className="mt-6 pt-4 border-t">
                       <h3 className="font-semibold mb-4 flex items-center">
@@ -1300,12 +1297,10 @@ const ApplicationDetail = () => {
                     </div>
                   )}
                   
-                  {/* Estado de aprobación */}
                   {approvalStatus && (
                     <div className="mt-6 pt-4 border-t">
                       <h3 className="font-semibold mb-4">Estado de Aprobación</h3>
                       
-                      {/* Indicador de aprobación completa */}
                       {approvalStatus.isFullyApproved && (
                         <div className="mb-4 p-3 bg-success text-white rounded-lg">
                           <div className="flex items-center">
@@ -1319,7 +1314,6 @@ const ApplicationDetail = () => {
                       )}
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        {/* Aprobación por asesor */}
                         <div className="border rounded-lg p-3">
                           <div className="flex items-center justify-between">
                             <p className="font-medium">Estado Asesor</p>
@@ -1344,7 +1338,6 @@ const ApplicationDetail = () => {
                           )}
                         </div>
                         
-                        {/* Aprobación por empresa */}
                         <div className="border rounded-lg p-3">
                           <div className="flex items-center justify-between">
                             <p className="font-medium">Estado Empresa</p>
@@ -1370,7 +1363,6 @@ const ApplicationDetail = () => {
                         </div>
                       </div>
                       
-                      {/* Estado Global */}
                       {application && application.global_status && (
                         <div className="border rounded-lg p-3 mt-2">
                           <div className="flex items-center justify-between">
@@ -1385,7 +1377,6 @@ const ApplicationDetail = () => {
                         </div>
                       )}
                       
-                      {/* Sección de depuración para administradores del sistema */}
                       {application && (isCompanyAdmin() || isAdvisor()) && userCan(PERMISSIONS.VIEW_REPORTS) && (
                         <div className="mt-4 pt-4 border-t border-dashed">
                           <div className="bg-base-300 p-3 rounded-lg">
@@ -1412,18 +1403,8 @@ const ApplicationDetail = () => {
                 </div>
               </div>
 
-              {/* ------------------- COMENTARIOS ------------------- */}
-              {application && (
-                <div className="card bg-base-100 shadow-xl mt-8">
-                  <div className="card-body">
-                    <CommentSection applicationId={application.id} />
-                  </div>
-                </div>
-              )}
-              
               {/* Columna derecha con información de cliente, empresa y asesor */}
               <div className="flex flex-col gap-6">
-                
                 {/* ------------------- COMENTARIOS ------------------- */}
                 {application && (
                   <div className="card bg-base-100 shadow-xl">
@@ -1435,14 +1416,14 @@ const ApplicationDetail = () => {
 
                 {/* Información del cliente */}
                 <div className="card bg-base-100 shadow-md p-4">
-                  {/* Buttons for approval - now at the top of the card */}
-                  {(application && approvalStatus && 
-                    ((isAdvisor() && !approvalStatus.approvedByAdvisor) || 
-                     (isCompanyAdmin() && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS)))) && (
+                  {/* Buttons for approval */}
+                  {(application && approvalStatus &&
+                    ((isAdvisor() && !approvalStatus.approvedByAdvisor) ||
+                      (isCompanyAdmin() && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS)))) && (
                     <div className="flex justify-center space-x-3 mb-4 pb-3 border-b">
                       {application && approvalStatus && isAdvisor() && !approvalStatus.approvedByAdvisor && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && (
-                        <button 
-                          onClick={handleAdvisorApproval} 
+                        <button
+                          onClick={handleAdvisorApproval}
                           disabled={approving}
                           className="btn btn-primary"
                         >
@@ -1454,10 +1435,10 @@ const ApplicationDetail = () => {
                           ) : 'Aprobar como Asesor'}
                         </button>
                       )}
-                      
+
                       {application && approvalStatus && isCompanyAdmin() && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && !approvalStatus.approvedByCompany && (
-                        <button 
-                          onClick={handleCompanyApproval} 
+                        <button
+                          onClick={handleCompanyApproval}
                           disabled={approving}
                           className="btn btn-primary"
                         >
@@ -1469,10 +1450,10 @@ const ApplicationDetail = () => {
                           ) : 'Aprobar como Empresa'}
                         </button>
                       )}
-                      
+
                       {application && approvalStatus && isCompanyAdmin() && userCan(PERMISSIONS.CHANGE_APPLICATION_STATUS) && approvalStatus.approvedByCompany && (
-                        <button 
-                          onClick={handleCancelCompanyApproval} 
+                        <button
+                          onClick={handleCancelCompanyApproval}
                           disabled={approving}
                           className="btn btn-outline btn-error"
                         >
@@ -1486,13 +1467,13 @@ const ApplicationDetail = () => {
                       )}
                     </div>
                   )}
-                  
+
                   <div>
                     <h3 className="text-lg font-semibold mb-4">
                       Información del Cliente
                     </h3>
                   </div>
-                  
+
                   <div className="mb-4">
                     <div className="flex flex-col space-y-2">
                       <div className="flex justify-between items-center">
@@ -1503,7 +1484,7 @@ const ApplicationDetail = () => {
                           {application.client_name || 'No disponible'}
                         </div>
                       </div>
-                      
+
                       <div className="flex justify-between items-center">
                         <div className="text-sm text-gray-500">
                           Email:
@@ -1512,7 +1493,7 @@ const ApplicationDetail = () => {
                           {application.client_email || 'No disponible'}
                         </div>
                       </div>
-                      
+
                       <div className="flex justify-between items-center">
                         <div className="text-sm text-gray-500">
                           Teléfono:
@@ -1522,7 +1503,7 @@ const ApplicationDetail = () => {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="mt-4">
                       <ClientProfileButton
                         clientId={application.client_id}
@@ -1540,7 +1521,7 @@ const ApplicationDetail = () => {
                   <div className="card bg-base-100 shadow-xl">
                     <div className="card-body">
                       <h2 className="card-title text-lg border-b pb-2 mb-4">Información de la Empresa</h2>
-                      
+
                       <div className="space-y-4">
                         {application.company_name && (
                           <div>
@@ -1548,7 +1529,7 @@ const ApplicationDetail = () => {
                             <p className="font-medium">{application.company_name}</p>
                           </div>
                         )}
-                        
+
                         {application.company_id && (
                           <div>
                             <p className="text-sm text-gray-500">ID de la Empresa</p>
@@ -1556,11 +1537,10 @@ const ApplicationDetail = () => {
                           </div>
                         )}
 
-                        {/* Botón para ver detalles de la empresa si tiene permisos */}
                         {userCan(PERMISSIONS.VIEW_COMPANIES) && (
                           <div className="pt-2 mt-2 border-t">
-                            <Link 
-                              to={`/companies/${application.company_id}`} 
+                            <Link
+                              to={`/companies/${application.company_id}`}
                               className="btn btn-sm btn-outline btn-primary w-full"
                             >
                               Ver Detalles de la Empresa
@@ -1577,7 +1557,7 @@ const ApplicationDetail = () => {
                   <div className="card bg-base-100 shadow-xl">
                     <div className="card-body">
                       <h2 className="card-title text-lg border-b pb-2 mb-4">Asesor Asignado</h2>
-                      
+
                       <div className="space-y-4">
                         {application.advisor_name && (
                           <div>
@@ -1590,11 +1570,10 @@ const ApplicationDetail = () => {
                           <p className="font-medium">{application.assigned_to}</p>
                         </div>
 
-                        {/* Botón para ver detalles del asesor si tiene permisos */}
                         {userCan(PERMISSIONS.VIEW_ADVISORS) && (
                           <div className="pt-2 mt-2 border-t">
-                            <Link 
-                              to={`/advisors/${application.assigned_to}`} 
+                            <Link
+                              to={`/advisors/${application.assigned_to}`}
                               className="btn btn-sm btn-outline btn-primary w-full"
                             >
                               Ver Perfil del Asesor
@@ -1686,7 +1665,6 @@ const ApplicationDetail = () => {
               <div className="mt-8">
                 <div className="card bg-base-100 shadow-xl">
                   <div className="card-body">
-                    {/* Panel DocuSign - seguimiento manual */}
                     {application && (
                       <DocuSignPanel
                         applicationId={application.id}
@@ -1701,8 +1679,6 @@ const ApplicationDetail = () => {
                             message: 'Datos de DocuSign guardados correctamente',
                             type: NotificationType.SUCCESS,
                           });
-                          // Optionally reload application data
-                          // loadApplicationData();
                         }}
                       />
                     )}
@@ -1725,10 +1701,8 @@ const ApplicationDetail = () => {
                       )}
                     </h2>
                     
-                    {/* Filtros para el historial */}
                     {history.length > 0 && (
                       <div className="flex gap-2">
-                        {/* Filtro por tipo de evento */}
                         <select 
                           className="select select-sm select-bordered w-auto"
                           value={historyFilter}
@@ -1739,7 +1713,6 @@ const ApplicationDetail = () => {
                           <option value="approval">Aprobaciones</option>
                         </select>
                         
-                        {/* Filtro por tipo de usuario */}
                         <select 
                           className="select select-sm select-bordered w-auto"
                           value={userFilter}
@@ -1770,7 +1743,6 @@ const ApplicationDetail = () => {
                     <>
                       <ol className="relative border-s border-gray-200 dark:border-gray-700 ms-3 mt-4">
                         {filteredHistory.map((item, index) => {
-                          // Determinar el tipo de usuario basado en rol o comentario
                           let userType = 'Sistema';
                           let userBadgeClass = 'badge-ghost';
                           
@@ -1857,7 +1829,6 @@ const ApplicationDetail = () => {
                     </div>
                   </div>
               </div>
-            </div>
           </>
         ) : (
           <div className="text-center p-10">
@@ -1865,10 +1836,8 @@ const ApplicationDetail = () => {
           </div>
         )}
         
-        {/* Acciones de flujo de trabajo - Solo mostrar si ya están las aprobaciones necesarias */}
         {application && approvalStatus && (
           <>
-            {/* Botón para mover a estado "Por Dispersar" después de aprobación */}
             {application.status === APPLICATION_STATUS.APPROVED && 
               isAdvisor() && 
               approvalStatus.approvedByAdvisor && 
@@ -1889,7 +1858,6 @@ const ApplicationDetail = () => {
               </div>
             )}
             
-            {/* Botón para marcar como completado si está en estado "Por Dispersar" */}
             {application.status === APPLICATION_STATUS.POR_DISPERSAR && 
               isAdvisor() && (
               <div className="mt-4 p-4 bg-base-200 rounded-lg">
@@ -1911,7 +1879,6 @@ const ApplicationDetail = () => {
                           entityFilter
                         );
                         
-                        // Recargar datos para asegurar que tenemos la info más actualizada
                         await loadApplicationData();
                         
                         setSuccessMessage('Solicitud marcada como dispersada correctamente');
@@ -1936,7 +1903,6 @@ const ApplicationDetail = () => {
           </>
         )}
         
-        {/* Modal para subir documentos */}
         {isUploadModalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg w-full max-w-2xl">
@@ -2000,7 +1966,6 @@ const ApplicationDetail = () => {
           </div>
         )}
         
-        {/* Document viewer */}
         {viewingDocument && (
           <DocumentViewer 
             document={viewingDocument}
