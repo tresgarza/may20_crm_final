@@ -18,6 +18,18 @@ interface CommentItem {
   created_at: string;
 }
 
+const roleLabel = (role?: string) => {
+  switch ((role || '').toLowerCase()) {
+    case 'advisor':
+      return 'Asesor';
+    case 'company_admin':
+    case 'empresa':
+      return 'Empresa';
+    default:
+      return 'Usuario';
+  }
+};
+
 const CommentSection: React.FC<CommentSectionProps> = ({ applicationId }) => {
   const { user } = useAuth();
   const { userCan, isAdvisor, isCompanyAdmin } = usePermissions();
@@ -77,6 +89,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({ applicationId }) => {
               <li key={c.id} className="border rounded-lg p-3 bg-base-200">
                 <div className="flex justify-between items-center mb-1">
                   <span className="font-semibold text-sm">{c.user_name || 'Usuario'}</span>
+                  <span className="badge badge-outline badge-xs ml-2 text-xs">{roleLabel(c.user_role)}</span>
                   <span className="text-xs text-gray-500">{formatDate(c.created_at, 'datetime')}</span>
                 </div>
                 <p className="text-sm whitespace-pre-wrap">{c.text}</p>

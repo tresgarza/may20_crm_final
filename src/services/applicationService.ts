@@ -1176,7 +1176,7 @@ export const getComments = async (applicationId: string, entityFilter?: Record<s
   try {
     const { data, error } = await supabase
       .from(`${TABLES.COMMENTS}`)
-      .select('*, users:user_id(id, name, email)')
+      .select('*, users:user_id(id, name, email, role)')
       .eq('application_id', applicationId)
       .order('created_at', { ascending: false });
 
@@ -1188,6 +1188,7 @@ export const getComments = async (applicationId: string, entityFilter?: Record<s
       user_id: c.user_id,
       user_name: c.users?.name || null,
       user_email: c.users?.email || null,
+      user_role: c.users?.role || null,
     }));
   } catch (error) {
     console.error(`Error fetching comments for application ${applicationId}:`, error);
