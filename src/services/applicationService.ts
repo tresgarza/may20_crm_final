@@ -1126,15 +1126,19 @@ export const addComment = async (applicationId: string, userId: string, text: st
     }
   }
   
-  const query = `
-    INSERT INTO ${TABLES.COMMENTS} (application_id, user_id, text)
-    VALUES ('${applicationId}', '${userId}', '${text}')
-    RETURNING *
-  `;
-  
   try {
-    const data = await executeQuery(query);
-    return data[0] as { 
+    // Usar directamente el cliente de Supabase para evitar el fallback MCP que falla en producción
+    const { data, error } = await supabase
+      .from(TABLES.COMMENTS)
+      .insert({ application_id: applicationId, user_id: userId, text })
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return data as {
       id: string;
       application_id: string;
       user_id: string;
