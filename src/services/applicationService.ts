@@ -293,15 +293,15 @@ const mapStatusFromDB = (dbStatus: string): ApplicationStatus => {
 export const getApplicationById = async (id: string, entityFilter?: Record<string, any> | null) => {
   console.log(`[getApplicationById] Fetching application with ID: ${id}`);
   
-  let query = `SELECT * FROM ${TABLES.APPLICATIONS} WHERE id = '${id}'`;
+  let query = `SELECT a.*, adv.name AS advisor_name FROM ${TABLES.APPLICATIONS} a LEFT JOIN advisors adv ON adv.id = a.assigned_to WHERE a.id = '${id}'`;
   
   // Aplicar filtro por entidad si es necesario
   if (entityFilter) {
     if (entityFilter.advisor_id) {
-      query += ` AND assigned_to = '${entityFilter.advisor_id}'`;
+      query += ` AND a.assigned_to = '${entityFilter.advisor_id}'`;
     }
     if (entityFilter.company_id) {
-      query += ` AND company_id = '${entityFilter.company_id}'`;
+      query += ` AND a.company_id = '${entityFilter.company_id}'`;
     }
   }
   
