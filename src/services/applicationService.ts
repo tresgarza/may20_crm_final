@@ -1176,7 +1176,7 @@ export const getComments = async (applicationId: string, entityFilter?: Record<s
   try {
     const { data, error } = await supabase
       .from(`${TABLES.COMMENTS}`)
-      .select('*, users:user_id(id, name, email, role)')
+      .select('*, users(id, name, email, role)')
       .eq('application_id', applicationId)
       .order('created_at', { ascending: false });
 
