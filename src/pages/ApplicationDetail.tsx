@@ -1423,6 +1423,15 @@ const ApplicationDetail = () => {
               
               {/* Columna derecha con información de cliente, empresa y asesor */}
               <div className="flex flex-col gap-6">
+                
+                {/* ------------------- COMENTARIOS ------------------- */}
+                {application && (
+                  <div className="card bg-base-100 shadow-xl">
+                    <div className="card-body">
+                      <CommentSection applicationId={application.id} />
+                    </div>
+                  </div>
+                )}
 
                 {/* Información del cliente */}
                 <div className="card bg-base-100 shadow-md p-4">
